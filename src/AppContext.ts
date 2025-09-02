@@ -1,7 +1,7 @@
 import React from "react";
-import { NetworkIds } from "./backend/Network";
-import NetworkProvider from "./backend/NetworkProvider";
-import AccountManager from "./backend/AccountManager";
+import { NetworkIds } from "./backend/Network.js";
+import NetworkProvider from "./backend/NetworkProvider.js";
+import AccountManager from "./backend/AccountManager.js";
 
 export const WalletContext = React.createContext<AppContext | undefined>(undefined);
 
@@ -22,3 +22,4 @@ export class AppContext {
     this.accountManager = new AccountManager();
   }
 }
+

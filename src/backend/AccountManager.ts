@@ -1,15 +1,26 @@
-import Account from "./Account";
+import Account from "./Account.js";
 
 export default class AccountManager {
-  // Active account index.
   active: number;
   accounts: Account[];
+  private listeners: (() => void)[];
 
   constructor() {
-    // Initialize empty, first.
-    // TODO: After the storageProvider is done, use there to store these.
     this.active = -1;
     this.accounts = [];
+    this.listeners = [];
+  }
+
+  // Subscribe to changes
+  subscribe(fn: () => void) {
+    this.listeners.push(fn);
+    return () => {
+      this.listeners = this.listeners.filter(l => l !== fn);
+    };
+  }
+
+  private notifyListeners() {
+    this.listeners.forEach(fn => fn());
   }
 
   CreateAccount(): number {
@@ -18,36 +29,31 @@ export default class AccountManager {
 
     if (this.active == -1 || this.active != index) {
       this.active = index;
+      this.notifyListeners();  // <-- make sure listeners are notified
     }
 
     return index;
   }
 
   AddAccount(account: Account): number {
-    if (account.entropy == undefined) {
+    if (!account.entropy) {
       console.error("Account to be added returned undefined. Please check.");
       return -1;
     }
-
-    let index = this.accounts.push(account) - 1;
-
-    if (this.active == -1 || this.active != index) {
-      this.active = index;
-    }
-
+    const index = this.accounts.push(account) - 1;
+    this.notifyListeners(); // update UI
     return index;
   }
 
   RemoveAccount(account_index: number) {
-    if (this.accounts.length <= account_index) {
-      console.error("Account does not already exist. Returning...");
+    if (account_index < 0 || account_index >= this.accounts.length) {
+      console.error("Account does not exist. Returning...");
       return;
     }
-    
     this.accounts.splice(account_index, 1);
-    
-    if (this.active == account_index)
-      this.active = -1;
+
+    if (this.active === account_index) this.active = -1;
+    this.notifyListeners();
   }
 
   GetActiveIndex(): number {
@@ -55,14 +61,25 @@ export default class AccountManager {
   }
 
   GetActive(): Account | undefined {
-    if (this.active < 0 || this.active >= this.accounts.length) {
-      return undefined;
-    }
+    if (this.active < 0 || this.active >= this.accounts.length) return undefined;
     return this.accounts[this.active];
   }
 
+  SetActive(index: number): boolean {
+    if (index < 0 || index >= this.accounts.length) {
+      console.error("Invalid account index: " + index);
+      return false;
+    }
+    this.active = index;
+    this.notifyListeners();
+    return true;
+  }
+
+  GetAll(): Account[] {
+    return this.accounts;
+  }
+
   private CreateRandomAccountName(): string {
-    const current_len = this.accounts.length + 1;
-    return "New User #" + current_len;
+    return "New User #" + (this.accounts.length + 1);
   }
 }

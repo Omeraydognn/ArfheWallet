@@ -11,8 +11,10 @@ import {
 import "./ArfBottomBar.css";
 import { History, Home, Send, Lock, Search } from "@mui/icons-material";
 import ArfBottomMenu from "./ArfBottomMenu";
+import { useNavigate } from "react-router";
 
 export default function ArfBottomBar() {
+  const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
@@ -28,7 +30,7 @@ export default function ArfBottomBar() {
 
       <BottomNavigation
         showLabels >
-        <BottomNavigationAction label="Home" icon={<Home />} />
+        <BottomNavigationAction label="Home" icon={<Home />} onClick={(e) => navigate('home')}/>
         <BottomNavigationAction label="Explore" icon={<Search />} />
         <Fab
           color="primary" 
@@ -44,8 +46,8 @@ export default function ArfBottomBar() {
           }}>
           <Send />
         </Fab>
-        <BottomNavigationAction label="History" icon={<History />} />
-        <BottomNavigationAction label="Security" icon={<Lock />} />
+        <BottomNavigationAction label="History" icon={<History />} onClick={(e) => navigate('history')} />
+        <BottomNavigationAction label="Security" icon={<Lock />} onClick={(e) => navigate('privacy')} />
       </BottomNavigation>
     </div>
   );

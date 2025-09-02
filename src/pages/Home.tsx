@@ -4,7 +4,7 @@ import "./Home.css";
 import { Label, Check, Circle, ContentCopy } from "@mui/icons-material";
 import { LineChart } from "@mui/x-charts";
 import { AppContext, WalletContext } from "../AppContext.js";
-import { useArfBar } from "../components/ArfBarContext.js";
+import { ActiveAccountContext, ActiveAccountContextType } from "../ActiveAccountProvider.js";
 import ArfGraph from "../components/ArfGraph.js";
 
 const NETWORK_NAMES = [
@@ -41,33 +41,12 @@ function Home() {
   if (!wallet_context)
     return;
 
-  const { setTitle, setText } = useArfBar();
-
-  const [active, setActive] = React.useState(
-    wallet_context.accountManager.GetActiveIndex()
-  )
+  const active_context = React.useContext<ActiveAccountContextType | undefined>(ActiveAccountContext);
+  if (!active_context)
+    return;
 
   const [network, setNetwork] = React.useState(1);
   const [networkDrawerOpen, setNetworkDrawerOpen] = React.useState(false);
-
-  const getActiveTitle = () => {
-    const account = wallet_context.accountManager.accounts[active];
-    return account?.GetName() ?? "Unnamed";
-  }
-
-  const getActiveText = () => {
-    const account = wallet_context.accountManager.accounts[active];
-
-    let text = account?.GetPubKey();
-
-    if (text) {
-      const first = text.slice(0, 6);
-      const last = text.slice(-4);
-      text = first + "...." + last;
-    }
-
-    return text ?? "Unnamed";
-  }
 
   const handleNetworkChange = (event: any) => {
     setNetwork(event.target.value)
@@ -76,11 +55,6 @@ function Home() {
   const toggleNetworkDrawer = () => {
     setNetworkDrawerOpen(!networkDrawerOpen)
   }
-
-  useEffect(() => {
-    setTitle(getActiveTitle());
-    setText(getActiveText());
-  })
 
   return (
     <div className='home'>

@@ -1,0 +1,25 @@
+.privacy {
+  width: inherit;
+  height: 100%;
+
+  align-items: center;
+  justify-content: center;
+}
+
+.privacy-content {
+  width: inherit;
+  height: inherit;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.privacy-bottom-text {
+  color: #4f4f4f;
+  text-align: center;
+  position:absolute;
+  bottom: 5rem;
+
+  width: 80%;
+}

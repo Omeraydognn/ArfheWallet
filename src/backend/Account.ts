@@ -54,6 +54,15 @@ export default class Account {
     return this.ethers_wallet?.publicKey;
   }
 
+  GetPublicKey(): string | undefined {
+    return this.GetPubKey();
+  }
+
+  GetShortKey(): string | undefined {
+    const key = this.GetPubKey();
+    return key?.slice(0, 6) + "..." + key?.slice(-4);
+  }
+
   SetName(name: string) {
     this.name = name;
   }
