@@ -1,18 +1,27 @@
 .home {
   width: inherit;
-  height: inherit;
+  height: 100%;
   flex:1;
-  padding: 1em;
-  padding-top: 5em;
-  padding-bottom: 5em;
-  background-color: #e6e6e6;
+  padding: 0;
+  /* background-color: #e6e6e6; */
+
+  /* background: linear-gradient(to right, #2c2721, #1b1b1b, #1b1b1b, #1b1b1b, #2c2721); */
 }
 
-.network-select {
-  padding: 20px;
-  margin-top: 50px;
+.infobox {
+  min-height: 15rem;
+  color: rgb(54, 54, 54);
+
 }
 
-#network-select-label {
-  height: 40px;
+.list {
+  margin: 0;
+  margin-top: 0rem;
+}
+
+.list-item {
+  border-bottom: 1px solid #303030;
+  border-radius: 0;
+  color: rgb(54, 54, 54);
+  /* margin-bottom: 1rem; */
 }
