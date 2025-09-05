@@ -1,0 +1,182 @@
+/* Revoke Sayfasına Özel Kapsayıcı */
+.revoke-page-wrapper {
+    box-sizing: border-box; 
+    overflow-x: hidden; 
+    background-color: #f8fafc;
+    min-height: 100vh;
+    width: 100%;
+  }
+  
+  /* Sayfanın içeriğini merkezlemek ve padding'i ayarlamak için */
+  .revoke-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2rem 1rem;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+  
+  /* Header */
+  .header-icon-wrapper {
+    background-color: #e2e8f0;
+    border-radius: 50%;
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  
+  /* Card Styles */
+  .contract-card, .specific-allowance-card {
+    width: 100%;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 1rem;
+    background-color: #f1f5f9;
+  }
+  
+  .contract-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%;
+  }
+  
+  .card-header-content {
+    margin-bottom: 1rem;
+  }
+  
+  /* Metin taşmasını engelleyen yeni kurallar */
+  .contract-address {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.875rem;
+    color: #334155;
+    /* Metnin kelime kırarak alt satıra geçmesini sağlar */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  /* Adres hash'i için özel stil */
+  .address-hash {
+    font-family: 'Roboto Mono', monospace;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  
+  /* Specific Card Styles (bottom one) */
+  .specific-allowance-card {
+    padding: 1.5rem;
+    border-color: #ef4444;
+  }
+  
+  .card-content-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  
+  .allowance-text {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-bottom: -0.5rem;
+  }
+  
+  .allowance-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  
+  /* Buttons */
+  .button-group {
+    display: flex;
+    gap: 0.5rem;
+    margin-right: 1rem;
+    flex-wrap: wrap; 
+  }
+  
+  .details-button, .revoke-button {
+    flex-shrink: 0;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    border: 1px solid #94a3b8;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+    background-color: transparent;
+    color: #334155;
+    /* Butonların mobil ekranda taşmasını önler */
+    white-space: nowrap;
+  }
+  
+  .details-button:hover {
+    background-color: #e2e8f0;
+  }
+  
+  .revoke-button {
+    background-color: transparent;
+    color: #ef4444;
+    border-color: #ef4444;
+  }
+  
+  .revoke-button.full-width {
+    width: 100%;
+    margin-top: 1rem;
+  }
+  
+  .revoke-button:hover {
+    background-color: #fee2e2;
+  }
+  
+  /* Risk Indicator */
+  .risk-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+  }
+  
+  .risk-label {
+    font-size: 0.75rem;
+    color: #64748b;
+    white-space: nowrap;
+  }
+  
+  .risk-bar-container {
+    flex-grow: 1;
+    height: 12px;
+    background-color: #e2e8f0;
+    border-radius: 9999px;
+    overflow: hidden;
+  }
+  
+  .risk-bar {
+    height: 100%;
+    transition: width 0.3s ease-in-out;
+    border-radius: 9999px;
+  }
+  
+  .risk-value {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  
+  /* Layout adjustments */
+  .card-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  
+  /* Responsive adjustments for smaller screens */
+  @media (max-width: 640px) {
+    .card-body {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+  }

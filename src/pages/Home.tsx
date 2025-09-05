@@ -78,7 +78,7 @@ function Home() {
       </Drawer>
 
       { 
-      /*
+      /* 
         <Paper elevation={2}>
           <Alert icon={<Check fontSize="inherit" />} severity="success" >
             The USDT transfer of 10.00 from 0x0000..00aa to 0xf33f..d00d is successful. 
@@ -89,7 +89,7 @@ function Home() {
           </Alert>
         </Paper>
         */
-      }
+      } 
 
       <Box sx={{ padding: 2 }} className="infobox">
         {/* text section (with padding) */}

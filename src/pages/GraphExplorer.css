@@ -1,0 +1,187 @@
+/* Container & Base Styles */
+.graph-explorer-page-wrapper {
+    background-color: #f8fafc;
+    min-height: 100vh;
+    padding: 1rem;
+    box-sizing: border-box;
+  }
+  
+  .graph-container-box {
+    background-color: #ffffff;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    position: relative;
+  }
+  
+  /* Search Bar */
+  .search-bar-container {
+    display: flex;
+    align-items: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 9999px;
+    padding: 0.5rem 1rem;
+    margin-bottom: 2rem;
+  }
+  
+  .search-icon {
+    color: #64748b;
+    margin-right: 0.5rem;
+  }
+  
+  .search-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background-color: transparent;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.875rem;
+    color: #0f172a;
+  }
+  
+  /* Graph Display Area */
+  .graph-display-area {
+    position: relative;
+    height: 400px;
+    width: 100%;
+  }
+  
+  /* Node Circles */
+  .node-circle {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.75rem;
+    color: #ffffff;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    z-index: 10;
+  }
+  
+  .node-circle:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  .node-label {
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 90%;
+    text-align: center;
+  }
+  
+  /* Node Colors */
+  .node-circle-red { background-color: #ef4444; }
+  .node-circle-orange { background-color: #f97316; }
+  .node-circle-green { background-color: #22c55e; }
+  
+  /* Connection Lines */
+  .connection-line {
+    position: absolute;
+    width: 2px;
+    background-color: #cbd5e1;
+    transform-origin: top left;
+    z-index: 5;
+  }
+  
+  /* Daha profesyonel görünümlü ok uçları için */
+  .connection-line::after {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: -4px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 6px 4px 0 4px;
+    border-color: #cbd5e1 transparent transparent transparent;
+  }
+  
+  .connection-line.dashed {
+    border-style: dashed;
+  }
+  
+  .connection-line.solid {
+    border-style: solid;
+  }
+  
+  /* Node Info Popover */
+  .node-info-popover {
+    position: fixed;
+    background-color: #1e293b;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 50;
+    pointer-events: none;
+  }
+  
+  .popover-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #cbd5e1;
+  }
+  
+  .popover-address {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.75rem;
+    margin-bottom: 0.75rem;
+    word-break: break-all;
+  }
+  
+  .popover-stats p {
+    font-size: 0.75rem;
+    margin: 0.2rem 0;
+    line-height: 1.2;
+  }
+  
+  /* Action Buttons */
+  .action-buttons-container {
+    position: absolute;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .action-button {
+    background-color: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  
+  .action-button:hover {
+    background-color: #e2e8f0;
+  }
+  
+  .action-icon {
+    color: #64748b;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 640px) {
+    .graph-container-box {
+      padding: 1rem;
+    }
+  }

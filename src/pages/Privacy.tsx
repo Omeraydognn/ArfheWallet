@@ -27,7 +27,10 @@ export default function Privacy() {
                 onClick={(_e) => setPrivacyLevel(PrivacyLevel.FULL) }>
                 FULL
               </Button>
-              <Button disabled={true}>
+              <Button 
+              color= "success"
+               variant={ privacyLevel == PrivacyLevel.PARTIAL ? "contained" : "outlined" }
+               onClick={(_e) => setPrivacyLevel(PrivacyLevel.PARTIAL) }>
                 PARTIAL
               </Button>
               <Button
