@@ -1,23 +1,21 @@
-import EthereumNetwork from "./Ethereum";
-import { NetworkIds } from "./Network";
+// import { NetworkId } from "./Network.js";
+import SepoliaNetwork from "./Sepolia.js";
 
 class NetworkProvider {
+  private sepoliaNetwork?: SepoliaNetwork;
 
-  ethereumNetwork: EthereumNetwork | undefined;
-
-  constructor(requestedNetworks: [number]) {
-    if (requestedNetworks.includes(NetworkIds.Ethereum))
-      this.ethInit();
+  constructor() {
+    this.sepoliaInit();
   }
 
-  ethInit() {
-    if (this.ethereumNetwork == undefined) {
-      this.ethereumNetwork = new EthereumNetwork();
+  sepoliaInit() {
+    if (this.sepoliaNetwork == undefined) {
+      this.sepoliaNetwork = new SepoliaNetwork();
     }
   }
 
-  getEthNetwork(): EthereumNetwork | undefined {
-    return this.ethereumNetwork
+  getSepoliaNetwork(): SepoliaNetwork | undefined {
+    return this.sepoliaNetwork;
   }
 }
 

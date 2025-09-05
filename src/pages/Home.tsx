@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Button, Drawer, FormControl, InputLabel, MenuItem, Select, Alert, Typography, Box, Card, Paper, List, ListItem, ListItemButton, ListItemText, ListItemIcon, Icon, Tooltip, Avatar, Chip } from "@mui/material";
 import "./Home.css";
 import { Label, Check, Circle, ContentCopy } from "@mui/icons-material";
@@ -6,6 +6,7 @@ import { LineChart } from "@mui/x-charts";
 import { AppContext, WalletContext } from "../AppContext.js";
 import { ActiveAccountContext, ActiveAccountContextType } from "../ActiveAccountProvider.js";
 import ArfGraph from "../components/ArfGraph.js";
+import { TokenBalance } from "../backend/Network.js";
 
 const NETWORK_NAMES = [
   "UNKNOWN",
@@ -22,9 +23,9 @@ const NETWORK_AVATAR_SRC = [
 ]
 
 const TOKENS = [
-  { name: "ETH", icon: "eth.png" },
-  { name: "USDT", icon: "usdt.png" },
-  { name: "ARF", icon: "coin.svg" },
+  { name: "ETH", icon: "eth.png", contract: "ETH" },
+  { name: "USDT", icon: "usdt.png", contract: "0xdAC17F958D2ee523a2206206994597C13D831ec7" },
+  { name: "ARF", icon: "coin.svg", contract: "0xYourArfContract" },
 ];
 
 const demoData = [
@@ -47,6 +48,7 @@ function Home() {
 
   const [network, setNetwork] = React.useState(1);
   const [networkDrawerOpen, setNetworkDrawerOpen] = React.useState(false);
+  const [balances, setBalances] = useState<Record<string, string>>({});
 
   const handleNetworkChange = (event: any) => {
     setNetwork(event.target.value)
@@ -55,6 +57,34 @@ function Home() {
   const toggleNetworkDrawer = () => {
     setNetworkDrawerOpen(!networkDrawerOpen)
   }
+
+  useEffect(() => {
+    async function fetchBalances() {
+      try {
+        const net = wallet_context?.networkProvider.getSepoliaNetwork();
+        if (!net) return;
+
+        const address = active_context?.activeAccount?.GetAddress();
+        if (!address) return;
+
+        const tokenBalances: TokenBalance[] = await net.getTokenBalances(
+          address
+        );
+
+        // Map balances by contract/name
+        const balanceMap: Record<string, string> = {};
+        tokenBalances.forEach((tb) => {
+          balanceMap[tb.contractAddress] = tb.tokenBalance;
+        });
+
+        setBalances(balanceMap);
+      } catch (err) {
+        console.error("Error fetching balances:", err);
+      }
+    }
+
+    fetchBalances();
+  }, [active_context.activeAccount]);
 
   return (
     <div className='home'>
@@ -125,13 +155,13 @@ function Home() {
 
       <Box className="list">
         <List >
-          {TOKENS.map(({ name, icon }) => (
+          {TOKENS.map(({ name, icon, contract }) => (
             <ListItem
-              className="list-item"
               key={name}
+              className="list-item"
               secondaryAction={
                 <Typography fontWeight={600} textAlign="right">
-                  0.00
+                  {balances[contract] ?? "0.00"}
                 </Typography>
               }
             >

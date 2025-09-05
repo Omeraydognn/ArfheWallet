@@ -36,12 +36,24 @@ export default class AccountManager {
   }
 
   AddAccount(account: Account): number {
-    if (!account.entropy) {
+    if (!account.mnemonic) {
       console.error("Account to be added returned undefined. Please check.");
       return -1;
     }
     const index = this.accounts.push(account) - 1;
     this.notifyListeners(); // update UI
+    return index;
+  }
+
+  ImportAccount(mnemonic: string): number {
+    let account = Account.FromMnemonic(mnemonic, this.CreateRandomAccountName());
+    let index = this.AddAccount(account);
+
+    if (this.active == -1 || this.active != index) {
+      this.active = index;
+      this.notifyListeners();  // <-- make sure listeners are notified
+    }
+
     return index;
   }
 

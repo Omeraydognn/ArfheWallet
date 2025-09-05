@@ -30,5 +30,6 @@
     // Add if you need Node APIs:
     // "lib": ["esnext", "dom"],
     // "types": ["node"]
-  }
+  },
+  "include": ["src"]
 }

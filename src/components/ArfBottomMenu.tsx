@@ -32,9 +32,32 @@ function CustomTabPanel(props: TabPanelProps) {
 }
 
 function SendPanel() {
+  const context = useContext(WalletContext);
+  const networkProvider = context?.networkProvider;
+
   const [sendAddress, setSendAddress] = React.useState("");
   const [sendToken, setSendToken] = React.useState(0);
   const [sendAmount, setSendAmount] = React.useState(0.0);
+
+  const [blockNumber, setBlockNumber] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const fetchBlockNumber = async () => {
+      const network = networkProvider?.getSepoliaNetwork();
+      if (!network) return;
+
+      try {
+        const data = await network.getBlockNumber();
+        // if getBlockNumber returns full block JSON, extract the number
+        const number = data?.result?.number ?? null;
+        setBlockNumber(number);
+      } catch (err) {
+        console.error("Failed to fetch block number:", err);
+      }
+    };
+
+    fetchBlockNumber();
+  }, [networkProvider]); // re-run if provider changes
 
   return (
     <Stack direction="column">
@@ -78,6 +101,11 @@ function SendPanel() {
           onChange={(e) => setSendAmount(parseFloat(e.target.value))}
         />
       </Stack>
+
+      <Typography>
+        Latest Block:{" "}
+        {blockNumber ? blockNumber : "Loading..."}
+      </Typography>
 
       <Stack
         direction="row"

@@ -139,7 +139,7 @@ function ArfBar({ network, setNetwork }: { network: any; setNetwork: any }) {
                 {activeAccount?.GetName() ?? "No Active Account"}
               </Typography>
               <Typography textAlign="center" fontSize={12}>
-                {activeAccount?.GetShortKey() ?? "0x000000000"}
+                {activeAccount?.GetShortAddress() ?? "0x000000000"}
               </Typography>
             </Box>
 
