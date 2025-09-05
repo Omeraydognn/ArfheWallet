@@ -133,9 +133,11 @@ function Home() {
         </Box>
 
         {/* graph section (full width, ignoring padding) */}
+        {/*
         <Box sx={{ mx: -2, mb: -2 }}> 
           <ArfGraph data={demoData}/>
         </Box>
+        */}
       </Box>
       
       { /*<LineChart

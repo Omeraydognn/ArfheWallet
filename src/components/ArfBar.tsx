@@ -55,7 +55,7 @@ function AccountDrawer({ open, onClose }: { open: boolean; onClose: () => void }
                 >
                   <ListItemText
                     primary={acc.GetName()}
-                    secondary={acc.GetPublicKey()}
+                    secondary={acc.GetAddress()}
                     primaryTypographyProps={{ fontSize: 14 }}
                     secondaryTypographyProps={{ fontSize: 12, noWrap: true }}
                   />

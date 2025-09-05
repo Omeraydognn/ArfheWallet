@@ -47,10 +47,9 @@ function SendPanel() {
       if (!network) return;
 
       try {
-        const data = await network.getBlockNumber();
+        const number = await network.getBlockNumber();
         // if getBlockNumber returns full block JSON, extract the number
-        const number = data?.result?.number ?? null;
-        setBlockNumber(number);
+        setBlockNumber(number.toString());
       } catch (err) {
         console.error("Failed to fetch block number:", err);
       }
@@ -122,7 +121,7 @@ function SendPanel() {
 function ReceivePanel() {
   const wallet = useContext(WalletContext);
 
-  const PUBLIC_KEY = wallet?.accountManager?.GetActive()?.public_key;
+  const PUBLIC_KEY = wallet?.accountManager?.GetActive()?.GetAddress();
 
   if (!PUBLIC_KEY) {
     return (
