@@ -111,6 +111,9 @@ function ArfBar({ network, setNetwork }: { network: any; setNetwork: any }) {
               <MenuItem value={1}>Ethereum</MenuItem>
               <MenuItem value={2}>Zama.ai</MenuItem>
               <MenuItem value={3}>Fhenix</MenuItem>
+              <MenuItem value={4}>Sepolia</MenuItem>
+              <MenuItem value={5}>Hoodi</MenuItem>
+              
             </Select>
           </FormControl>
         </div>

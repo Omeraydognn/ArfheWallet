@@ -6,6 +6,7 @@ export default class SepoliaNetwork extends Network {
   constructor() {
     super(
       NetworkId.Ethereum_Sepolia,
+      "Sepolia",
       "https://eth-sepolia.g.alchemy.com/v2/"
     );
   }

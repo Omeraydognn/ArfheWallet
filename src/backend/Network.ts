@@ -1,3 +1,4 @@
+import { formatEther } from "ethers";
 import TokenCache, { TokenCacheItem } from "./TokenCache.js";
 
 enum NetworkId {
@@ -6,7 +7,7 @@ enum NetworkId {
   Zama = 2,
   Fhenix = 3,
   Ethereum_Sepolia = 4,
-  Ethereum_Holesky = 5,
+  Ethereum_Hoodi = 5,
 }
 
 type TokenBalance = {
@@ -16,14 +17,20 @@ type TokenBalance = {
 };
 
 function WeiToEth(value: bigint): string {
+  /*
   const WEI_PER_ETH = 10n ** 18n;
   const whole = value / WEI_PER_ETH;
   const fraction = value % WEI_PER_ETH;
   return `${whole}.${fraction.toString().padStart(18, "0")}`.replace(/\.?0+$/, "");
+  */
+
+  return formatEther(value);
 }
 
 class Network {
   network_id: NetworkId;
+  network_name: string;
+
   api_key?: string;
   rpc_url?: string;
 
@@ -32,8 +39,9 @@ class Network {
     "Content-Type": "application/json",
   };
 
-  constructor(network_id: NetworkId, baseUrl?: string) {
+  constructor(network_id: NetworkId, network_name: string, baseUrl?: string) {
     this.network_id = network_id;
+    this.network_name = network_name;
 
     this.api_key = import.meta.env.VITE_ALCHEMY_API_KEY ?? "";
     if (!this.api_key) {
