@@ -7,6 +7,7 @@ import { AppContext, WalletContext } from "../AppContext.js";
 import { ActiveAccountContext, ActiveAccountContextType } from "../ActiveAccountProvider.js";
 import ArfGraph from "../components/ArfGraph.js";
 import { TokenBalance } from "../backend/Network.js";
+import { TokenCacheItem } from "../backend/TokenCache.js";
 
 const NETWORK_NAMES = [
   "UNKNOWN",
@@ -46,9 +47,10 @@ function Home() {
   if (!active_context)
     return;
 
-  const [network, setNetwork] = React.useState(1);
+  const [network, setNetwork] = React.useState(4);
   const [networkDrawerOpen, setNetworkDrawerOpen] = React.useState(false);
   const [balances, setBalances] = useState<Record<string, string>>({});
+  const [tokens, setTokens] = useState<TokenCacheItem[]>([]);
 
   const handleNetworkChange = (event: any) => {
     setNetwork(event.target.value)
@@ -68,7 +70,7 @@ function Home() {
         if (!address) return;
 
         const tokenBalances: TokenBalance[] = await net.getTokenBalances(
-          address
+          wallet_context?.tokenCache, address
         );
 
         // Map balances by contract/name
@@ -78,6 +80,9 @@ function Home() {
         });
 
         setBalances(balanceMap);
+
+        const cached = wallet_context?.tokenCache.getAllTokens(network) ?? [];
+        setTokens(cached);
       } catch (err) {
         console.error("Error fetching balances:", err);
       }
@@ -156,28 +161,43 @@ function Home() {
       
 
       <Box className="list">
-        <List >
-          {TOKENS.map(({ name, icon, contract }) => (
-            <ListItem
-              key={name}
-              className="list-item"
-              secondaryAction={
-                <Typography fontWeight={600} textAlign="right">
-                  {balances[contract] ?? "0.00"}
-                </Typography>
-              }
-            >
-              <ListItemIcon>
-                <Avatar src={icon} />
-              </ListItemIcon>
-              <ListItemText primary={name} />
-            </ListItem>
-          ))}
-        </List>
+        { tokens.length === 0 ? (
+          <NoAssetsFound />
+        ) : (
+          <List>
+            {tokens.map((token) => (
+              <ListItem
+                key={token.contractAddress}
+                className="list-item"
+                secondaryAction={
+                  <Typography fontWeight={600} textAlign="right">
+                    {balances[token.contractAddress] ?? "0.00"}
+                  </Typography>
+                }
+              >
+                <ListItemIcon>
+                  <Avatar src={token.logoSrc} />
+                </ListItemIcon>
+                <ListItemText primary={token.symbol} secondary={token.name} />
+              </ListItem>
+            ))}
+          </List>
+        )}
       </Box>
 
     </div>
   );
 }
+
+function NoAssetsFound() {
+  return (
+    <Box sx={{ p: 3, textAlign: "center" }}>
+      <Typography variant="h6" color="text.secondary">
+        No assets found
+      </Typography>
+    </Box>
+  );
+}
+
 
 export default Home;

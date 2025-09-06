@@ -1,3 +1,5 @@
+import TokenCache, { TokenCacheItem } from "./TokenCache.js";
+
 enum NetworkId {
   Unknown = -1,
   Ethereum_Mainnet = 1,
@@ -74,29 +76,73 @@ class Network {
     return parseInt(result, 16);
   }
 
-  async getTokenBalances(address: string): Promise<TokenBalance[]> {
+  async getTokenMetadata(tokenCacheObj: TokenCache, contractAddress: string): Promise<TokenCacheItem> {
+    const metadata = await this.call("alchemy_getTokenMetadata", [contractAddress]);
+
+    const item: TokenCacheItem = {
+      name: metadata.name ?? "Unknown Token",
+      symbol: metadata.symbol ?? "",
+      decimals: metadata.decimals ?? 18,
+      logoSrc: metadata.logo ?? "",
+      contractAddress: contractAddress,
+    };
+
+    tokenCacheObj.setToken(this.network_id, item);
+    return item;
+  }
+
+  async getTokenBalances(tokenCacheObj: TokenCache | undefined, address: string): Promise<TokenBalance[]> {
+    if (!tokenCacheObj) {
+      console.error("TokenCache not found. Returning empty...");
+      return [];
+    }
+
     const result = await this.call("alchemy_getTokenBalances", [
       address,
       ["erc20", "NATIVE_TOKEN"],
     ]);
 
-    return result.tokenBalances.map((t: any): TokenBalance => {
-      if (t.contractAddress === "null") {
-        // Native ETH
-        return {
-          contractAddress: "ETH",
-          tokenBalance: WeiToEth(BigInt(t.tokenBalance)),
-          isNative: true,
-        };
-      }
+    return Promise.all(
+      result.tokenBalances.map(async (t: any): Promise<TokenBalance> => {
+        if (t.contractAddress === "null") {
+          // Native token (ETH, MATIC, etc.)
+          const nativeItem: TokenCacheItem = {
+            name: "Ethereum",
+            symbol: "ETH",
+            decimals: 18,
+            logoSrc: "/logos/eth.png", // you could customize per network
+            contractAddress: "ETH",
+          };
 
-      // ERC20
-      return {
-        contractAddress: t.contractAddress,
-        tokenBalance: BigInt(t.tokenBalance).toString(),
-        isNative: false,
-      };
-    });
+          if (!tokenCacheObj.hasToken(this.network_id, "ETH")) {
+            tokenCacheObj.setToken(this.network_id, nativeItem);
+          }
+
+          return {
+            contractAddress: "ETH",
+            tokenBalance: WeiToEth(BigInt(t.tokenBalance)),
+            isNative: true,
+          };
+        }
+
+        const contract = t.contractAddress.toLowerCase();
+
+        // Check cache; fetch metadata if missing
+        if (!tokenCacheObj.hasToken(this.network_id, contract)) {
+          try {
+            await this.getTokenMetadata(tokenCacheObj, contract);
+          } catch (err) {
+            console.warn(`Failed to fetch metadata for ${contract}:`, err);
+          }
+        }
+
+        return {
+          contractAddress: contract,
+          tokenBalance: BigInt(t.tokenBalance).toString(),
+          isNative: false,
+        };
+      })
+    );
   }
 }
 

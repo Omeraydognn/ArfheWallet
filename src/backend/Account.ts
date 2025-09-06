@@ -10,7 +10,11 @@ export default class Account {
 
   ethers_wallet?: HDNodeWallet;
 
-  constructor() {}
+  owned_tokens: Map<number, string[]>;
+
+  constructor() {
+    this.owned_tokens = new Map();
+  }
 
   static Random(name: string): Account {
     const account = new Account();
@@ -76,5 +80,42 @@ export default class Account {
 
   GetName(): string {
     return this.name ?? "";
+  }
+
+  private getNetworkTokens(networkId: number): string[] {
+    if (!this.owned_tokens.has(networkId)) {
+      this.owned_tokens.set(networkId, []);
+    }
+    return this.owned_tokens.get(networkId)!;
+  }
+
+  AddToken(networkId: number, contractAddress: string): void {
+    const addr = contractAddress.toLowerCase();
+    const tokens = this.getNetworkTokens(networkId);
+    if (!tokens.includes(addr)) {
+      tokens.push(addr);
+    }
+  }
+
+  RemoveToken(networkId: number, contractAddress: string): void {
+    const addr = contractAddress.toLowerCase();
+    const tokens = this.getNetworkTokens(networkId);
+    this.owned_tokens.set(
+      networkId,
+      tokens.filter(t => t !== addr)
+    );
+  }
+
+  HasToken(networkId: number, contractAddress: string): boolean {
+    const addr = contractAddress.toLowerCase();
+    return this.getNetworkTokens(networkId).includes(addr);
+  }
+
+  GetOwnedTokens(networkId: number): string[] {
+    return [...this.getNetworkTokens(networkId)];
+  }
+
+  GetAllOwnedTokens(): Map<number, string[]> {
+    return new Map(this.owned_tokens);
   }
 }
