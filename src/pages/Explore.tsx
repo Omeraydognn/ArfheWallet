@@ -1,220 +1,226 @@
-import React, { useState } from "react";
-import { Search, Activity, Box, Clock, ArrowRight } from "lucide-react";
-import './Explore.css'; // Stil dosyasını buraya import ediyoruz
+import React, { useState, useEffect } from 'react';
+import { Container, Paper, Typography, TextField, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, CircularProgress, Box, Grid, Link as MuiLink } from '@mui/material';
+import { Search as SearchIcon, Bolt as BoltIcon, AccountBalanceWallet as AccountBalanceWalletIcon, Public as PublicIcon, Dashboard as DashboardIcon } from '@mui/icons-material';
 
-// Mock Data (Gerçek verilerinizle değiştirin)
-const mockData = {
-  blocks: [
-    { number: 1056789, hash: "0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f", transactions: 25, size: "1.2 KB", timestamp: "20 saniye önce" },
-    { number: 1056788, hash: "0x2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f1", transactions: 18, size: "1.1 KB", timestamp: "45 saniye önce" },
-    { number: 1056787, hash: "0x3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f12", transactions: 32, size: "1.5 KB", timestamp: "1 dakika önce" },
-  ],
-  recentTransactions: [
-    { hash: "0x4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f123", amount: "0.5 ETH", gasFee: "0.001 ETH", status: "confirmed", timestamp: "5 saniye önce" },
-    { hash: "0x5e6f7a8b9c0d1e2f3a4b5c6d7e8f1234", amount: "1.2 BTC", gasFee: "0.0002 BTC", status: "pending", timestamp: "15 saniye önce" },
-    { hash: "0x6f7a8b9c0d1e2f3a4b5c6d7e8f12345", amount: "15 USDT", gasFee: "0.0005 ETH", status: "confirmed", timestamp: "30 saniye önce" },
-  ],
-  addresses: [
-    { address: "0x7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c", transactions: 125, balance: "10 ETH", lastActivity: "5 dakika önce" },
-    { address: "0x8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3", transactions: 89, balance: "2 BTC", lastActivity: "20 dakika önce" },
-    { address: "0x9b0c1d2e3f4a5b6c7d8e9f0a1b2c34", transactions: 210, balance: "5000 USDT", lastActivity: "1 saat önce" },
-  ],
+// Bu bileşen, Metamask ve Phantom gibi cüzdanların explorer sayfalarının modern ve profesyonel
+// düzenini yansıtan kapsamlı bir dashboard oluşturur.
+// Tüm stil ve mantık, tek bir dosya içinde, harici bir CSS dosyasına ihtiyaç duymadan çalışmaktadır.
+
+// Gösterim amaçlı sahte veri. Gerçek verilerle entegrasyon için API çağrıları gereklidir.
+const generateMockData = () => {
+  const blocks = [];
+  const transactions = [];
+  const now = Date.now();
+  for (let i = 0; i < 12; i++) {
+    blocks.push({
+      id: `0x${Math.random().toString(16).slice(2, 10)}`,
+      number: 123456789 - i,
+      timestamp: new Date(now - i * 60000).toLocaleString('tr-TR'),
+      txCount: Math.floor(Math.random() * 50) + 1,
+      miner: `0x${Math.random().toString(16).slice(2, 12)}`,
+    });
+
+    transactions.push({
+      hash: `0x${Math.random().toString(16).slice(2, 20)}`,
+      from: `0x${Math.random().toString(16).slice(2, 10)}`,
+      to: `0x${Math.random().toString(16).slice(2, 10)}`,
+      value: (Math.random() * 10).toFixed(4),
+      status: i % 2 === 0 ? 'Başarılı' : 'Beklemede',
+    });
+  }
+  return { blocks, transactions };
 };
 
-const Explorer = () => {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("transactions");
-  const { blocks, recentTransactions, addresses } = mockData;
+const Explore = () => {
+  const [loading, setLoading] = useState(true);
+  const [blocks, setBlocks] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    console.log("Searching for:", searchQuery);
-    // Gerçek arama mantığı buraya eklenecek
+  useEffect(() => {
+    const { blocks, transactions } = generateMockData();
+    setBlocks(blocks);
+    setTransactions(transactions);
+    setLoading(false);
+  }, []);
+
+  const handleSearch = () => {
+    alert(`Aranan terim: ${searchQuery}`);
   };
 
-  const Card = ({ children }) => <div className="card">{children}</div>;
-  const CardHeader = ({ children }) => <div className="card-header">{children}</div>;
-  const CardTitle = ({ children }) => <h2 className="card-title">{children}</h2>;
-  const CardContent = ({ children }) => <div className="card-content">{children}</div>;
-  const Badge = ({ children, variant }) => <span className={`badge badge--${variant}`}>{children}</span>;
-  const TabsList = ({ children }) => <div className="tabs-list">{children}</div>;
-  const TabsTrigger = ({ children, value, active, onClick }) => (
-    <button
-      onClick={onClick}
-      className={`tabs-trigger ${active ? 'tabs-trigger--active' : ''}`}
-    >
-      {children}
-    </button>
-  );
+  if (loading) {
+    return (
+      <Box className="flex justify-center items-center h-screen bg-gray-100">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Varsayılan ana metrik değerleri
+  const totalTransactions = 5000000;
+  const latestBlockNumber = 123456789;
+  const avgBlockTime = '2.5s';
 
   return (
-    <div className="explorer-container">
-      <div className="header">
-        <h1>Blockchain Explorer</h1>
-        <p>Blokları, işlemleri ve adresleri keşfedin</p>
-      </div>
-
-      <div className="search-section">
-        <form onSubmit={handleSearch} className="search-form">
-          <div className="search-input-wrapper">
-            <Search className="search-icon" />
-            <input
-              type="text"
-              placeholder="Blok numarası, işlem hash'i veya adres ara..."
+    // Ana konteyner: beyaz arka plan ve genel düzen
+    <div className="bg-gray-100 min-h-screen flex flex-col font-sans text-gray-800">
+      <Container maxWidth="lg" className="py-8">
+        <Paper className="p-6 md:p-8 rounded-xl shadow-lg bg-white">
+          <Typography variant="h4" gutterBottom className="font-semibold text-gray-800 text-center mb-6">
+            Explorer
+          </Typography>
+          
+          {/* Arama çubuğu */}
+          <Box className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4 mb-8">
+            <TextField
+              fullWidth
+              variant="outlined"
+              label="Adres, İşlem Hash veya Blok Numarası Girin"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="search-input"
+              className="rounded-lg shadow-sm"
+              InputProps={{ classes: { root: 'rounded-lg' } }}
             />
-          </div>
-          <button type="submit" className="search-button">
-            Ara
-          </button>
-        </form>
-      </div>
+            <Button 
+              variant="contained" 
+              startIcon={<SearchIcon />} 
+              onClick={handleSearch}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-colors w-full md:w-auto"
+            >
+              Ara
+            </Button>
+          </Box>
 
-      <div className="tabs-section">
-        <TabsList>
-          <TabsTrigger value="transactions" active={activeTab === "transactions"} onClick={() => setActiveTab("transactions")}>
-            İşlemler
-          </TabsTrigger>
-          <TabsTrigger value="blocks" active={activeTab === "blocks"} onClick={() => setActiveTab("blocks")}>
-            Bloklar
-          </TabsTrigger>
-          <TabsTrigger value="addresses" active={activeTab === "addresses"} onClick={() => setActiveTab("addresses")}>
-            Adresler
-          </TabsTrigger>
-        </TabsList>
-        
-        <div className="tab-content">
-          {activeTab === "transactions" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <div className="card-title-icon-wrapper">
-                    <Activity className="card-title-icon" />
-                    <span>Son İşlemler</span>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="item-list">
-                  {recentTransactions.map((tx) => (
-                    <div
-                      key={tx.hash}
-                      className="list-item clickable"
-                      onClick={() => console.log(`Navigating to tx: ${tx.hash}`)}
-                    >
-                      <div className="list-item-main">
-                        <div className="list-item-hash">
-                          <span className="hash-text">{tx.hash.substring(0, 8)}...{tx.hash.substring(tx.hash.length - 8)}</span>
-                        </div>
-                        <div className="list-item-meta">
-                          <Clock className="meta-icon" />
-                          <span className="meta-text">{tx.timestamp}</span>
-                        </div>
+          {/* İki Sütunlu Düzen: Sol tarafta Metrikler, Sağ tarafta En Son Bloklar ve İşlemler */}
+          <Grid container spacing={4}>
+            {/* Metrikler ve Ağ Bilgileri - Sol Sütun */}
+            <Grid item xs={12} lg={4}>
+              <Grid container spacing={4}>
+                <Grid item xs={12} sm={6}>
+                  <Paper className="p-4 rounded-xl shadow-md bg-gray-50 flex flex-col items-start h-full">
+                    <Typography variant="h6" className="font-bold text-gray-800 flex items-center mb-2">
+                      <DashboardIcon className="mr-2 text-blue-600" /> Ağ Durumu
+                    </Typography>
+                    <div className="w-full space-y-3">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500">Son Blok:</span>
+                        <span className="font-semibold">{latestBlockNumber}</span>
                       </div>
-                      <div className="list-item-details">
-                        <div className="details-text">
-                          <span className="details-amount">{tx.amount}</span>
-                          <span className="details-gas">Gas: {tx.gasFee}</span>
-                        </div>
-                        <Badge variant={tx.status === "confirmed" ? "default" : "secondary"}>
-                          {tx.status === "confirmed" ? "Onaylandı" : "Beklemede"}
-                        </Badge>
-                        <ArrowRight className="details-arrow" />
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500">Toplam İşlem:</span>
+                        <span className="font-semibold">{totalTransactions.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500">Ortalama Blok Süresi:</span>
+                        <span className="font-semibold">{avgBlockTime}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500">Token Fiyatı:</span>
+                        <span className="font-semibold text-green-600">$1.25</span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Paper className="p-4 rounded-xl shadow-md bg-gray-50 flex flex-col items-start h-full">
+                    <Typography variant="h6" className="font-bold text-gray-800 mb-2">
+                      Popüler Adresler
+                    </Typography>
+                    {['0xabc...', '0xdef...', '0x123...'].map((address, index) => (
+                      <MuiLink key={index} href={`/address/${address}`} className="text-blue-600 hover:underline text-sm mb-1">
+                        {address}
+                      </MuiLink>
+                    ))}
+                  </Paper>
+                </Grid>
+              </Grid>
+            </Grid>
 
-          {activeTab === "blocks" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <div className="card-title-icon-wrapper">
-                    <Box className="card-title-icon" />
-                    <span>Son Bloklar</span>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="item-list">
-                  {blocks.map((block) => (
-                    <div
-                      key={block.number}
-                      className="list-item clickable"
-                    >
-                      <div className="list-item-main">
-                        <div className="block-number-badge">
-                          #{block.number}
-                        </div>
-                        <div className="list-item-content">
-                          <span className="hash-text">{block.hash.substring(0, 8)}...{block.hash.substring(block.hash.length - 8)}</span>
-                          <div className="list-item-meta">
-                            <Clock className="meta-icon" />
-                            <span className="meta-text">{block.timestamp}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="list-item-details">
-                        <div className="details-text">
-                          <span className="details-tx-count">{block.transactions} işlem</span>
-                          <span className="details-size">Boyut: {block.size}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+            {/* Son Bloklar ve Son İşlemler - Sağ Sütun */}
+            <Grid item xs={12} lg={8}>
+              <Paper className="p-4 rounded-xl shadow-md bg-gray-50 mb-4">
+                <Typography variant="h6" className="font-bold text-gray-800 mb-2">
+                  Son Bloklar
+                </Typography>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell className="font-bold text-gray-600">Blok No</TableCell>
+                        <TableCell className="font-bold text-gray-600">Yaş</TableCell>
+                        <TableCell align="right" className="font-bold text-gray-600">İşlem</TableCell>
+                        <TableCell className="font-bold text-gray-600">Madenci</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {blocks.map((block) => (
+                        <TableRow key={block.id} className="hover:bg-gray-100 transition-colors">
+                          <TableCell>
+                            <MuiLink href={`/block/${block.number}`} className="text-blue-600 hover:underline">
+                              {block.number}
+                            </MuiLink>
+                          </TableCell>
+                          <TableCell>{block.timestamp}</TableCell>
+                          <TableCell align="right">{block.txCount}</TableCell>
+                          <TableCell className="text-gray-500 font-mono text-xs">
+                            <MuiLink href={`/address/${block.miner}`} className="text-blue-600 hover:underline">
+                              {block.miner.substring(0, 10)}...
+                            </MuiLink>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
 
-          {activeTab === "addresses" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <div className="card-title-icon-wrapper">
-                    <Activity className="card-title-icon" />
-                    <span>Aktif Adresler</span>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="item-list">
-                  {addresses.map((address) => (
-                    <div
-                      key={address.address}
-                      className="list-item clickable"
-                      onClick={() => console.log(`Navigating to address: ${address.address}`)}
-                    >
-                      <div className="list-item-main">
-                        <div className="address-icon-wrapper">
-                          <Activity className="address-icon" />
-                        </div>
-                        <div className="list-item-content">
-                          <span className="hash-text">{address.address.substring(0, 8)}...{address.address.substring(address.address.length - 8)}</span>
-                          <span className="details-tx-count">{address.transactions} işlem</span>
-                        </div>
-                      </div>
-                      <div className="list-item-details">
-                        <div className="details-text">
-                          <span className="details-amount">{address.balance}</span>
-                          <span className="details-last-activity">Son aktivite: {address.lastActivity}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
+              <Paper className="p-4 rounded-xl shadow-md bg-gray-50">
+                <Typography variant="h6" className="font-bold text-gray-800 mb-2">
+                  Son İşlemler
+                </Typography>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell className="font-bold text-gray-600">İşlem Hash</TableCell>
+                        <TableCell className="font-bold text-gray-600">Gönderen</TableCell>
+                        <TableCell className="font-bold text-gray-600">Alıcı</TableCell>
+                        <TableCell align="right" className="font-bold text-gray-600">Değer</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {transactions.map((tx, index) => (
+                        <TableRow key={index} className="hover:bg-gray-100 transition-colors">
+                          <TableCell>
+                            <MuiLink href={`/tx/${tx.hash}`} className="text-blue-600 hover:underline text-xs">
+                              {tx.hash.substring(0, 15)}...
+                            </MuiLink>
+                          </TableCell>
+                          <TableCell>
+                            <MuiLink href={`/address/${tx.from}`} className="text-blue-600 hover:underline text-xs">
+                              {tx.from.substring(0, 10)}...
+                            </MuiLink>
+                          </TableCell>
+                          <TableCell>
+                            <MuiLink href={`/address/${tx.to}`} className="text-blue-600 hover:underline text-xs">
+                              {tx.to.substring(0, 10)}...
+                            </MuiLink>
+                          </TableCell>
+                          <TableCell align="right">
+                            <span className="font-semibold">{tx.value}</span> FHE
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            </Grid>
+          </Grid>
+        </Paper>
+      </Container>
     </div>
   );
 };
 
-export default Explorer;
+export default Explore;
