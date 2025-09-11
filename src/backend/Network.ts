@@ -1,4 +1,5 @@
-import { formatEther } from "ethers";
+import { formatEther, parseUnits, TransactionRequest } from "ethers";
+import Account from "./Account.js";
 import TokenCache, { TokenCacheItem } from "./TokenCache.js";
 
 enum NetworkId {
@@ -151,6 +152,58 @@ class Network {
         };
       })
     );
+  }
+
+  async sendTransaction(
+    account: Account,
+    tx: {
+      to: string;
+      value?: string;         // in ETH (human readable)
+      gasLimit?: bigint;      // optional
+      gasPrice?: string;      // in gwei (human readable)
+      data?: string;          // calldata (optional)
+    }
+  ): Promise<string> {
+    if (!this.rpc_url) throw new Error("RPC URL not set");
+    if (!account.ethers_wallet) throw new Error("Account is missing ethers_wallet");
+
+    const wallet = account.ethers_wallet;
+
+    // Nonce
+    const nonceHex = await this.call("eth_getTransactionCount", [
+      wallet.address,
+      "pending",
+    ]);
+    const nonce = BigInt(nonceHex);
+
+    // Gas price (fallback to eth_gasPrice if not provided)
+    let gasPrice = tx.gasPrice
+      ? parseUnits(tx.gasPrice, "gwei")
+      : BigInt(await this.call("eth_gasPrice", []));
+
+    // Value in wei
+    const valueWei = tx.value ? parseUnits(tx.value, "ether") : 0n;
+
+    const chainIdHex = await this.call("eth_chainId", []);
+    const chainId = parseInt(chainIdHex, 16);
+
+    // Construct transaction
+    const txRequest: TransactionRequest = {
+      to: tx.to,
+      value: valueWei,
+      gasLimit: tx.gasLimit ?? 21_000n,
+      gasPrice,
+      nonce: Number(nonce),
+      data: tx.data ?? "0x",
+      chainId,
+    };
+
+    // Sign and serialize
+    const signedTx = await wallet.signTransaction(txRequest);
+
+    // Broadcast
+    const txHash = await this.call("eth_sendRawTransaction", [signedTx]);
+    return txHash;
   }
 }
 

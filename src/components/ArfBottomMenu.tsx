@@ -34,12 +34,16 @@ function CustomTabPanel(props: TabPanelProps) {
 function SendPanel() {
   const context = useContext(WalletContext);
   const networkProvider = context?.networkProvider;
+  const activeAccount = context?.accountManager?.GetActive();
 
   const [sendAddress, setSendAddress] = React.useState("");
   const [sendToken, setSendToken] = React.useState(0);
   const [sendAmount, setSendAmount] = React.useState(0.0);
 
   const [blockNumber, setBlockNumber] = React.useState<string | null>(null);
+  const [txHash, setTxHash] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const fetchBlockNumber = async () => {
@@ -58,8 +62,51 @@ function SendPanel() {
     fetchBlockNumber();
   }, [networkProvider]); // re-run if provider changes
 
+  const handleSend = async () => {
+    if (!activeAccount) {
+      setError("No active account");
+      return;
+    }
+    if (!networkProvider) {
+      setError("No network provider");
+      return;
+    }
+    if (!sendAddress || sendAmount <= 0) {
+      setError("Invalid address or amount");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setTxHash(null);
+
+    try {
+      if (sendToken === 0) {
+        const network = networkProvider.getSepoliaNetwork();
+        if (!network) {
+          throw Error("No network available");
+        }
+
+        const hash = await network.sendTransaction(activeAccount, {
+          to: sendAddress,
+          value: sendAmount.toString(),
+          gasPrice: "10", // simple static gas price; could be dynamic
+        });
+
+        setTxHash(hash);
+      } else {
+        throw Error("Token sending support is coming soon.")
+      }
+    } catch (err: any) {
+      console.error("Transaction failed:", err);
+      setError(err.message ?? "Transaction failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <Stack direction="column">
+    <Stack direction="column" spacing={2}>
       <TextField
         variant="filled"
         label="Send To Address"
@@ -68,15 +115,8 @@ function SendPanel() {
         value={sendAddress}
         onChange={(e) => setSendAddress(e.target.value)}
       />
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        sx={{
-          width: "100%",
-          marginTop: "1rem",
-          marginBottom: "0.5rem",
-        }}
-      >
+
+      <Stack direction="row" spacing={1}>
         <FormControl sx={{ flex: "1" }}>
           <InputLabel id="send-token-label">Token</InputLabel>
           <Select
@@ -92,27 +132,49 @@ function SendPanel() {
             <MenuItem value={2}>USDT</MenuItem>
           </Select>
         </FormControl>
+
         <TextField
           variant="filled"
           label="Amount"
-          sx={{ marginLeft: "0.5rem" }}
+          type="number"
           value={sendAmount}
           onChange={(e) => setSendAmount(parseFloat(e.target.value))}
         />
       </Stack>
 
       <Typography>
-        Latest Block:{" "}
-        {blockNumber ? blockNumber : "Loading..."}
+        Latest Block: {blockNumber ? blockNumber : "Loading..."}
       </Typography>
+
+      {loading && <Typography>Sending transaction...</Typography>}
+      {txHash && (
+        <Typography color="primary">
+          Tx Sent: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+        </Typography>
+      )}
+      {error && <Typography color="error">{error}</Typography>}
 
       <Stack
         direction="row"
         justifyContent="space-between"
         sx={{ position: "absolute", width: "90%", bottom: "15px" }}
       >
-        <Button>CANCEL</Button>
-        <Button variant="contained">SEND</Button>
+        <Button onClick={() => {
+          setSendAddress("");
+          setSendAmount(0);
+          setSendToken(0);
+          setTxHash(null);
+          setError(null);
+        }}>
+          CANCEL
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleSend}
+          disabled={loading}
+        >
+          SEND
+        </Button>
       </Stack>
     </Stack>
   );
@@ -172,10 +234,33 @@ const SWAP_TEST_CONTRACTS = [
 ];
 
 function SwapPanel() {
+  const [enabled, setEnabled] = React.useState(false); // toggle this to enable/disable swap
+
   const [swapContract, setSwapContract] = React.useState(0); // provider id
   const [fromToken, setFromToken] = React.useState(0);
   const [toToken, setToToken] = React.useState(1);
   const [swapAmount, setSwapAmount] = React.useState(0.0);
+
+  if (!enabled) {
+    return (
+      <Stack
+        direction="column"
+        spacing={2}
+        justifyContent="center"
+        alignItems="center"
+        sx={{ height: "100%", textAlign: "center" }}
+      >
+        <img
+          src="/images/temp/swap-soon.png" // replace with your image path
+          alt="Coming soon"
+          style={{ width: 150, marginBottom: 16 }}
+        />
+        <Typography variant="h6" color="text.secondary">
+          Coming soon...
+        </Typography>
+      </Stack>
+    );
+  }
 
   return (
     <Stack direction="column" spacing={2}>
