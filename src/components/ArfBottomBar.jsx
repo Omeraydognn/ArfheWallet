@@ -31,7 +31,7 @@ export default function ArfBottomBar() {
       <BottomNavigation
         showLabels >
         <BottomNavigationAction label="Home" icon={<Home />} onClick={(e) => navigate('home')}/>
-        <BottomNavigationAction label="Explore" icon={<Search />} />
+        <BottomNavigationAction label="Explore" icon={<Search />} onClick={(e) => navigate('explore')}/>
         <Fab
           color="primary" 
           variant="extended" 

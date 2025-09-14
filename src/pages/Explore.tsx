@@ -2,11 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { Container, Paper, Typography, TextField, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, CircularProgress, Box, Grid, Link as MuiLink } from '@mui/material';
 import { Search as SearchIcon, Bolt as BoltIcon, AccountBalanceWallet as AccountBalanceWalletIcon, Public as PublicIcon, Dashboard as DashboardIcon } from '@mui/icons-material';
 
-// Bu bileşen, Metamask ve Phantom gibi cüzdanların explorer sayfalarının modern ve profesyonel
-// düzenini yansıtan kapsamlı bir dashboard oluşturur.
-// Tüm stil ve mantık, tek bir dosya içinde, harici bir CSS dosyasına ihtiyaç duymadan çalışmaktadır.
 
-// Gösterim amaçlı sahte veri. Gerçek verilerle entegrasyon için API çağrıları gereklidir.
+/* IF YOU ARE READING THIS, THIS IS MY FEEDBACK ON THIS CODE -NS */
+
+// There is certainly some effort, but there is a lot of room for improvement.
+// The explorer was made by GPT for the desktop view, not the mobile view that we are targeting.
+// So when slop'ing some code with GPT, please specify that it should be mobile-first and responsive.
+
+// Also a reminder: Do not use Turkish characters (or any non-ASCII characters) in code, whatsoever.
+
+// PS: I am happy that you finally are convinced to use MUI xD
+// PPS: The following interface declarations are my gift to you, for writing better code.
+// At least for this page. You are welcome.
+
+interface Block {
+  id: string;
+  number: number;
+  timestamp: string;
+  txCount: number;
+  miner: string;
+}
+
+interface Transaction {
+  hash: string;
+  from: string;
+  to: string;
+  value: string;
+  status: string;
+}
+
+// K, byee!!
+
 const generateMockData = () => {
   const blocks = [];
   const transactions = [];
@@ -25,7 +51,8 @@ const generateMockData = () => {
       from: `0x${Math.random().toString(16).slice(2, 10)}`,
       to: `0x${Math.random().toString(16).slice(2, 10)}`,
       value: (Math.random() * 10).toFixed(4),
-      status: i % 2 === 0 ? 'Başarılı' : 'Beklemede',
+      // Reminder: Do not use Turkish characters (or any non-ASCII characters) in code, whatsoever.
+      status: i % 2 === 0 ? 'Basarili' : 'Beklemede',
     });
   }
   return { blocks, transactions };
@@ -33,8 +60,8 @@ const generateMockData = () => {
 
 const Explore = () => {
   const [loading, setLoading] = useState(true);
-  const [blocks, setBlocks] = useState([]);
-  const [transactions, setTransactions] = useState([]);
+  const [blocks, setBlocks] = useState([] as Block[]);
+  const [transactions, setTransactions] = useState([] as Transaction[]);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
@@ -94,9 +121,12 @@ const Explore = () => {
           {/* İki Sütunlu Düzen: Sol tarafta Metrikler, Sağ tarafta En Son Bloklar ve İşlemler */}
           <Grid container spacing={4}>
             {/* Metrikler ve Ağ Bilgileri - Sol Sütun */}
-            <Grid item xs={12} lg={4}>
+
+            {/* GPT nasıl da belli oluyor, müq */}
+            <Grid size={{ xs: 12, lg: 4 }}>
               <Grid container spacing={4}>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  {/* Yo GPT, read this f*ckin fix. Pretty please. */}
                   <Paper className="p-4 rounded-xl shadow-md bg-gray-50 flex flex-col items-start h-full">
                     <Typography variant="h6" className="font-bold text-gray-800 flex items-center mb-2">
                       <DashboardIcon className="mr-2 text-blue-600" /> Ağ Durumu
@@ -121,7 +151,7 @@ const Explore = () => {
                     </div>
                   </Paper>
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <Paper className="p-4 rounded-xl shadow-md bg-gray-50 flex flex-col items-start h-full">
                     <Typography variant="h6" className="font-bold text-gray-800 mb-2">
                       Popüler Adresler
@@ -137,7 +167,7 @@ const Explore = () => {
             </Grid>
 
             {/* Son Bloklar ve Son İşlemler - Sağ Sütun */}
-            <Grid item xs={12} lg={8}>
+            <Grid size={{ xs: 12, lg: 8 }}>
               <Paper className="p-4 rounded-xl shadow-md bg-gray-50 mb-4">
                 <Typography variant="h6" className="font-bold text-gray-800 mb-2">
                   Son Bloklar
@@ -182,10 +212,11 @@ const Explore = () => {
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell className="font-bold text-gray-600">İşlem Hash</TableCell>
-                        <TableCell className="font-bold text-gray-600">Gönderen</TableCell>
-                        <TableCell className="font-bold text-gray-600">Alıcı</TableCell>
-                        <TableCell align="right" className="font-bold text-gray-600">Değer</TableCell>
+                        <TableCell className="font-bold text-gray-600">Islem Hash</TableCell>
+                        <TableCell className="font-bold text-gray-600">Gonderen</TableCell>
+                        {/* Read the comment I made before, pretty please. */}
+                        <TableCell className="font-bold text-gray-600">Alici</TableCell>
+                        <TableCell align="right" className="font-bold text-gray-600">Deger</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>

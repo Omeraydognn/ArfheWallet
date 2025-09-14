@@ -3,6 +3,16 @@ import * as d3 from 'd3';
 import { Container, Paper, Typography, Box, Tooltip, IconButton, Slide, CircularProgress } from '@mui/material';
 import { ZoomIn, ZoomOut, Search, Clear } from '@mui/icons-material';
 
+/* IF YOU ARE READING THIS, THIS IS MY FEEDBACK ON THIS CODE -NS */
+
+// I do not know where this thing is supposed to be, but you need to contact me ASAP about this.
+// Slop'ping code with GPT again, good, good. No judgment here.
+// I do have much more important things to do than fix this code rn, so sorry 'bout that.
+// but def contact me when you fix this.
+
+// Also another reminder: Do not use Turkish characters (or any non-ASCII characters) in code, whatsoever.
+
+
 const WalletInteractionMap = () => {
   const svgRef = useRef(null);
   const [loading, setLoading] = useState(true);
