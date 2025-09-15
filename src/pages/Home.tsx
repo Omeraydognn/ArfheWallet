@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Drawer, FormControl, InputLabel, MenuItem, Select, Alert, Typography, Box, Card, Paper, List, ListItem, ListItemButton, ListItemText, ListItemIcon, Icon, Tooltip, Avatar, Chip } from "@mui/material";
 import "./Home.css";
 import { Label, Check, Circle, ContentCopy } from "@mui/icons-material";
@@ -8,6 +8,7 @@ import { ActiveAccountContext, ActiveAccountContextType } from "../ActiveAccount
 import ArfGraph from "../components/ArfGraph.js";
 import { TokenBalance } from "../backend/Network.js";
 import { TokenCacheItem } from "../backend/TokenCache.js";
+import * as React from "react";
 
 const NETWORK_NAMES = [
   "UNKNOWN",
@@ -115,11 +116,11 @@ function Home() {
         </Box>
 
         {/* graph section (full width, ignoring padding) */}
-        {/*
+        
         <Box sx={{ mx: -2, mb: -2 }}> 
           <ArfGraph data={demoData}/>
         </Box>
-        */}
+        
       </Box>
       
       { /*<LineChart
