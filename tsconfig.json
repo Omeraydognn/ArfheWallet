@@ -6,7 +6,8 @@
 
     // Module/ESM Settings
     "module": "esnext", // emit modern ESM
-    "moduleResolution": "nodenext", // bundler-style resolution (no .js required)
+    
+    "moduleResolution": "node",
     "target": "esnext", // latest JS output
     "jsx": "react-jsx", // React 17+ JSX transform
     "isolatedModules": true, // needed for Vite/ESBuild
