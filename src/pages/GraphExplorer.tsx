@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, SetStateAction } from 'react';
 import * as d3 from 'd3';
 import { Container, Paper, Typography, Box, Tooltip, IconButton, Slide, CircularProgress } from '@mui/material';
 import { ZoomIn, ZoomOut, Search, Clear } from '@mui/icons-material';
@@ -17,8 +17,8 @@ const WalletInteractionMap = () => {
   const svgRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState(null);
-  const [nodes, setNodes] = useState([]);
-  const [links, setLinks] = useState([]);
+  const [nodes, setNodes] = useState([] as any[]);
+  const [links, setLinks] = useState([] as any[]);
 
   // Mock data to simulate wallet interactions
   const generateMockData = () => {
@@ -71,7 +71,7 @@ const WalletInteractionMap = () => {
     const color = d3.scaleOrdinal(d3.schemeCategory10);
 
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id(d => d.id).distance(150))
+      .force("link", d3.forceLink(links).id((d: { id: any; }) => d.id).distance(150))
       .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2));
 
@@ -81,14 +81,14 @@ const WalletInteractionMap = () => {
       .selectAll("line")
       .data(links)
       .join("line")
-      .attr("stroke-width", d => Math.sqrt(d.value));
+      .attr("stroke-width", (d: { value: number; }) => Math.sqrt(d.value));
 
     const node = svg.append("g")
       .selectAll("g")
       .data(nodes)
       .join("g")
       .attr("class", "node")
-      .on("click", (event, d) => {
+      .on("click", (event: { stopPropagation: () => void; }, d: SetStateAction<null>) => {
         event.stopPropagation();
         setSelectedNode(d);
       });
@@ -97,7 +97,7 @@ const WalletInteractionMap = () => {
       .attr("stroke", "#fff")
       .attr("stroke-width", 1.5)
       .attr("r", 15)
-      .attr("fill", d => color(d.group));
+      .attr("fill", (d: { group: any; }) => color(d.group));
 
     node.append("text")
       .attr("x", 18)
@@ -105,26 +105,26 @@ const WalletInteractionMap = () => {
       .attr("font-family", "sans-serif")
       .attr("font-size", 10)
       .attr("fill", "currentColor")
-      .text(d => d.label)
+      .text((d: { label: any; }) => d.label)
       .clone(true).lower()
       .attr("stroke", "white")
       .attr("stroke-width", 3);
 
     simulation.on("tick", () => {
       link
-        .attr("x1", d => d.source.x)
-        .attr("y1", d => d.source.y)
-        .attr("x2", d => d.target.x)
-        .attr("y2", d => d.target.y);
+        .attr("x1", (d: { source: { x: any; }; }) => d.source.x)
+        .attr("y1", (d: { source: { y: any; }; }) => d.source.y)
+        .attr("x2", (d: { target: { x: any; }; }) => d.target.x)
+        .attr("y2", (d: { target: { y: any; }; }) => d.target.y);
 
       node
-        .attr("transform", d => `translate(${d.x},${d.y})`);
+        .attr("transform", (d: { x: any; y: any; }) => `translate(${d.x},${d.y})`);
     });
 
     // Zoom and Pan functionality
     const zoom = d3.zoom()
       .scaleExtent([0.5, 4])
-      .on("zoom", (event) => {
+      .on("zoom", (event: { transform: any; }) => {
         d3.select(svgRef.current).attr("transform", event.transform);
       });
     

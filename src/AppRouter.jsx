@@ -6,6 +6,8 @@ import Auth from "./pages/Auth";
 import History from "./pages/History";
 import Privacy from "./pages/Privacy";
 import Explore from "./pages/Explore";
+import Revoke from "./pages/Revoke";
+import Graph from "./pages/GraphExplorer";
 
 // import NetworkProvider from "./backend/NetworkProvider";
 // import { WalletContext } from "./AppContext";
@@ -27,6 +29,9 @@ function AppRouter() {
             <Route path="explore" element={<Explore />} />
             <Route path="history" element={<History />} />
             <Route path="privacy" element={<Privacy />} />
+
+            <Route path="revoke" element={<Revoke />} />
+            <Route path="graph" element={<Graph />} />
           </Route>        
 
         </Routes>

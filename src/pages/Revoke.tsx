@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Container, Paper, Typography, Box, Button, Collapse, CircularProgress } from '@mui/material';
 import { ExpandMore, ExpandLess, ErrorOutline, CheckCircleOutline, WarningAmberOutlined, CancelOutlined } from '@mui/icons-material';
-import clsx from 'clsx';
 
 const mockApprovals = [
   {
@@ -24,13 +23,13 @@ const mockApprovals = [
   },
 ];
 
-const getRiskColor = (risk) => {
+const getRiskColor = (risk: number) => {
   if (risk >= 80) return 'text-red-500 bg-red-100';
   if (risk >= 40) return 'text-yellow-500 bg-yellow-100';
   return 'text-green-500 bg-green-100';
 };
 
-const getRiskIcon = (risk) => {
+const getRiskIcon = (risk: number) => {
   if (risk >= 80) return <ErrorOutline className="text-red-500" />;
   if (risk >= 40) return <WarningAmberOutlined className="text-yellow-500" />;
   return <CheckCircleOutline className="text-green-500" />;
@@ -56,7 +55,7 @@ const ApprovalCard = ({ approval }) => {
         <Typography className="text-sm md:text-base font-semibold text-gray-700">
           Sözleşme Adresi: <span className="font-mono text-gray-900">{approval.address}</span>
         </Typography>
-        <Box className={clsx("flex items-center space-x-2 px-3 py-1 rounded-full", getRiskColor(approval.risk))}>
+        <Box className={"flex items-center space-x-2 px-3 py-1 rounded-full"}>
           <Typography className="text-xs font-bold">
             Risk: {approval.risk}
           </Typography>
