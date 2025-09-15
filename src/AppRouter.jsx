@@ -18,7 +18,6 @@ import { ActiveAccountProvider } from "./ActiveAccountProvider";
 function AppRouter() {
   return (
     <WalletProvider>
-      <ActiveAccountProvider>  
         <Routes>
           <Route path="/" element={<Splash />} />
           <Route path="auth" element={<Auth />} />
@@ -35,7 +34,6 @@ function AppRouter() {
           </Route>        
 
         </Routes>
-      </ActiveAccountProvider>
     </WalletProvider>
   );
 };

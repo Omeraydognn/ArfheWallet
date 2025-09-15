@@ -1,4 +1,4 @@
-import React from "react";
+import * as React from "react";
 import {
   AppBar,
   Box,
@@ -23,6 +23,7 @@ import { Menu } from "@mui/icons-material";
 import { WalletContext } from "../AppContext.js";
 import { useActiveAccount } from "../ActiveAccountProvider.js";
 import "./ArfBar.css";
+import Account from "../backend/Account.js";
 
 const NETWORK_NAMES = ["UNKNOWN", "Ethereum", "Zama.ai", "Fhenix"];
 const NETWORK_AVATAR_SRC = ["", "eth.png", "discorvery.png", "discorvery.png"];
@@ -44,11 +45,12 @@ function AccountDrawer({ open, onClose }: { open: boolean; onClose: () => void }
           </Typography>
           <Divider />
           <List>
-            {accounts.map((acc, idx) => (
+            {accounts.map((acc: Account, idx: number) => (
               <ListItem key={idx} disablePadding>
                 <ListItemButton
                   selected={idx === activeIndex}
                   onClick={() => {
+                    wallet.accountManager.SetActive(idx);
                     setActiveIndex(idx);
                     onClose();
                   }}

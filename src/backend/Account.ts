@@ -1,14 +1,14 @@
 import { Wallet, HDNodeWallet, Mnemonic } from "ethers";
 
 export default class Account {
-  name?: string;
-  mnemonic?: Mnemonic;
+  name?: string | undefined;
+  mnemonic?: Mnemonic | undefined;
 
-  private_key?: string;
-  public_key?: string;
-  address?: string;
+  private_key?: string | undefined;
+  public_key?: string | undefined;
+  address?: string | undefined;
 
-  ethers_wallet?: HDNodeWallet;
+  ethers_wallet?: HDNodeWallet | undefined;
 
   owned_tokens: Map<number, string[]>;
 

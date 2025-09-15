@@ -35,7 +35,7 @@ const getRiskIcon = (risk: number) => {
   return <CheckCircleOutline className="text-green-500" />;
 };
 
-const ApprovalCard = ({ approval }) => {
+const ApprovalCard = ({ approval }: { approval: any }) => {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
 

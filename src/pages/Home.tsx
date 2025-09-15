@@ -61,6 +61,8 @@ function Home() {
   };
 
   useEffect(() => {
+    active_context.setActiveIndex(wallet_context.accountManager.GetActiveIndex());
+
     async function fetchBalances() {
       try {
         const net = wallet_context?.networkProvider.getSepoliaNetwork();
