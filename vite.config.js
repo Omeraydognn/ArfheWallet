@@ -1,8 +1,21 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
+
+const target = process.env.TARGET || "chrome";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    viteStaticCopy({
+      targets: [
+        {
+          src: `public/${target}/manifest.json`,
+          dest: "."
+        },
+      ],
+    }),
+  ],
   base: './', // '/' olarak ayarla, yoksa hash routing oluşabilir
   server: {
     historyApiFallback: true,
