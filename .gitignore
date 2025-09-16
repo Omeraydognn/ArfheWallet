@@ -27,3 +27,5 @@ vite.config.js
 # Bone-headed .env xD
 .env
 bun.lockb
+
+*.xpi
