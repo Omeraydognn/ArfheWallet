@@ -80,7 +80,7 @@ function CreateWallet({ accountManager, onDone }: { accountManager: AccountManag
 function ImportWallet({ accountManager, onDone }: { accountManager: AccountManager | undefined; onDone: () => void }) {
   const [mnemonic, setMnemonic] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
-  const { setActiveIndex } = useActiveAccount();
+  // const { setActiveIndex } = useActiveAccount();
 
   const handleImport = () => {
     if (!accountManager) {
@@ -97,7 +97,7 @@ function ImportWallet({ accountManager, onDone }: { accountManager: AccountManag
         setError("Failed to import account");
         return;
       }
-      setActiveIndex(index); // Update ActiveAccountProvider
+      // setActiveIndex(index); // Update ActiveAccountProvider
       setError(null);
       console.log("Importing wallet with mnemonic:", mnemonic);
       onDone();
@@ -267,8 +267,9 @@ export default function Auth() {
   }, [accountManager]);
 
   const handleDone = () => {
+    setAccountExist(true);
     setStep(AuthStep.LOGIN); // Move to LOGIN after CREATE or IMPORT
-    navigate("/home");
+    // navigate("/home");
   };
 
   return (

@@ -17,6 +17,16 @@ type TokenBalance = {
   isNative: boolean;         // true if ETH, false if ERC20
 };
 
+type TransactionHistory = {
+  hash: string;              // Transaction hash
+  from: string;              // Sender address
+  to: string;                // Receiver address
+  contractAddress: string;   // "ETH" for native, otherwise token contract
+  value: string;             // Human-readable value (ETH or token amount)
+  timestamp: string;         // ISO timestamp of the block
+  isNative: boolean;         // true if native token (ETH), false if ERC20
+};
+
 function WeiToEth(value: bigint): string {
   /*
   const WEI_PER_ETH = 10n ** 18n;
@@ -154,6 +164,57 @@ class Network {
     );
   }
 
+  async getHistory(address: string, tokenCacheObj: TokenCache | undefined): Promise<TransactionHistory[]> {
+    if (!tokenCacheObj) {
+      console.error("TokenCache not found. Returning empty...");
+      return [];
+    }
+
+    const params = {
+      fromBlock: "0x0",
+      toBlock: "latest",
+      fromAddress: address,
+      category: ["external", "erc20"],
+    };
+
+    const result = await this.call("alchemy_getAssetTransfers", [params]);
+
+    return Promise.all(
+      result.transfers.map(async (transfer: any): Promise<TransactionHistory> => {
+        const isNative = !transfer.rawContract.address; // Native token if asset is null
+        const contractAddress = isNative ? "ETH" : transfer.rawContract.address.toLowerCase();
+
+        // Fetch token metadata for ERC20 tokens if not cached
+        if (!isNative && !tokenCacheObj.hasToken(this.network_id, contractAddress)) {
+          try {
+            await this.getTokenMetadata(tokenCacheObj, contractAddress);
+          } catch (err) {
+            console.warn(`Failed to fetch metadata for ${contractAddress}:`, err);
+          }
+        }
+
+        // Fetch block timestamp
+        const blockData = await this.call("eth_getBlockByNumber", [transfer.blockNum, false]);
+        const timestamp = new Date(parseInt(blockData.timestamp, 16) * 1000).toISOString();
+
+        // Convert value to human-readable format
+        const value = isNative
+          ? WeiToEth(BigInt(transfer.rawContract?.value || "0"))
+          : BigInt(transfer.rawContract?.value || "0").toString();
+
+        return {
+          hash: transfer.hash,
+          from: transfer.from.toLowerCase(),
+          to: transfer.to.toLowerCase(),
+          contractAddress,
+          value,
+          timestamp,
+          isNative,
+        };
+      })
+    );
+  }
+
   async sendTransaction(
     account: Account,
     tx: {
@@ -207,4 +268,4 @@ class Network {
   }
 }
 
-export { Network, NetworkId, type TokenBalance };
+export { Network, NetworkId, type TokenBalance, type TransactionHistory };

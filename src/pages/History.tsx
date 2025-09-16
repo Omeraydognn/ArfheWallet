@@ -1,70 +1,114 @@
 import { Close, Lock, LockOpen } from "@mui/icons-material";
-import { Avatar, Box, Card, Chip, Divider, Icon, Stack, Typography } from "@mui/material";
+import { Avatar, Box, Card, Chip, Divider, Stack, Typography } from "@mui/material";
+import { useContext, useEffect, useState } from "react";
+import { WalletContext } from "../AppContext";
+import { Network, NetworkId, TransactionHistory } from "../backend/Network";
+import TokenCache, { TokenCacheItem } from "../backend/TokenCache";
 import "./History.css";
-
-interface HistoryProps {
-  activeNetwork: number,
-}
 
 function HistoryFilter() {
   return (
     <Stack direction="row" spacing=".5rem" marginY="1rem">
-      <Chip variant="outlined" icon={<Close />} label=""/>
+      <Chip variant="outlined" icon={<Close />} label="" />
       <Chip variant="outlined" icon={<Lock />} label="Encrypted" />
       <Chip variant="outlined" icon={<LockOpen />} label="Not Encrypted" />
     </Stack>
   );
 }
 
-const TEST_PROPS = [
-  { description: "Sent 5.0 USDT to 0x0000.0000", txId: "0x00000000000000000000000000000000", encrypted: false },
-  { description: "Received 5.2 USDT from 0x1550.0000", txId: "0x00000000000000000000000000000000", encrypted: true },
-  { description: "Sent 5.0 USDT to 0x0000.0000", txId: "0x00000000000000000000000000000000", encrypted: false },
-  { description: "Received 5.2 USDT from 0x1550.0000", txId: "0x00000000000000000000000000000000", encrypted: true },
-  { description: "Sent 5.0 USDT to 0x0000.0000", txId: "0x00000000000000000000000000000000", encrypted: false },
-  { description: "Received 5.2 USDT from 0x1550.0000", txId: "0x00000000000000000000000000000000", encrypted: true },
-  { description: "Sent 5.0 USDT to 0x0000.0000", txId: "0x00000000000000000000000000000000", encrypted: false },
-  { description: "Received 5.2 USDT from 0x1550.0000", txId: "0x00000000000000000000000000000000", encrypted: true },
-  { description: "Sent 5.0 USDT to 0x0000.0000", txId: "0x00000000000000000000000000000000", encrypted: false },
-  { description: "Received 5.2 USDT from 0x1550.0000", txId: "0x00000000000000000000000000000000", encrypted: true },
-]
+export default function History() {
+  const walletContext = useContext(WalletContext);
+  if (!walletContext) {
+    throw new Error("WalletContext not found in History");
+  }
 
-export default function History({ activeNetwork }: HistoryProps) {
+  const tokenCache = walletContext.tokenCache;
+  const activeAccount = walletContext.accountManager.GetActive();
+  const network = walletContext.networkProvider.getSepoliaNetwork();
+  if (!network) {
+    throw new Error("Sepolia network not initialized");
+  }
+  
+  const [transactions, setTransactions] = useState<TransactionHistory[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch transaction history when component mounts or dependencies change
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        setLoading(true);
+        const history = await network.getHistory(activeAccount?.GetAddress()!!, tokenCache);
+        setTransactions(history);
+        setError(null);
+      } catch (err) {
+        console.error("Failed to fetch transaction history:", err);
+        setError("Failed to load transaction history");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchHistory();
+  }, [ network, tokenCache]);
+
+  // Helper function to format transaction description
+  const getTransactionDescription = (tx: TransactionHistory, token: TokenCacheItem | undefined): string => {
+    const isSent = tx.from.toLowerCase() === activeAccount?.GetAddress()!!.toLowerCase();
+    const action = isSent ? "Sent" : "Received";
+    const symbol = tx.isNative ? "ETH" : token?.symbol || "Unknown";
+    const value = tx.value;
+    const counterparty = isSent ? tx.to : tx.from;
+    // Shorten address for display (first 6 and last 4 characters)
+    const shortAddress = `${counterparty.slice(0, 6)}...${counterparty.slice(-4)}`;
+    return `${action} ${value} ${symbol} ${isSent ? "to" : "from"} ${shortAddress}`;
+  };
+
   return (
-    <>
-      <div className="history">
-        <Typography variant="h6">
-          History
-        </Typography>
+    <div className="history">
+      <Typography variant="h6">History</Typography>
 
+      <HistoryFilter />
 
-        <HistoryFilter />
+      {loading && <Typography>Loading...</Typography>}
+      {error && <Typography color="error">{error}</Typography>}
 
-        {
-          TEST_PROPS.map(({description, txId, encrypted}, index) => {
-            return (
-              <Card key={index} className="history-card" variant="outlined">
-                <Stack direction="row" alignItems="center">
-                  <Avatar className="history-avatar"/>
-                  
-                  <Stack className="history-text">
-                    <Typography fontSize={12} color="grey">
-                      {txId}
-                    </Typography>
-                    <Typography fontSize={14}>
-                      {description}
-                    </Typography>
-                  </Stack>
+      {!loading && !error && transactions.length === 0 && (
+        <Typography>No transactions found.</Typography>
+      )}
 
-                  <Box className="history-icons">
-                    {encrypted ? <Lock /> : <LockOpen />}
-                  </Box>
+      {!loading &&
+        transactions.map((tx, index) => {
+          // Get token metadata from cache
+          const token = tokenCache.hasToken(network.network_id, tx.contractAddress)
+            ? tokenCache.getToken(network.network_id, tx.contractAddress)
+            : undefined;
+
+          return (
+            <Card key={index} className="history-card" variant="outlined">
+              <Stack direction="row" alignItems="center">
+                <Avatar className="history-avatar" src={token?.logoSrc || "/logos/default.png"} />
+
+                <Stack className="history-text">
+                  <Typography fontSize={12} color="grey">
+                    {tx.hash}
+                  </Typography>
+                  <Typography fontSize={14}>
+                    {getTransactionDescription(tx, token)}
+                  </Typography>
+                  <Typography fontSize={12} color="grey">
+                    {new Date(tx.timestamp).toLocaleString()}
+                  </Typography>
                 </Stack>
-              </Card>
-            );
-          })
-        }
-      </div>
-    </>
+
+                <Box className="history-icons">
+                  {/* Assuming transactions are not encrypted unless specified */}
+                  <LockOpen />
+                </Box>
+              </Stack>
+            </Card>
+          );
+        })}
+    </div>
   );
 }
