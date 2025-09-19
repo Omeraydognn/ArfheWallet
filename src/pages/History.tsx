@@ -64,6 +64,27 @@ export default function History() {
     return `${action} ${value} ${symbol} ${isSent ? "to" : "from"} ${shortAddress}`;
   };
 
+  const getEtherscanTxUrl = (networkId: NetworkId, txHash: string): string => {
+    let baseUrl: string;
+    switch (networkId) {
+      case NetworkId.Ethereum_Sepolia:
+        baseUrl = "https://sepolia.etherscan.io";
+        break;
+      case NetworkId.Ethereum_Mainnet:
+        baseUrl = "https://etherscan.io";
+        break;
+      default:
+        baseUrl = "https://etherscan.io"; // Fallback to mainnet
+    }
+    return `${baseUrl}/tx/${txHash}`;
+  };
+
+  // Handler for clicking a transaction
+  const handleTransactionClick = (txHash: string) => {
+    const url = getEtherscanTxUrl(network.network_id, txHash);
+    window.open(url, "_blank");
+  };
+
   return (
     <div className="history">
       <Typography variant="h6">History</Typography>
@@ -85,7 +106,11 @@ export default function History() {
             : undefined;
 
           return (
-            <Card key={index} className="history-card" variant="outlined">
+            <Card
+              key={index}
+              className="history-card"
+              onClick={() => handleTransactionClick(tx.hash)} // Add click handler
+              variant="outlined">
               <Stack direction="row" alignItems="center">
                 <Avatar className="history-avatar" src={token?.logoSrc || "/logos/default.png"} />
 

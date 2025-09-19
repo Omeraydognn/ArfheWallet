@@ -110,6 +110,24 @@ class Network {
     return item;
   }
 
+  private formatTokenAmount(value: bigint, decimals: number): string {
+    if (decimals < 0) decimals = 0;
+    const base = 10n ** BigInt(decimals);
+
+    const whole = value / base;
+    const fraction = value % base;
+
+    // Pad fraction to full decimals, then trim trailing zeros
+    let fractionStr = fraction.toString().padStart(decimals, "0").replace(/0+$/, "");
+
+    if (fractionStr.length === 0) {
+      return whole.toString();
+    }
+
+    return `${whole}.${fractionStr}`;
+  }
+
+
   async getTokenBalances(tokenCacheObj: TokenCache | undefined, address: string): Promise<TokenBalance[]> {
     if (!tokenCacheObj) {
       console.error("TokenCache not found. Returning empty...");
@@ -139,7 +157,7 @@ class Network {
 
           return {
             contractAddress: "ETH",
-            tokenBalance: WeiToEth(BigInt(t.tokenBalance)),
+            tokenBalance: this.formatTokenAmount(BigInt(t.tokenBalance), 18),
             isNative: true,
           };
         }
@@ -157,7 +175,10 @@ class Network {
 
         return {
           contractAddress: contract,
-          tokenBalance: BigInt(t.tokenBalance).toString(),
+          tokenBalance: this.formatTokenAmount(
+            BigInt(t.tokenBalance),
+            tokenCacheObj.getToken(this.network_id, contract)?.decimals ?? 18
+          ),
           isNative: false,
         };
       })
@@ -197,10 +218,15 @@ class Network {
         const blockData = await this.call("eth_getBlockByNumber", [transfer.blockNum, false]);
         const timestamp = new Date(parseInt(blockData.timestamp, 16) * 1000).toISOString();
 
-        // Convert value to human-readable format
-        const value = isNative
-          ? WeiToEth(BigInt(transfer.rawContract?.value || "0"))
-          : BigInt(transfer.rawContract?.value || "0").toString();
+        const decimals =
+          isNative
+            ? 18
+            : tokenCacheObj.getToken(this.network_id, contractAddress)?.decimals ?? 18;
+
+        const value = this.formatTokenAmount(
+          BigInt(transfer.rawContract?.value || "0"),
+          decimals
+        );
 
         return {
           hash: transfer.hash,

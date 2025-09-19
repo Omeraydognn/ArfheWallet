@@ -275,6 +275,7 @@ export default function Auth() {
   return (
     <ThemeProvider theme={ArfTheme}>
       <div className="auth">
+        {/*
         <Box mb={2}>
           {accountManager ? (
             <Alert severity="success">AccountManager is online</Alert>
@@ -282,6 +283,7 @@ export default function Auth() {
             <Alert severity="error">AccountManager is offline</Alert>
           )}
         </Box>
+        */}
 
         {accountExists ? (
           <LoginIntoWallet storageManager={context?.storageManager} />
