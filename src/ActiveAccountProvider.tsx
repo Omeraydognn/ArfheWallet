@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import { WalletContext } from "./AppContext.js";
 import Account from "./backend/Account.js";
 
@@ -21,26 +21,30 @@ export const ActiveAccountProvider: React.FC<{ children: React.ReactNode }> = ({
   if (!wallet) throw new Error("WalletContext must be available for ActiveAccountProvider");
 
   const [activeIndex, setInnerActiveIndex] = useState(wallet.accountManager.GetActiveIndex());
-
-  const setActiveIndex = (index: number) => {
-    wallet.accountManager.SetActive(index);
-    setInnerActiveIndex(index);
-  };
+  const [activeAccount, setActiveAccount] = useState<Account | undefined>(wallet.accountManager.GetActive());
 
   useEffect(() => {
     const unsubscribe = wallet.accountManager.subscribe(() => {
       const idx = wallet.accountManager.GetActiveIndex();
-      setInnerActiveIndex(idx); // will re-render children when active changes
+      setInnerActiveIndex(idx);
+      setActiveAccount(wallet.accountManager.GetActive());
     });
     return unsubscribe;
   }, [wallet]);
+
+  const setActiveIndex = (index: number) => {
+    if (wallet.accountManager.SetActive(index)) {
+      setInnerActiveIndex(index);
+      setActiveAccount(wallet.accountManager.GetActive());
+    }
+  };
 
   return (
     <ActiveAccountContext.Provider
       value={{
         activeIndex,
+        activeAccount,
         setActiveIndex,
-        activeAccount: wallet.accountManager.GetActive(),
       }}
     >
       {children}

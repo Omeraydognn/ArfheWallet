@@ -1,0 +1,7 @@
+onlyBuiltDependencies:
+  - bufferutil
+  - core-js
+  - core-js-pure
+  - es5-ext
+  - esbuild
+  - utf-8-validate

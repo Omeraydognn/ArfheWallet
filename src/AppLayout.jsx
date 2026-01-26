@@ -3,17 +3,17 @@ import { Outlet } from 'react-router';
 import ArfBottomBar from './components/ArfBottomBar';
 import ArfBar from './components/ArfBar';
 import './AppLayout.css';
-import { ThemeProvider, Box } from '@mui/material';
-import ArfTheme from './components/ArfTheme';
+import { Box } from '@mui/material';
+import { ActiveAccountProvider } from './ActiveAccountProvider';
 
 function AppLayout() {
-  const [network, setNetwork] = React.useState(1); 
-  
+  const [network, setNetwork] = React.useState(1);
+
   return (
     <div className='app-layout'>
-      <ThemeProvider theme={ArfTheme}>
+      <ActiveAccountProvider>
         <Box sx={{ flexShrink: 0 }}>
-          <ArfBar network={network} setNetwork={setNetwork}/>
+          <ArfBar network={network} setNetwork={setNetwork} />
         </Box>
 
         <Box className="content-box">
@@ -23,7 +23,7 @@ function AppLayout() {
         <Box sx={{ flexShrink: 0 }}>
           <ArfBottomBar />
         </Box>
-      </ThemeProvider>
+      </ActiveAccountProvider>
     </div>
   );
 }

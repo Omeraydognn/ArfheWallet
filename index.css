@@ -4,13 +4,13 @@
 html, body {
   margin: 0;
   padding: 0;
-  width: 380px;   /* fixed width */
-  height: 640px;  /* fixed height */
   overflow: hidden; /* optional: prevent scrollbars */
 }
 
 .app-container {
   width: 100vw;
   height: 100vh;
+  min-width: 380px;   /* fixed width */
+  min-height: 640px;  /* fixed height */
   margin: 0;
 }

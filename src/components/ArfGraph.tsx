@@ -11,7 +11,7 @@ interface GradientLineProps {
 
 export default function ArfGraph({
   data,
-  stroke = "#1d1d1d",
+  stroke = "#ffffffff",
   height = 180,
 }: GradientLineProps) {
   return (
@@ -19,7 +19,7 @@ export default function ArfGraph({
       <ResponsiveContainer>
         <AreaChart
           data={data}
-          margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+          margin={{ top: 0, right: 0, bottom: 20, left: 0 }}
         >
           <defs>
             <linearGradient id="lineGradient" x1="0" y1="0" x2="0" y2="1">

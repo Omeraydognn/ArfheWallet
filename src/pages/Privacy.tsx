@@ -1,160 +1,332 @@
-import React, { useState } from 'react';
-import { Container, Paper, Typography, Box, Button, List, ListItem, ListItemText } from '@mui/material';
-import LockIcon from '@mui/icons-material/Lock';
-import LockOpenIcon from '@mui/icons-material/LockOpen';
-import { styled } from '@mui/system';
-import clsx from 'clsx';
+import React, { useState, useContext, useEffect } from 'react';
+import {
+  Container,
+  Paper,
+  Typography,
+  Box,
+  Button,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
+  Avatar,
+  Stack,
+  Chip,
+  useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Alert,
+  CircularProgress
+} from '@mui/material';
+import {
+  Lock,
+  LockOpen,
+  Security,
+  Shield,
+  Visibility,
+  VisibilityOff
+} from '@mui/icons-material';
+import { WalletContext } from '../AppContext.js';
 
-// Styled Button components for each privacy level
-const PrivacyButton = styled(Button)(({ theme, color, selected }) => ({
-  flex: 1,
-  padding: '12px',
-  borderRadius: '12px',
-  fontWeight: 'bold',
-  textTransform: 'none',
-  boxShadow: selected ? `0 4px 6px rgba(0, 0, 0, 0.1)` : 'none',
-  transition: 'all 0.3s ease',
-  '&:hover': {
-    transform: 'translateY(-2px)',
-    boxShadow: `0 6px 8px rgba(0, 0, 0, 0.15)`,
-  },
-  ...(color === 'red' && {
-    backgroundColor: selected ? '#EF4444' : '#FEE2E2',
-    color: selected ? '#FFFFFF' : '#EF4444',
-  }),
-  ...(color === 'orange' && {
-    backgroundColor: selected ? '#F97316' : '#FFEDD5',
-    color: selected ? '#FFFFFF' : '#F97316',
-  }),
-  ...(color === 'green' && {
-    backgroundColor: selected ? '#22C55E' : '#DCFCE7',
-    color: selected ? '#FFFFFF' : '#22C55E',
-  }),
-}));
+type PrivacyLevel = 'open' | 'semi-open' | 'full';
 
-const TransactionItem = styled(ListItem)(({ theme }) => ({
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: '12px 16px',
-  borderRadius: '12px',
-  marginBottom: '8px',
-  backgroundColor: '#FFFFFF',
-  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-  transition: 'all 0.3s ease',
-  '&:hover': {
-    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+// Demo Contracts (Same as ArfBottomMenu)
+const CONTRACTS = {
+  "USDC": {
+    public: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+    shielded: "0x8267F1C913454B3E0C6C523B737E90B81D330222"
   },
-}));
+  "ETH": {
+    public: "ETH",
+    shielded: "0x1267F2C913454B3E0C6C523B737E90B81D330333"
+  }
+};
 
 const FHEPrivacyPanel = () => {
-  const [privacySetting, setPrivacySetting] = useState('full');
+  const theme = useTheme();
+  const context = useContext(WalletContext);
+  const network = context?.networkProvider?.getActiveNetwork();
+  const activeAccount = context?.accountManager?.GetActive();
+
+  const [privacySetting, setPrivacySetting] = useState<PrivacyLevel>('full');
+
+  // Balances State
+  const [balances, setBalances] = useState({ eETH: "Encrypted", eUSDC: "Encrypted" });
+  const [decrypted, setDecrypted] = useState({ eETH: false, eUSDC: false });
+  const [loadingBalance, setLoadingBalance] = useState(""); // Key of token loading
+
+  // Password / Dialog State
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [pendingDecryptToken, setPendingDecryptToken] = useState<string | null>(null);
+
+  // History State (Mock)
   const [history, setHistory] = useState([
-    { id: 1, action: 'İşlem: 0x00000000000000000000000000000000', encrypted: true },
-    { id: 2, action: 'İşlem: 0x00000000000000000000000000000000', encrypted: true },
-    { id: 3, action: 'İşlem: 0x00000000000000000000000000000000', encrypted: true },
-    { id: 4, action: 'İşlem: 0x00000000000000000000000000000000', encrypted: true },
-    { id: 5, action: 'İşlem: 0x00000000000000000000000000000000', encrypted: true },
-    { id: 6, action: 'İşlem: 0x00000000000000000000000000000000', encrypted: true },
+    { id: 1, action: 'Confidential Transfer (eETH)', encrypted: true, hash: '0x3a...12c' },
+    { id: 2, action: 'Shield Assets (ETH -> eETH)', encrypted: false, hash: '0x8b...44a' },
   ]);
 
-  const handleSetPrivacy = (setting) => {
+  const handleSetPrivacy = (setting: PrivacyLevel) => {
     setPrivacySetting(setting);
   };
 
-  const handleDecrypt = (id) => {
-    setHistory(history.map(item =>
-      item.id === id ? { ...item, encrypted: false } : item
-    ));
-    alert('Şifre başarıyla çözüldü!');
+  const requestDecrypt = (tokenKey: string) => {
+    setPendingDecryptToken(tokenKey);
+    setPasswordOpen(true);
+  };
+
+  const handlePasswordSubmit = async () => {
+    if (!pendingDecryptToken) return;
+    setPasswordOpen(false);
+    setPasswordInput("");
+
+    // Start Decryption Logic
+    const tokenKey = pendingDecryptToken;
+    setLoadingBalance(tokenKey);
+
+    try {
+      if (!network || !activeAccount) throw new Error("Wallet not connected");
+
+      // @ts-ignore
+      const contractAddr = tokenKey === "eETH" ? CONTRACTS["ETH"].shielded : CONTRACTS["USDC"].shielded;
+      const userAddr = activeAccount.GetAddress();
+      if (!userAddr) throw new Error("No Address");
+
+      const balance = await network.getShieldedBalance(contractAddr, userAddr);
+
+      setBalances(prev => ({ ...prev, [tokenKey]: balance }));
+      setDecrypted(prev => ({ ...prev, [tokenKey]: true }));
+
+    } catch (e) {
+      console.error(e);
+      alert("Decryption Failed: " + (e as any).message);
+    } finally {
+      setLoadingBalance("");
+      setPendingDecryptToken(null);
+    }
   };
 
   return (
-    <div className="bg-gray-50 min-h-screen flex flex-col font-sans text-gray-800">
-      <Container maxWidth="sm" className="py-8">
-        <Paper className="p-6 md:p-8 rounded-3xl shadow-lg bg-white">
-          <Box className="text-center mb-6">
-            <Typography variant="body1" className="text-sm text-gray-500 mb-1">Hesap</Typography>
-            <Typography variant="h6" className="font-semibold text-gray-800">biar.arf</Typography>
-          </Box>
+    <Box sx={{ pb: 12 }}>
+      <Container maxWidth="md" sx={{ py: 4 }}>
 
-          <Box className="flex justify-center items-center mb-6">
-            <Button
-              variant="contained"
-              className="rounded-full px-6 py-3 font-semibold normal-case shadow-lg"
-              startIcon={<LockIcon />}
-              sx={{ backgroundColor: '#1E40AF', '&:hover': { backgroundColor: '#1E40AF' } }}
-            >
-              Gizlilik Paneli
-            </Button>
+        {/* Header */}
+        <Box sx={{ textAlign: 'center', mb: 6 }}>
+          <Box sx={{
+            width: 80, height: 80,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            mx: 'auto', mb: 3,
+            boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)'
+          }}>
+            <Shield sx={{ fontSize: 40, color: '#fff' }} />
           </Box>
+          <Typography variant="h4" fontWeight={800} gutterBottom color="text.primary">
+            Privacy Shield
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            Manage your on-chain visibility and FHE encryption settings
+          </Typography>
+        </Box>
 
-          <Box className="bg-gray-100 p-6 rounded-2xl text-center mb-8 shadow-inner">
-            <Typography variant="h6" className="font-semibold text-gray-800 mb-4">
-              Gizlilik Ayarı
-            </Typography>
-            <div className="flex justify-center space-x-4">
-              <PrivacyButton
-                onClick={() => handleSetPrivacy('open')}
-                color="red"
-                selected={privacySetting === 'open'}
-              >
-                Açık
-              </PrivacyButton>
-              <PrivacyButton
-                onClick={() => handleSetPrivacy('semi-open')}
-                color="orange"
-                selected={privacySetting === 'semi-open'}
-              >
-                Yarı Açık
-              </PrivacyButton>
-              <PrivacyButton
-                onClick={() => handleSetPrivacy('full')}
-                color="green"
-                selected={privacySetting === 'full'}
-              >
-                Gizli
-              </PrivacyButton>
-            </div>
+        {/* Shielded Balances */}
+        <Paper elevation={0} sx={{ p: 0, borderRadius: 4, mb: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+          <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="h6" fontWeight={700}>Shielded Balances</Typography>
+            <Typography variant="caption" color="text.secondary">Only you can view these balances (using FHE Decryption).</Typography>
           </Box>
-          
-          <Box className="p-6 rounded-2xl shadow-lg bg-white">
-            <Typography variant="h6" className="font-semibold text-gray-800 text-center mb-4">
-              İşlem Geçmişi
-            </Typography>
-            <List className="p-0">
-              {history.map((item) => (
-                <TransactionItem key={item.id}>
-                  <ListItemText primary={item.action} primaryTypographyProps={{ className: 'font-mono text-sm' }} />
-                  {item.encrypted ? (
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      onClick={() => handleDecrypt(item.id)}
-                      startIcon={<LockIcon />}
-                      className="rounded-full normal-case text-white"
-                      sx={{ backgroundColor: '#EF4444', '&:hover': { backgroundColor: '#DC2626' } }}
-                    >
-                      Şifreyi Çöz
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outlined"
-                      disabled
-                      startIcon={<LockOpenIcon />}
-                      className="rounded-full normal-case text-gray-500 border-gray-300"
-                    >
-                      Çözüldü
-                    </Button>
-                  )}
-                </TransactionItem>
-              ))}
-            </List>
-          </Box>
+          <List>
+            {['eETH', 'eUSDC'].map((token) => (
+              <ListItem key={token} divider>
+                <ListItemAvatar>
+                  <Avatar sx={{ bgcolor: 'primary.main' }}><Lock /></Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={token}
+                  secondary={decrypted[token as keyof typeof decrypted] ? "Decrypted" : "Encrypted on-chain"}
+                />
+
+                <Stack direction="row" alignItems="center" spacing={2}>
+                  <Typography variant="h6" fontFamily="monospace">
+                    {loadingBalance === token ? <CircularProgress size={20} /> : balances[token as keyof typeof balances]}
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={decrypted[token as keyof typeof decrypted] ? <VisibilityOff /> : <Visibility />}
+                    onClick={() => {
+                      if (decrypted[token as keyof typeof decrypted]) {
+                        // Re-encrypt (Hide)
+                        setBalances(prev => ({ ...prev, [token]: "Encrypted" }));
+                        setDecrypted(prev => ({ ...prev, [token]: false }));
+                      } else {
+                        requestDecrypt(token);
+                      }
+                    }}
+                  >
+                    {decrypted[token as keyof typeof decrypted] ? "Hide" : "Decrypt"}
+                  </Button>
+                </Stack>
+              </ListItem>
+            ))}
+          </List>
         </Paper>
+
+        {/* Privacy Control Panel */}
+        <Paper elevation={0} sx={{
+          p: 1,
+          borderRadius: 4,
+          background: theme.palette.mode === 'dark' ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid',
+          borderColor: 'divider',
+          mb: 4,
+        }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            <PrivacyOption
+              label="Transparent"
+              active={privacySetting === 'open'}
+              color="error"
+              icon={<LockOpen />}
+              onClick={() => handleSetPrivacy('open')}
+            />
+            <PrivacyOption
+              label="Obscured"
+              active={privacySetting === 'semi-open'}
+              color="warning"
+              icon={<Security />}
+              onClick={() => handleSetPrivacy('semi-open')}
+            />
+            <PrivacyOption
+              label="Fully Encrypted"
+              active={privacySetting === 'full'}
+              color="success"
+              icon={<Lock />}
+              onClick={() => handleSetPrivacy('full')}
+            />
+          </Stack>
+        </Paper>
+
+        {/* Info Box */}
+        <Paper sx={{
+          p: 3,
+          mb: 4,
+          borderRadius: 3,
+          background: 'linear-gradient(to right, rgba(79, 70, 229, 0.05), transparent)',
+          borderLeft: '4px solid #4f46e5'
+        }}>
+          <Typography variant="body2" color="text.secondary">
+            Current Status:
+            <Box component="span" sx={{ color: 'primary.main', fontWeight: 700, ml: 1 }}>
+              {privacySetting === 'full' ? 'Network Confidentiality Active' : 'Limited Protection'}
+            </Box>
+          </Typography>
+        </Paper>
+
+        {/* Recent Activity */}
+        <Paper elevation={0} sx={{
+          p: 0,
+          borderRadius: 4,
+          overflow: 'hidden',
+          bgcolor: 'background.paper',
+          border: '1px solid',
+          borderColor: 'divider',
+        }}>
+          <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="h6" fontWeight={700} color="text.primary">Encrypted Activity (Demo)</Typography>
+          </Box>
+          <List sx={{ p: 0 }}>
+            {history.map((item) => (
+              <ListItem key={item.id} divider sx={{ borderColor: 'divider' }}>
+                <ListItemAvatar>
+                  <Avatar sx={{
+                    bgcolor: item.encrypted ? 'rgba(79, 70, 229, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                    color: item.encrypted ? 'primary.main' : 'success.main'
+                  }}>
+                    {item.encrypted ? <Lock fontSize="small" /> : <LockOpen fontSize="small" />}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={<Typography fontWeight={600} color="text.primary">{item.action}</Typography>}
+                  secondary={
+                    <Typography variant="caption" fontFamily="monospace" color="text.secondary">
+                      Tx: {item.hash}
+                    </Typography>
+                  }
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Paper>
+
       </Container>
-    </div>
+
+      {/* Password Dialog */}
+      <Dialog open={passwordOpen} onClose={() => setPasswordOpen(false)}>
+        <DialogTitle>Enter Wallet Password</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Please enter your password to decrypt your shielded balance (Simulated).
+          </Typography>
+          <TextField
+            autoFocus
+            fullWidth
+            type="password"
+            label="Password"
+            value={passwordInput}
+            onChange={e => setPasswordInput(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPasswordOpen(false)}>Cancel</Button>
+          <Button onClick={handlePasswordSubmit} variant="contained" disabled={!passwordInput}>Decrypt</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 };
+
+// Helper Component
+const PrivacyOption = ({ label, active, color, icon, onClick }: any) => {
+  const getColors = () => {
+    switch (color) {
+      case 'error': return active ? '#ef4444' : 'transparent';
+      case 'warning': return active ? '#f97316' : 'transparent';
+      case 'success': return active ? '#10b981' : 'transparent';
+      default: return 'transparent';
+    }
+  };
+
+  return (
+    <Button
+      fullWidth
+      onClick={onClick}
+      sx={{
+        py: 2,
+        borderRadius: 3,
+        bgcolor: active ? 'background.paper' : 'transparent',
+        boxShadow: active ? 1 : 'none',
+        border: `2px solid ${active ? getColors() : 'transparent'}`,
+        color: active ? 'text.primary' : 'text.disabled',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+        transition: 'all 0.2s',
+        '&:hover': {
+          bgcolor: active ? 'background.paper' : 'action.hover',
+        }
+      }}
+    >
+      <Box sx={{ color: active ? getColors() : 'inherit', transition: 'color 0.2s' }}>
+        {icon}
+      </Box>
+      <Typography variant="body2" fontWeight={600}>{label}</Typography>
+    </Button>
+  );
+}
 
 export default FHEPrivacyPanel;

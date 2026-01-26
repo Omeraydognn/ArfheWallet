@@ -1,6 +1,8 @@
 import React from "react";
 import { AppContext, WalletContext } from "./AppContext.js";
 
+import WalletConnectManager from "./components/WalletConnectManager";
+
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   // Create AppContext instance once
   const appContext = React.useMemo(() => new AppContext(), []);
@@ -8,17 +10,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   // State just for forcing re-renders
   const [, setRefresh] = React.useState(0);
 
-  // Subscribe to AccountManager changes
+  // Subscribe to AccountManager and NetworkProvider changes
   React.useEffect(() => {
-    const unsubscribe = appContext.accountManager.subscribe(() => {
-      setRefresh(f => f + 1); // trigger re-render
+    const unsubscribeAccount = appContext.accountManager.subscribe(() => {
+      setRefresh(f => f + 1);
     });
-    return unsubscribe;
-  }, [appContext.accountManager]);
+    const unsubscribeNetwork = appContext.networkProvider.subscribe(() => {
+      setRefresh(f => f + 1);
+    });
+    return () => {
+      unsubscribeAccount();
+      unsubscribeNetwork();
+    };
+  }, [appContext.accountManager, appContext.networkProvider]);
 
   return (
     <WalletContext.Provider value={appContext}>
       {children}
+      <WalletConnectManager />
     </WalletContext.Provider>
   );
 }

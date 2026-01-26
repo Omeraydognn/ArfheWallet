@@ -1,25 +1,31 @@
-import React from "react";
-import { NetworkIds } from "./backend/Network.js";
+import { createContext } from "react";
 import NetworkProvider from "./backend/NetworkProvider.js";
 import AccountManager from "./backend/AccountManager.js";
+import TokenCache from "./backend/TokenCache.js";
+import StorageManager from "./backend/StorageManager.js";
 
-export const WalletContext = React.createContext<AppContext | undefined>(undefined);
+import { WalletConnectService } from "./backend/WalletConnectService";
+
+export const WalletContext = createContext<AppContext | undefined>(undefined);
 
 export class AppContext {
-  
+
+  storageManager: StorageManager;
   // accountsManager
   accountManager: AccountManager;
   // privateKey initialized from storageProvider.
   networkProvider: NetworkProvider;
-  // storage_provider
+  // token cache
+  tokenCache: TokenCache;
+  // wallet connect
+  walletConnectService: WalletConnectService;
 
   constructor() {
-    this.networkProvider = new NetworkProvider([
-      NetworkIds.Ethereum
-      // No other networks for now, at least 'til "NetworkProvider" stabilizes.
-    ]);
-
-    this.accountManager = new AccountManager();
+    this.storageManager = new StorageManager();
+    this.accountManager = new AccountManager(this.storageManager);
+    this.networkProvider = new NetworkProvider();
+    this.tokenCache = new TokenCache();
+    this.walletConnectService = new WalletConnectService(this.accountManager);
   }
 }
 

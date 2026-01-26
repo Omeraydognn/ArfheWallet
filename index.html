@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <link rel="stylesheet" href="/index.css">
     <base href="/" />
@@ -7,17 +8,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>React App</title>
 </head>
+
 <body class="app-container">
     <div id="root"></div>
-    <script type="module" src="index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
+    <script>
+        // Global Polyfills
+        window.global = window;
+        window.process = { env: {} };
+        if (window.buffer && window.buffer.Buffer) {
+            window.Buffer = window.buffer.Buffer;
+        }
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
 </body>
+
 </html>
-
-
-
-
-
-
-
-
-

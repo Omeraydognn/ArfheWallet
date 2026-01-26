@@ -1,4 +1,4 @@
-import React from "react";
+import * as React from "react";
 import {
   AppBar,
   Box,
@@ -23,13 +23,18 @@ import { Menu } from "@mui/icons-material";
 import { WalletContext } from "../AppContext.js";
 import { useActiveAccount } from "../ActiveAccountProvider.js";
 import "./ArfBar.css";
+import Account from "../backend/Account.js";
 
-const NETWORK_NAMES = ["UNKNOWN", "Ethereum", "Zama.ai", "Fhenix"];
+
 const NETWORK_AVATAR_SRC = ["", "eth.png", "discorvery.png", "discorvery.png"];
+
+import { useNavigate } from "react-router";
+import { Settings as SettingsIcon, Add } from "@mui/icons-material"; // Add icons
 
 function AccountDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const wallet = React.useContext(WalletContext);
   const { activeIndex, activeAccount, setActiveIndex } = useActiveAccount();
+  const navigate = useNavigate();
 
   if (!wallet) return null;
 
@@ -39,25 +44,30 @@ function AccountDrawer({ open, onClose }: { open: boolean; onClose: () => void }
     <Drawer anchor="left" open={open} onClose={onClose}>
       <Box sx={{ width: 280, display: "flex", flexDirection: "column", height: "100%" }}>
         <Box sx={{ p: 2 }}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h6" gutterBottom fontWeight={700}>
             Accounts
           </Typography>
-          <Divider />
+          <Divider sx={{ mb: 2 }} />
           <List>
-            {accounts.map((acc, idx) => (
-              <ListItem key={idx} disablePadding>
+            {accounts.map((acc: Account, idx: number) => (
+              <ListItem key={idx} disablePadding sx={{ mb: 1 }}>
                 <ListItemButton
                   selected={idx === activeIndex}
                   onClick={() => {
+                    wallet.accountManager.SetActive(idx);
                     setActiveIndex(idx);
                     onClose();
                   }}
+                  sx={{ borderRadius: 2 }}
                 >
+                  <Avatar sx={{ width: 32, height: 32, mr: 2, bgcolor: idx === activeIndex ? 'primary.main' : 'grey.300' }}>
+                    {acc.GetName()[0]}
+                  </Avatar>
                   <ListItemText
                     primary={acc.GetName()}
-                    secondary={acc.GetPublicKey()}
-                    primaryTypographyProps={{ fontSize: 14 }}
-                    secondaryTypographyProps={{ fontSize: 12, noWrap: true }}
+                    secondary={acc.GetAddress().substring(0, 6) + "..." + acc.GetAddress().substring(38)}
+                    primaryTypographyProps={{ fontSize: 14, fontWeight: 600 }}
+                    secondaryTypographyProps={{ fontSize: 12 }}
                   />
                 </ListItemButton>
               </ListItem>
@@ -67,14 +77,29 @@ function AccountDrawer({ open, onClose }: { open: boolean; onClose: () => void }
 
         <Box sx={{ p: 2, mt: "auto" }}>
           <Button
-            variant="contained"
+            variant="outlined"
             fullWidth
+            startIcon={<Add />}
             onClick={() => {
               const newIndex = wallet.accountManager.CreateAccount();
               setActiveIndex(newIndex);
             }}
+            sx={{ mb: 1, borderRadius: 3, textTransform: 'none' }}
           >
             Add Account
+          </Button>
+
+          <Button
+            variant="text"
+            fullWidth
+            startIcon={<SettingsIcon />}
+            onClick={() => {
+              navigate('/settings');
+              onClose();
+            }}
+            sx={{ borderRadius: 3, textTransform: 'none', color: 'text.secondary' }}
+          >
+            Settings
           </Button>
         </Box>
       </Box>
@@ -96,25 +121,8 @@ function ArfBar({ network, setNetwork }: { network: any; setNetwork: any }) {
 
   return (
     <div className="arf-bar">
-      {/* Network Drawer */}
-      <Drawer anchor="top" open={networkDrawerOpen} onClose={toggleNetworkDrawer}>
-        <div className="network-select">
-          <FormControl fullWidth>
-            <InputLabel id="network-select-label">Network</InputLabel>
-            <Select
-              labelId="network-select-label"
-              id="network-select"
-              value={network}
-              label="Network"
-              onChange={(e) => setNetwork(e.target.value)}
-            >
-              <MenuItem value={1}>Ethereum</MenuItem>
-              <MenuItem value={2}>Zama.ai</MenuItem>
-              <MenuItem value={3}>Fhenix</MenuItem>
-            </Select>
-          </FormControl>
-        </div>
-      </Drawer>
+
+
 
       {/* Account Drawer */}
       <AccountDrawer open={accountDrawerOpen} onClose={toggleAccountDrawer} />
@@ -122,30 +130,26 @@ function ArfBar({ network, setNetwork }: { network: any; setNetwork: any }) {
       {/* AppBar */}
       <Box sx={{ flexGrow: 1 }}>
         <AppBar color="transparent" elevation={0} position="fixed">
-          <Toolbar className="arf-toolbar">
+          <Toolbar className="arf-toolbar" sx={{ justifyContent: "center", position: "relative" }}>
             <IconButton
               size="large"
               edge="start"
               color="inherit"
               aria-label="menu"
-              sx={{ mr: 2 }}
+              sx={{ position: "absolute", left: 16 }}
               onClick={toggleAccountDrawer}
             >
               <Menu />
             </IconButton>
 
-            <Box className="arf-toolbar-name">
-              <Typography textAlign="center" fontSize={12}>
+            <Box className="arf-toolbar-name" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Typography textAlign="center" fontSize={14} fontWeight={700}>
                 {activeAccount?.GetName() ?? "No Active Account"}
               </Typography>
-              <Typography textAlign="center" fontSize={12}>
-                {activeAccount?.GetShortKey() ?? "0x000000000"}
+              <Typography textAlign="center" fontSize={11} color="text.secondary" sx={{ opacity: 0.8 }}>
+                {activeAccount?.GetShortAddress() ?? "0x000..."}
               </Typography>
             </Box>
-
-            <Button onClick={toggleNetworkDrawer}>
-              <Avatar src={NETWORK_AVATAR_SRC[network] ?? ""} />
-            </Button>
           </Toolbar>
         </AppBar>
       </Box>

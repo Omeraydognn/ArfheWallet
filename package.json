@@ -7,6 +7,8 @@
     "dev": "vite",
     "start": "react-scripts start",
     "build": "vite build",
+    "build:chrome": "cross-env TARGET=chrome vite build",
+    "build:firefox": "cross-env TARGET=firefox vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -17,10 +19,17 @@
     "@mui/icons-material": "^7.3.1",
     "@mui/material": "^7.3.1",
     "@mui/x-charts": "^8.10.0",
+    "@walletconnect/sign-client": "^2.23.4",
+    "@walletconnect/types": "^2.23.4",
+    "@walletconnect/utils": "^2.23.4",
     "alchemy-sdk": "^3.5.4",
     "antd": "^5.24.3",
+    "cofhejs": "^0.3.1",
+    "cross-env": "^10.0.0",
     "crpyto-js": "^0.0.1-security",
     "crypto-js": "^4.2.0",
+    "cytoscape": "^3.33.1",
+    "cytoscape-fcose": "^2.2.0",
     "d3": "^7.9.0",
     "ethers": "^6.13.5",
     "lucide-react": "^0.475.0",
@@ -31,11 +40,15 @@
     "react-scripts": "^5.0.1",
     "react-toastify": "^11.0.5",
     "recharts": "^3.1.2",
+    "viem": "^2.44.4",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0",
     "web-bip39": "git+https://github.com/hujiulong/web-bip39.git",
     "web3": "^4.16.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
+    "@types/d3": "^7.4.3",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
@@ -45,6 +58,8 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.18",
     "globals": "^15.14.0",
-    "vite": "^6.1.0"
+    "vite": "^6.1.0",
+    "vite-plugin-node-polyfills": "^0.25.0",
+    "vite-plugin-static-copy": "^3.1.2"
   }
 }
