@@ -44,7 +44,7 @@ function Home() {
   const active_context = React.useContext(ActiveAccountContext);
   const navigate = useNavigate();
 
-  const [balances, setBalances] = useState({});
+  const [balances, setBalances] = useState<Record<string, any>>({});
   // Initialize from cache immediately to prevent blank screen
   const [tokens, setTokens] = useState(() => {
     try {
@@ -53,21 +53,21 @@ function Home() {
     } catch { return []; }
   });
   const [totalBalanceUsd, setTotalBalanceUsd] = useState(0.00);
-  const [prices, setPrices] = useState({});
+  const [prices, setPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
 
   // Network Switcher State
-  const [anchorEl, setAnchorEl] = useState(null);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const openNetworkMenu = Boolean(anchorEl);
 
-  const activeNetworkId = wallet_context?.networkProvider.getActiveNetworkId();
+  const activeNetworkId = wallet_context?.networkProvider.getActiveNetworkId() ?? NetworkId.Ethereum_Mainnet;
   const activeNetwork = wallet_context?.networkProvider.getActiveNetwork();
 
-  const handleNetworkClick = (event) => {
+  const handleNetworkClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
   };
 
-  const handleNetworkClose = (networkId) => {
+  const handleNetworkClose = (networkId: NetworkId | null) => {
     setAnchorEl(null);
     if (networkId && wallet_context) {
       wallet_context.networkProvider.switchNetwork(networkId);
@@ -85,30 +85,104 @@ function Home() {
       const address = active_context.activeAccount?.GetAddress();
       if (!address) return;
 
-      // 1. Fetch Balances
+      // Initialize FHE if on Sepolia
+      if (activeNetworkId === NetworkId.Ethereum_Sepolia && active_context.activeAccount) {
+        try {
+          const { default: FheService } = await import("../backend/FheService.js");
+          const instance = FheService.getInstance();
+          
+          if (!instance.isReady()) {
+            console.log("[Home] Initializing FHE...");
+            const ethers = await import("ethers");
+            const provider = new ethers.JsonRpcProvider(net.rpc_url);
+            const privateKey = active_context.activeAccount.private_key;
+            if (!privateKey) throw new Error("No private key available");
+            const signer = new ethers.Wallet(privateKey, provider);
+            
+            await instance.init(provider, signer);
+            console.log("[Home] FHE Ready!");
+          }
+        } catch (e) {
+          console.error("[Home] FHE initialization failed:", e);
+        }
+      }
+
+      // 1. Fetch Public Token Balances
       const tokenBalances = await net.getTokenBalances(
         wallet_context.tokenCache, address
       );
 
-      // 2. Extract Contracts
-      const contractAddresses = tokenBalances.map(t => t.contractAddress);
+      // 2. Fetch Wrapped Token Balances (Only on Sepolia)
+      const wrappedBalances: any[] = [];
+      const WRAPPED_USDC_ADDRESS = import.meta.env.VITE_WRAPPED_USDC_ADDRESS?.toLowerCase();
+      const IGNORED_CONTRACTS = [
+        "0xbde0a2e375b67c802d4651fecf3b678b1886d15b", // SimpleWrappedUSDC (old)
+        "0x3e0722a877e52fe755e8bf02372342c63930fd57", // MockFHEWrappedUSDC (old)
+        "0x6ab305c679002c0938c2be3f824fcb8b81be5b70", // CoFHEWrappedUSDC v1 (old - no ERC20)
+        "0x5c3f1fe2c451ccc73443865fec914a595c3d1a7c"  // CoFHEWrappedUSDC v2 (old - FHE not on Sepolia)
+      ];
+      
+      if (activeNetworkId === NetworkId.Ethereum_Sepolia && WRAPPED_USDC_ADDRESS) {
+        console.log("[Home] Fetching wrapped USDC balance...", WRAPPED_USDC_ADDRESS);
+        
+        // Wrapped USDC - Simple ERC20 balance check
+        try {
+          const wrappedUsdcBalance = await net.getTokenBalance(
+            WRAPPED_USDC_ADDRESS,
+            address
+          );
+          
+          console.log("[Home] Wrapped USDC balance:", wrappedUsdcBalance);
+          
+          if (parseFloat(wrappedUsdcBalance) > 0) {
+            wrappedBalances.push({
+              contractAddress: WRAPPED_USDC_ADDRESS,
+              tokenBalance: wrappedUsdcBalance,
+              isNative: false,
+              isShielded: true // NEW: MockFHEWrappedUSDC has confidential transfers
+            });
+
+            // Cache metadata - UPDATE to cUSDC
+            wallet_context.tokenCache.setToken(activeNetworkId, {
+              name: "Confidential USDC",
+              symbol: "cUSDC",
+              decimals: 6,
+              logoSrc: "",
+              contractAddress: WRAPPED_USDC_ADDRESS
+            });
+          }
+        } catch (e) {
+          console.warn("[Home] Failed to fetch Wrapped USDC balance:", e);
+        }
+      }
+
+      // Merge public + wrapped balances
+      const allBalances = [...tokenBalances, ...wrappedBalances];
+
+      // 3. Extract Contracts for price fetching - EXCLUDE wrapped token addresses
+      const wrappedTokenAddresses = WRAPPED_USDC_ADDRESS ? [WRAPPED_USDC_ADDRESS] : [];
+
+      const contractAddresses = tokenBalances
+        .map(t => t.contractAddress)
+        .filter(addr => !wrappedTokenAddresses.includes(addr.toLowerCase()));
 
       // --- IMMEDIATE RENDER ---
       // We render the tokens immediately with 0 price, then update later.
-      const initialDisplay = tokenBalances.map(tb => {
+      const initialDisplay = allBalances.map(tb => {
         const cachedMeta = wallet_context.tokenCache.getToken(activeNetworkId, tb.contractAddress);
         return {
           name: cachedMeta?.name ?? (tb.isNative ? "Ethereum" : "Unknown Token"),
           symbol: cachedMeta?.symbol ?? (tb.isNative ? "ETH" : "???"),
           logoSrc: cachedMeta?.logoSrc ?? (tb.isNative ? "/logos/eth.png" : ""),
           contractAddress: tb.contractAddress,
-          decimals: cachedMeta?.decimals ?? 18
+          decimals: cachedMeta?.decimals ?? 18,
+          isShielded: tb.isShielded ?? false
         };
       });
       setTokens(initialDisplay); // Show list instantly
 
-      // 3. Fetch Prices (Async/Non-blocking)
-      let currentPrices = {};
+      // 3. Fetch Prices (Async/Non-blocking) - Only for public tokens
+      let currentPrices: Record<string, number> = {};
       try {
         currentPrices = await net.getTokenPrices(contractAddresses);
       } catch (e) { console.warn("Price fetch skipped"); }
@@ -117,8 +191,9 @@ function Home() {
 
       // 4. Calculate Values & Update Display
       let totalUsd = 0;
-      const balanceMap = {};
+      const balanceMap: Record<string, any> = {};
 
+      // Process public token balances
       tokenBalances.forEach((tb) => {
         const p = tb.isNative ? (currentPrices["ETH"] ?? 0) : (currentPrices[tb.contractAddress.toLowerCase()] ?? 0);
         const valUsd = parseFloat(tb.tokenBalance) * p;
@@ -131,13 +206,24 @@ function Home() {
         };
       });
 
+      // Process wrapped token balances (no price data yet, just show balance)
+      wrappedBalances.forEach((wb) => {
+        balanceMap[wb.contractAddress] = {
+          ...wb,
+          priceUsd: 0, // No price for wrapped tokens yet
+          totalValueUsd: 0
+        };
+      });
+
       setBalances(balanceMap);
       setTotalBalanceUsd(totalUsd);
 
       const cached = wallet_context.tokenCache.getAllTokens(activeNetworkId) ?? [];
 
       // FIX: Use 'balanceMap' (local var) instead of 'balances' (stale state)
+      // Filter out old wrapped USDC contracts
       const displayTokens = cached.filter(t => {
+        if (IGNORED_CONTRACTS.includes(t.contractAddress.toLowerCase())) return false; // IGNORE OLD
         if (t.symbol === "ETH") return true;
         // Check local map
         const entry = balanceMap[t.contractAddress];
@@ -146,7 +232,10 @@ function Home() {
 
       // Update the list or fallback to showing what we found in balances if cache is desync
       if (displayTokens.length > 0) {
-        setTokens(displayTokens);
+        setTokens(displayTokens.map(t => ({
+          ...t,
+          isShielded: balanceMap[t.contractAddress]?.isShielded ?? false
+        })));
       } else {
         // Fallback layout if cache didn't match
         const fallback = Object.values(balanceMap).map((b: any) => ({
@@ -154,7 +243,8 @@ function Home() {
           symbol: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.symbol ?? (b.isNative ? "ETH" : "???"),
           logoSrc: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.logoSrc ?? "",
           contractAddress: b.contractAddress,
-          decimals: 18
+          decimals: 18,
+          isShielded: b.isShielded ?? false
         }));
         setTokens(fallback);
       }
@@ -297,7 +387,7 @@ function Home() {
         </Typography>
 
         <List disablePadding>
-          {tokens.map((token) => {
+          {tokens.map((token: any) => {
             const b = balances[token.contractAddress];
             const balanceStr = b ? parseFloat(b.tokenBalance).toFixed(4) : "0.0000";
             const valStr = b?.totalValueUsd ? `$${b.totalValueUsd.toFixed(2)}` : "$0.00";
@@ -310,6 +400,7 @@ function Home() {
                 balance={balanceStr}
                 value={valStr}
                 icon={token.logoSrc}
+                isShielded={token.isShielded ?? false}
               />
             );
           })}
@@ -327,7 +418,7 @@ function Home() {
 }
 
 // Helper Components
-function ActionButton({ icon, label, onClick }) {
+function ActionButton({ icon, label, onClick }: { icon: any, label: string, onClick: () => void }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
       <Button
@@ -355,7 +446,14 @@ function ActionButton({ icon, label, onClick }) {
   );
 }
 
-function AssetItem({ symbol, name, balance, value, icon }) {
+function AssetItem({ symbol, name, balance, value, icon, isShielded = false }: { 
+  symbol: string, 
+  name: string, 
+  balance: string, 
+  value: string, 
+  icon: string,
+  isShielded?: boolean 
+}) {
   return (
     <Paper
       elevation={0}
@@ -379,8 +477,8 @@ function AssetItem({ symbol, name, balance, value, icon }) {
           <Avatar
             src={icon}
             sx={{
-              bgcolor: 'rgba(79, 70, 229, 0.1)',
-              color: 'primary.main',
+              bgcolor: isShielded ? 'rgba(139, 92, 246, 0.1)' : 'rgba(79, 70, 229, 0.1)',
+              color: isShielded ? 'secondary.main' : 'primary.main',
               width: 42,
               height: 42,
             }}
@@ -389,7 +487,20 @@ function AssetItem({ symbol, name, balance, value, icon }) {
           </Avatar>
         </ListItemAvatar>
         <ListItemText
-          primary={<Typography variant="subtitle1" fontWeight={700} color="text.primary">{symbol}</Typography>}
+          primary={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="subtitle1" fontWeight={700} color="text.primary">{symbol}</Typography>
+              {isShielded && (
+                <Chip 
+                  icon={<Shield sx={{ fontSize: 12 }} />} 
+                  label="Private" 
+                  size="small" 
+                  color="secondary" 
+                  sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
+                />
+              )}
+            </Box>
+          }
           secondary={<Typography variant="caption" color="text.secondary">{name}</Typography>}
         />
         <Box sx={{ textAlign: 'right' }}>

@@ -16,6 +16,7 @@
     "@ant-design/v5-patch-for-react-19": "^1.0.3",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@fhenixprotocol/contracts": "^0.3.1",
     "@mui/icons-material": "^7.3.1",
     "@mui/material": "^7.3.1",
     "@mui/x-charts": "^8.10.0",
@@ -32,6 +33,7 @@
     "cytoscape-fcose": "^2.2.0",
     "d3": "^7.9.0",
     "ethers": "^6.13.5",
+    "fhenixjs": "^0.4.1",
     "lucide-react": "^0.475.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.0.0",
@@ -48,6 +50,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
+    "@rollup/plugin-wasm": "^6.2.2",
     "@types/d3": "^7.4.3",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",

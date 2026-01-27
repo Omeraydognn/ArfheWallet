@@ -44,7 +44,8 @@ class Network {
       }
     }
 
-    if (this.isAlchemyConfigured()) {
+    // Alchemy only for Ethereum networks, not Fhenix
+    if (this.isAlchemyConfigured() && network_id !== NetworkId.Fhenix_Sepolia) {
       let sdkNetwork = AlchemyNetwork.ETH_MAINNET;
       switch (network_id) {
         case NetworkId.Ethereum_Sepolia:
@@ -71,6 +72,9 @@ class Network {
             break;
           case NetworkId.Ethereum_Sepolia:
             this.rpc_url = "https://ethereum-sepolia.publicnode.com";
+            break;
+          case NetworkId.Fhenix_Sepolia:
+            this.rpc_url = "https://api.helium.fhenix.zone";
             break;
           default:
             this.rpc_url = "";
@@ -148,7 +152,7 @@ class Network {
     const whole = value / base;
     const fraction = value % base;
 
-    let fractionStr = fraction.toString().padStart(decimals, "0").replace(/0+$/, "");
+    let fractionStr = fraction.toString().padStart(Number(decimals), "0").replace(/0+$/, "");
 
     if (fractionStr.length === 0) {
       return whole.toString();
@@ -246,11 +250,55 @@ class Network {
     return [nativeBalanceData, ...processedTokens];
   }
 
+  /**
+   * Get balance for a single ERC20 token
+   */
+  async getTokenBalance(tokenAddress: string, walletAddress: string): Promise<string> {
+    try {
+      const ethers = await import("ethers");
+      const ERC20_ABI = [
+        "function balanceOf(address owner) view returns (uint256)",
+        "function decimals() view returns (uint8)"
+      ];
+      
+      const provider = new ethers.JsonRpcProvider(this.rpc_url);
+      const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+      const [balance, decimals] = await Promise.all([
+        contract.balanceOf(walletAddress),
+        contract.decimals()
+      ]);
+      
+      return this.formatTokenAmount(balance, decimals);
+    } catch (error) {
+      console.error(`[Network] Failed to fetch balance for ${tokenAddress}:`, error);
+      return "0";
+    }
+  }
+
   async getTokenPrices(contractAddresses: string[]): Promise<{ [key: string]: number }> {
     try {
-      // 1. Prepare addresses (filter out ETH/Native markers)
+      // Skip price fetching for testnets (CoinGecko only supports mainnet)
+      if (this.network_id !== NetworkId.Ethereum_Mainnet) {
+        console.log("[Network] Skipping price fetch on testnet");
+        return {};
+      }
+
+      // eToken addresses (don't fetch prices for these)
+      // Including both official and any test/old variants
+      const eTokenAddresses = [
+        "0xfff9976742d46cc05630d1f6ebab18b2324d6b14", // eETH (official)
+        "0x2035f9228e160243be8e07973715c929845e445e", // eUSDC (official)
+        "0xfff9976782d46cc05630d1f6ebab18b2324d6b14", // Old/test eETH variant
+      ].map(a => a.toLowerCase());
+
+      // 1. Prepare addresses (filter out ETH/Native markers and eTokens)
       const tokenAddresses = contractAddresses
-        .filter(a => a !== "ETH" && !a.startsWith("0xeeee"))
+        .filter(a => {
+          const lower = a.toLowerCase();
+          const isEth = a === "ETH" || lower.startsWith("0xeeee");
+          const isEToken = eTokenAddresses.includes(lower);
+          return !isEth && !isEToken;
+        })
         .map(a => a.toLowerCase());
 
       const prices: { [key: string]: number } = {};
@@ -478,132 +526,231 @@ class Network {
       const { default: FheService } = await import("./FheService.js");
       const ethers = await import("ethers");
 
-      let instance = FheService.getInstance();
-      if (!instance.isReady()) return "0.0";
+      const instance = FheService.getInstance();
+      if (!instance.isReady()) {
+        console.warn("[Network] FHE not ready, cannot fetch shielded balance");
+        return "0.0";
+      }
 
-      const permit = await FheService.getInstance().createPermit(contractAddress, userAddress);
-      if (!permit) return "0.0";
+      // FHERC20.confidentialBalanceOf returns euint64 handle
+      const iface = new ethers.Interface([
+        "function confidentialBalanceOf(address account) view returns (uint256)"
+      ]);
+      
+      const data = iface.encodeFunctionData("confidentialBalanceOf", [userAddress]);
 
-      const iface = new ethers.Interface(["function balanceOf(address owner) view returns (uint256)"]);
-      const data = iface.encodeFunctionData("balanceOf", [userAddress]);
-
+      // eth_call to get encrypted balance handle
       const resultHex = await this.call("eth_call", [{
         to: contractAddress,
         data: data
       }, "latest"]);
 
-      if (!resultHex || resultHex === "0x") return "0.0";
-
-      const handle = BigInt(resultHex).toString();
-      const decrypted = await FheService.getInstance().unseal(contractAddress, userAddress, handle, permit);
-
-      if (decrypted !== null) {
-        return this.formatTokenAmount(BigInt(decrypted), 18);
+      if (!resultHex || resultHex === "0x" || resultHex === "0x0") {
+        return "0.0";
       }
+
+      // Handle is euint64 (encrypted uint64)
+      const handle = BigInt(resultHex);
+      
+      console.log(`[getShieldedBalance] Unsealing handle: ${handle}`);
+
+      // Unseal using CoFHE
+      const decrypted = await instance.unseal(handle, "uint64");
+
+      if (decrypted !== null && decrypted !== undefined) {
+        const isEth = contractAddress.toLowerCase() === "0xfff9976742d46cc05630d1f6ebab18b2324d6b14".toLowerCase();
+        const decimals = isEth ? 18 : 6;
+        const formatted = this.formatTokenAmount(decrypted, decimals);
+        console.log(`[getShieldedBalance] ✅ Unsealed: ${formatted}`);
+        return formatted;
+      }
+      
+      console.warn("[getShieldedBalance] ⚠️ Unseal returned null");
       return "0.0";
     } catch (e) {
+      console.error("[getShieldedBalance] ❌ Error:", e);
       return "0.0";
     }
   }
 
-  async wrap(account: Account, publicTokenAddress: string, shieldedTokenAddress: string, amount: string): Promise<string> {
+  /**
+   * Wrap: Converts public USDC tokens to wrapped tokens
+   * SimpleWrappedUSDC.wrap(uint256 amount)
+   */
+  async wrap(account: Account, publicTokenAddress: string, wrappedTokenAddress: string, amount: string): Promise<string> {
     const ethers = await import("ethers");
-    const isEth = publicTokenAddress === "ETH" || publicTokenAddress.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
-    const decimals = isEth ? 18 : 6;
-    const amountBig = ethers.parseUnits(amount, decimals);
 
-    // 1. ERC20 Approve (Sadece Token için)
-    if (!isEth) {
-      const ifaceer20 = new ethers.Interface([
-        "function allowance(address owner, address spender) view returns (uint256)",
-        "function approve(address spender, uint256 amount) returns (bool)"
-      ]);
-      const allowData = ifaceer20.encodeFunctionData("allowance", [account.GetAddress(), shieldedTokenAddress]);
-      const allowHex = await this.call("eth_call", [{ to: publicTokenAddress, data: allowData }, "latest"]);
+    // SimpleWrappedUSDC uses 6 decimals (same as USDC)
+    const decimals = 6;
+    const amountValue = ethers.parseUnits(amount, decimals);
 
-      if (BigInt(allowHex) < amountBig) {
-        const approveData = ifaceer20.encodeFunctionData("approve", [shieldedTokenAddress, amountBig]);
-        await this.sendTransaction(account, { to: publicTokenAddress, data: approveData, value: "0" });
-      }
+    // 1. Check and approve USDC spending
+    const ifaceErc20 = new ethers.Interface([
+      "function allowance(address owner, address spender) view returns (uint256)",
+      "function approve(address spender, uint256 amount) returns (bool)"
+    ]);
+    
+    const allowData = ifaceErc20.encodeFunctionData("allowance", [account.GetAddress(), wrappedTokenAddress]);
+    const allowHex = await this.call("eth_call", [{ to: publicTokenAddress, data: allowData }, "latest"]);
+    
+    // Fix: Handle empty or invalid hex responses
+    let currentAllowance = 0n;
+    try {
+      currentAllowance = allowHex && allowHex !== "0x" ? BigInt(allowHex) : 0n;
+    } catch (e) {
+      console.warn("[Wrap] Failed to parse allowance, assuming 0:", allowHex);
+      currentAllowance = 0n;
     }
 
-    console.log(`[Wrap] Step 1: Depositing to Public WETH...`);
+    if (currentAllowance < amountValue) {
+      console.log("[Wrap] Approving USDC tokens...");
+      const approveData = ifaceErc20.encodeFunctionData("approve", [wrappedTokenAddress, amountValue]);
+      const approveTx = await this.sendTransaction(account, { 
+        to: publicTokenAddress, 
+        data: approveData, 
+        value: "0"
+      });
+      console.log("[Wrap] USDC approved ✓ TX:", approveTx);
+    }
+
+    console.log(`[Wrap] Wrapping ${amount} USDC (${amountValue} units)...`);
+
+    // 2. Call wrap(uint256 amount)
     const iface = new ethers.Interface([
-      "function deposit(uint256 amount)",
-      "function deposit() payable",
-      "function shield(uint256 amount)" // FHE Shield function
+      "function wrap(uint256 amount) external"
     ]);
 
-    let data;
-    if (isEth) {
-      // --- 2 AŞAMALI SHIELD (ETH -> WETH -> eETH) ---
-      // 1. Deposit (ETH -> Public WETH)
-      // Eğer zaten WETH varsa bunu atlayabilirsin ama güvenlik için yapıyoruz.
-      const depositData = iface.encodeFunctionData("deposit()", []);
-      const tx1 = await this.sendTransaction(account, {
-        to: shieldedTokenAddress,
-        value: amount,
-        data: depositData,
-        gasLimit: 500000n
-      });
+    const data = iface.encodeFunctionData("wrap", [amountValue]);
 
-      // Wait for Deposit
-      console.log(`[Wrap] Deposit Confirmed (${tx1}). Step 2: Shielding...`);
-      // await this.waitForTransaction(tx1); // (sendTransaction zaten bekliyor)
-
-      // 2. Shield (Public WETH -> Encrypted eETH)
-      // DİKKAT: Bu işlem Public WETH'i yakar ve sana Gizli eETH verir.
-      const shieldData = iface.encodeFunctionData("shield", [amountBig]);
-
-      const tx2 = await this.sendTransaction(account, {
-        to: shieldedTokenAddress,
-        value: "0",
-        data: shieldData,
-        gasLimit: 3000000n // FHE işlemi, yüksek gas
-      });
-
-      return tx2; // Son hash'i dönüyoruz
-    } else {
-      // Token -> eToken (Genelde deposit direkt shield eder)
-      data = iface.encodeFunctionData("deposit(uint256)", [amountBig]);
-      return this.sendTransaction(account, {
-        to: shieldedTokenAddress,
-        value: "0",
-        data: data,
-        gasLimit: 1000000n
-      });
-    }
+    return this.sendTransaction(account, {
+      to: wrappedTokenAddress,
+      value: "0",
+      data: data
+    });
   }
 
-  async unwrap(account: Account, shieldedTokenAddress: string, amount: string): Promise<string> {
+  /**
+   * Unwrap: Burns wrapped tokens and returns underlying tokens to sender
+   * 
+   * SimpleWrappedUSDC.unwrap(uint256 amount)
+   */
+  async unwrap(account: Account, wrappedTokenAddress: string, amount: string): Promise<string> {
     const ethers = await import("ethers");
-    // FHE unwrap genelde: unshield(amount) -> Public WETH yapar. Sonra withdraw gerekebilir.
-    // Ama genelde tek adımda eETH -> ETH yapan fonksiyon "withdraw" yerine "unshield" olabilir.
-    // Biz standart withdraw'u deneriz ama gas artırırız.
-    const iface = new ethers.Interface(["function withdraw(uint256 amount)"]);
-    const isEth = shieldedTokenAddress.toLowerCase() === "0xfff9976742d46cc05630d1f6ebab18b2324d6b14".toLowerCase();
-    const decimals = isEth ? 18 : 6;
-    const amountWei = ethers.parseUnits(amount, decimals);
 
-    const data = iface.encodeFunctionData("withdraw", [amountWei]);
+    // SimpleWrappedUSDC uses 6 decimals (same as USDC)
+    const decimals = 6;
+    const amountValue = ethers.parseUnits(amount, decimals);
+
+    console.log(`[Unwrap] Unwrapping ${amount} wUSDC (${amountValue} units)`);
+
+    const iface = new ethers.Interface([
+      "function unwrap(uint256 amount) external"
+    ]);
+
+    const data = iface.encodeFunctionData("unwrap", [
+      amountValue  // amount: how much to unwrap
+    ]);
+
+    return this.sendTransaction(account, {
+      to: wrappedTokenAddress,
+      value: "0",
+      data: data
+    });
+  }
+
+  async claimUnwrapped(account: Account, shieldedTokenAddress: string, ctHash: string): Promise<string> {
+    const ethers = await import("ethers");
+
+    console.log(`[ClaimUnwrapped] Step 2/2: Claiming unwrapped tokens for ctHash: ${ctHash}`);
+
+    // FHERC20Wrapper.claimUnwrapped signature: function claimUnwrapped(uint256 ctHash)
+    const iface = new ethers.Interface([
+      "function claimUnwrapped(uint256 ctHash) external"
+    ]);
+
+    const data = iface.encodeFunctionData("claimUnwrapped", [ctHash]);
 
     return this.sendTransaction(account, {
       to: shieldedTokenAddress,
       value: "0",
       data: data,
-      gasLimit: 3000000n // Critical for FHE Decryption
+      gasLimit: 2000000n
     });
   }
 
-  async claimUnwrapped(account: Account, shieldedTokenAddress: string, requestId: string): Promise<string> {
-    throw new Error("Claim not implemented yet");
+  async claimAllUnwrapped(account: Account, shieldedTokenAddress: string): Promise<string> {
+    const ethers = await import("ethers");
+
+    console.log(`[ClaimAllUnwrapped] Claiming all pending unwrap requests...`);
+
+    // FHERC20Wrapper.claimAllUnwrapped signature: function claimAllUnwrapped()
+    const iface = new ethers.Interface([
+      "function claimAllUnwrapped() external"
+    ]);
+
+    const data = iface.encodeFunctionData("claimAllUnwrapped", []);
+
+    return this.sendTransaction(account, {
+      to: shieldedTokenAddress,
+      value: "0",
+      data: data,
+      gasLimit: 5000000n // Higher gas for multiple claims
+    });
   }
 
+  async getUserClaims(account: Account, shieldedTokenAddress: string): Promise<string[]> {
+    const ethers = await import("ethers");
+
+    // FHERC20Wrapper.getUserClaims signature: function getUserClaims(address user) view returns (uint256[])
+    const iface = new ethers.Interface([
+      "function getUserClaims(address user) view returns (uint256[])"
+    ]);
+
+    const data = iface.encodeFunctionData("getUserClaims", [account.GetAddress()]);
+    const result = await this.call("eth_call", [{ to: shieldedTokenAddress, data }, "latest"]);
+
+    const decoded = iface.decodeFunctionResult("getUserClaims", result);
+    const ctHashes = decoded[0].map((hash: bigint) => hash.toString());
+
+    console.log(`[getUserClaims] Found ${ctHashes.length} pending claims`);
+    return ctHashes;
+  }
+
+  async getClaim(shieldedTokenAddress: string, ctHash: string): Promise<any> {
+    const ethers = await import("ethers");
+
+    // FHERC20Wrapper.getClaim signature: function getClaim(uint256 ctHash) view returns (Claim)
+    // struct Claim { address to; uint64 value; uint64 decryptedAmount; bool decrypted; bool claimed; }
+    const iface = new ethers.Interface([
+      "function getClaim(uint256 ctHash) view returns (tuple(address to, uint64 value, uint64 decryptedAmount, bool decrypted, bool claimed))"
+    ]);
+
+    const data = iface.encodeFunctionData("getClaim", [ctHash]);
+    const result = await this.call("eth_call", [{ to: shieldedTokenAddress, data }, "latest"]);
+
+    const decoded = iface.decodeFunctionResult("getClaim", result);
+    const claim = decoded[0];
+
+    return {
+      to: claim.to,
+      value: claim.value.toString(),
+      decryptedAmount: claim.decryptedAmount.toString(),
+      decrypted: claim.decrypted,
+      claimed: claim.claimed
+    };
+  }
+
+  /**
+   * Confidential Transfer: Send encrypted tokens
+   * 
+   * FHERC20.confidentialTransfer(address to, InEuint64 memory inValue)
+   * Transfers encrypted amount without revealing the value
+   */
   async transferConfidential(account: Account, shieldedTokenAddress: string, to: string, amount: string): Promise<string> {
-    console.log(`[TransferConfidential] Sending ${amount} eTokens to ${to}`);
     const { default: FheService } = await import("./FheService.js");
     const ethers = await import("ethers");
 
+    // Initialize CoFHE if needed
     if (!FheService.getInstance().isReady()) {
       if (!account.ethers_wallet) throw new Error("Wallet not accessible");
       const provider = new ethers.JsonRpcProvider(this.rpc_url);
@@ -611,31 +758,43 @@ class Network {
       await FheService.getInstance().init(provider, connectedWallet);
     }
 
-    // FIXED: Use uint32 for Fhenix Testnet compatibility
-    const ciphertext = await FheService.getInstance().encrypt(amount, "uint32");
+    const isEth = shieldedTokenAddress.toLowerCase() === "0xfff9976742d46cc05630d1f6ebab18b2324d6b14".toLowerCase();
+    const decimals = isEth ? 18 : 6;
+    const amountValue = ethers.parseUnits(amount, decimals);
 
+    console.log(`[TransferConfidential] Sending ${amount} (${amountValue} units) to ${to}`);
+    console.log(`[TransferConfidential] Encrypting amount...`);
+
+    // Encrypt amount using CoFHE
+    const encrypted = await FheService.getInstance().encrypt(amountValue, "uint64");
+
+    // CoFheInUint64 structure:
+    // { ctHash: bigint, securityZone: number, utype: FheTypes.Uint64, signature: string }
+    
+    console.log(`[TransferConfidential] Encrypted ctHash: ${encrypted.ctHash}`);
+
+    // FHERC20.confidentialTransfer expects InEuint64:
+    // struct InEuint64 { uint256 ctHash; uint8 securityZone; bytes signature; uint8 utype; }
     const iface = new ethers.Interface([
-      "function transfer(address to, bytes calldata encryptedAmount) external returns (bool)",
-      "function transferEncrypted(address to, bytes calldata encryptedAmount) external returns (bool)",
-      "function confidentialTransfer(address to, bytes calldata encryptedAmount) external returns (bool)"
+      "function confidentialTransfer(address to, tuple(uint256 ctHash, uint8 securityZone, bytes signature, uint8 utype) calldata inValue) external returns (uint256)"
     ]);
 
-    let data;
-    try {
-      data = iface.encodeFunctionData("transfer", [to, ciphertext]);
-    } catch {
-      try {
-        data = iface.encodeFunctionData("transferEncrypted", [to, ciphertext]);
-      } catch {
-        data = iface.encodeFunctionData("confidentialTransfer", [to, ciphertext]);
-      }
-    }
+    const inEuint64 = {
+      ctHash: encrypted.ctHash,
+      securityZone: encrypted.securityZone,
+      signature: encrypted.signature,
+      utype: encrypted.utype
+    };
+
+    const data = iface.encodeFunctionData("confidentialTransfer", [to, inEuint64]);
+
+    console.log(`[TransferConfidential] Sending transaction...`);
 
     return this.sendTransaction(account, {
       to: shieldedTokenAddress,
       value: "0",
       data: data,
-      gasLimit: 3000000n // High Gas for FHE
+      gasLimit: 3000000n
     });
   }
 }

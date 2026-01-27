@@ -1,5 +1,6 @@
 import SepoliaNetwork from "./Sepolia.js";
 import MainnetNetwork from "./Mainnet.js";
+import FhenixSepoliaNetwork from "./FhenixSepolia.js";
 import { Network } from "./Network.js";
 import { NetworkId } from "./NetworkTypes.js";
 
@@ -8,8 +9,9 @@ type Listener = () => void;
 class NetworkProvider {
   private sepoliaNetwork?: SepoliaNetwork;
   private mainnetNetwork?: MainnetNetwork;
+  private fhenixSepoliaNetwork?: FhenixSepoliaNetwork;
 
-  private activeNetworkId: NetworkId = NetworkId.Ethereum_Sepolia; // Default to Sepolia
+  private activeNetworkId: NetworkId = NetworkId.Ethereum_Sepolia; // Default to Ethereum Sepolia
   private listeners: Listener[] = [];
 
   constructor() {
@@ -19,6 +21,7 @@ class NetworkProvider {
   init() {
     if (!this.sepoliaNetwork) this.sepoliaNetwork = new SepoliaNetwork();
     if (!this.mainnetNetwork) this.mainnetNetwork = new MainnetNetwork();
+    if (!this.fhenixSepoliaNetwork) this.fhenixSepoliaNetwork = new FhenixSepoliaNetwork();
   }
 
   getSepoliaNetwork(): SepoliaNetwork {
@@ -31,13 +34,21 @@ class NetworkProvider {
     return this.mainnetNetwork;
   }
 
+  getFhenixSepoliaNetwork(): FhenixSepoliaNetwork {
+    if (!this.fhenixSepoliaNetwork) this.fhenixSepoliaNetwork = new FhenixSepoliaNetwork();
+    return this.fhenixSepoliaNetwork;
+  }
+
   getActiveNetwork(): Network {
     switch (this.activeNetworkId) {
       case NetworkId.Ethereum_Mainnet:
         return this.getMainnetNetwork();
       case NetworkId.Ethereum_Sepolia:
-      default:
         return this.getSepoliaNetwork();
+      case NetworkId.Fhenix_Sepolia:
+        return this.getFhenixSepoliaNetwork();
+      default:
+        return this.getFhenixSepoliaNetwork(); // Default to Fhenix Sepolia
     }
   }
 

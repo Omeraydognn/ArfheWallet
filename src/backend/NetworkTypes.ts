@@ -6,6 +6,7 @@ export enum NetworkId {
     Fhenix = 3,
     Ethereum_Sepolia = 4,
     Ethereum_Hoodi = 5,
+    Fhenix_Sepolia = 8008135, // Fhenix Sepolia Testnet
 }
 
 export type TokenBalance = {

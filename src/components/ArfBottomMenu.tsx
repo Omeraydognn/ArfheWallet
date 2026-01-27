@@ -23,7 +23,7 @@ import {
   DialogActions
 } from "@mui/material";
 import { WalletContext } from "../AppContext.js";
-import { SwapHoriz, Send, QrCode, ContentCopy, CheckCircle, Error as ErrorIcon } from "@mui/icons-material";
+import { SwapHoriz, Send, QrCode, ContentCopy, CheckCircle, Shield, Error as ErrorIcon } from "@mui/icons-material";
 import { isAddress, parseUnits, Interface, formatEther, getAddress } from "ethers";
 
 // --- Tab Panel Wrapper ---
@@ -37,20 +37,19 @@ function CustomTabPanel(props: { children: React.ReactNode; index: number; value
 }
 
 // Demo Configuration
-// ArfheWallet - Fhenix Shielded Token Addresses
+// ArfheWallet - Wrapped Token Addresses (SimpleWrappedUSDC - NO FHE)
 const CONTRACTS = {
   "USDC": {
-    public: getAddress("0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"),
-    shielded: getAddress("0x2035f9228e160243be8e07973715c929845e445e")
+    public: getAddress("0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"), // Sepolia USDC
+    shielded: getAddress(import.meta.env.VITE_WRAPPED_USDC_ADDRESS || "0xbDe0a2e375b67c802d4651FeCf3B678b1886d15b") // SimpleWrappedUSDC
   },
   "ETH": {
-    public: getAddress("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
-    // Correct Fhenix eETH Address
-    shielded: getAddress("0xfff9976742d46cc05630d1f6ebab18b2324d6b14")
+    public: getAddress("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"), // Native ETH marker
+    shielded: getAddress("0x0000000000000000000000000000000000000000") // NOT SUPPORTED YET
   },
   "LINK": {
-    public: getAddress("0x776b6fc2ed15d6bb5fc32e0c89de68683118c62a"),
-    shielded: getAddress("0xfa1c414878ae7beed5ef116d3999988d6a686831")
+    public: getAddress("0x779877A7B0D9E8603169DdbD7836e478b4624789"), // Sepolia LINK
+    shielded: getAddress("0x0000000000000000000000000000000000000000") // NOT SUPPORTED YET
   }
 };
 
@@ -61,14 +60,22 @@ function ShieldPanel() {
   const activeAccount = context?.accountManager?.GetActive();
 
   const [mode, setMode] = useState<"shield" | "unshield">("shield");
-  const [token, setToken] = useState<"USDC" | "ETH">("USDC");
+  const [token, setToken] = useState<"USDC" | "ETH">("ETH");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [txHash, setTxHash] = useState("");
+  const [pendingClaim, setPendingClaim] = useState(false); // For unwrap step 2
 
   const handleAction = async () => {
     if (!network || !activeAccount) return;
+    
+    // Only USDC supported for now
+    if (token !== "USDC") {
+      setStatus("❌ Only USDC wrapping is supported currently");
+      return;
+    }
+    
     setLoading(true);
     setStatus("Processing... Please sign in wallet.");
     setTxHash("");
@@ -77,25 +84,63 @@ function ShieldPanel() {
       // @ts-ignore
       const config = CONTRACTS[token];
       if (!config) throw new Error("Invalid Token Config");
+      
+      // Check if wrapper exists
+      if (config.shielded === "0x0000000000000000000000000000000000000000") {
+        throw new Error(`${token} wrapping not yet deployed`);
+      }
 
       let hash = "";
 
       if (mode === "shield") {
+        console.log("[Wrap] Wrapping", token, "Amount:", amount);
+        console.log("[Wrap] Public token:", config.public);
+        console.log("[Wrap] Wrapper contract:", config.shielded);
+        
+        // Wrap: Public Token -> Wrapped Token
         hash = await network.wrap(activeAccount, config.public, config.shielded, amount);
+        
+        setTxHash(hash);
+        setStatus("Pending Confirmation... (Waiting for block)");
+        await network.waitForTransaction(hash);
+        
+        setStatus("✅ Shield (Wrap) Successful!");
+        setLoading(false);
+        
+        // Reset form
+        setTimeout(() => {
+          setAmount("");
+          setStatus("");
+          setTxHash("");
+        }, 3000);
+        
       } else {
+        // Unwrap: Wrapped Token -> Public Token (SimpleWrappedUSDC - single step, NO FHE)
+        console.log("[Unwrap] Unwrapping", token, "Amount:", amount);
+        console.log("[Unwrap] Wrapper contract:", config.shielded);
+        
+        setStatus("Unwrapping tokens...");
         hash = await network.unwrap(activeAccount, config.shielded, amount);
+        
+        setTxHash(hash);
+        setStatus("Pending Confirmation... (Waiting for block)");
+        await network.waitForTransaction(hash);
+        
+        setStatus("✅ Unshield (Unwrap) Successful!");
+        setLoading(false);
+        
+        // Reset form
+        setTimeout(() => {
+          setAmount("");
+          setStatus("");
+          setTxHash("");
+        }, 3000);
       }
-
-      setTxHash(hash);
-      setStatus("Pending Confirmation... (Waiting for block)");
-
-      await network.waitForTransaction(hash);
-
-      setStatus(mode === "shield" ? "Shield (Deposit) Successful!" : "Unshield (Withdraw) Successful!");
-      setLoading(false); 
+      
     } catch (e: any) {
       console.error(e);
-      setStatus("Failed: " + e.message);
+      setStatus("❌ Failed: " + e.message);
+      setPendingClaim(false);
       setLoading(false);
     }
   };
@@ -103,23 +148,39 @@ function ShieldPanel() {
   return (
     <Box>
       <Typography variant="h6" fontWeight={700} gutterBottom sx={{ mb: 3 }}>
-        Privacy Shield
+        🛡️ Privacy Shield (FHE)
       </Typography>
+
+      <Alert severity="info" sx={{ mb: 3, fontSize: '0.8rem' }}>
+        <strong>🛡️ CoFHE Privacy Shield:</strong> Shield (wrap) your tokens to enable <strong>confidential transfers</strong> using Fully Homomorphic Encryption. Balance and transaction amounts remain encrypted on-chain.
+        {mode === "unshield" && (
+          <>
+            <br /><br />
+            <strong>⚠️ Two-Step Unwrap Process:</strong>
+            <br />1️⃣ <strong>Unwrap Request:</strong> Burns encrypted tokens and initiates FHE decryption
+            <br />2️⃣ <strong>Wait & Claim:</strong> After ~10-20 seconds (decryption time), automatically claims your tokens
+            <br /><br />
+            <em>This is a fundamental requirement of FHE - encrypted data must be decrypted asynchronously before withdrawal.</em>
+          </>
+        )}
+      </Alert>
 
       <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
         <Button
           variant={mode === "shield" ? "contained" : "outlined"}
           onClick={() => setMode("shield")}
           fullWidth
+          color="secondary"
         >
-          Shield (Deposit)
+          🔒 Shield (Wrap)
         </Button>
         <Button
           variant={mode === "unshield" ? "contained" : "outlined"}
           onClick={() => setMode("unshield")}
           fullWidth
+          color="warning"
         >
-          Unshield (Withdraw)
+          🔓 Unshield (Unwrap)
         </Button>
       </Stack>
 
@@ -142,14 +203,17 @@ function ShieldPanel() {
             disableUnderline
             disabled={loading}
           >
-            <MenuItem value="USDC">eUSDC</MenuItem>
-            <MenuItem value="ETH">eETH</MenuItem>
+            <MenuItem value="ETH">ETH</MenuItem>
+            <MenuItem value="USDC">USDC</MenuItem>
           </Select>
         </Stack>
       </Paper>
 
       {status && (
-        <Alert severity={status.includes("Failed") ? "error" : status.includes("Pending") ? "info" : "success"} sx={{ mb: 2 }}>
+        <Alert 
+          severity={status.includes("Failed") || status.includes("❌") ? "error" : status.includes("Pending") ? "info" : "success"} 
+          sx={{ mb: 2 }}
+        >
           <Box>
             {status}
             {txHash && (
@@ -179,9 +243,17 @@ function ShieldPanel() {
         fullWidth
         onClick={handleAction}
         disabled={loading || !amount}
-        sx={{ borderRadius: 3, height: 48, bgcolor: mode === "shield" ? 'primary.main' : 'warning.main' }}
+        color={mode === "shield" ? "secondary" : "warning"}
+        sx={{ borderRadius: 3, height: 48 }}
       >
-        {loading ? (status.includes("Pending") ? "Pending..." : "Processing...") : (mode === "shield" ? "Shield Assets" : "Unshield Assets")}
+        {loading 
+          ? (pendingClaim 
+              ? "⏳ Waiting for decryption..." 
+              : (status.includes("Confirming") || status.includes("Pending") 
+                  ? "⏳ Confirming..." 
+                  : "🔄 Processing..."))
+          : (mode === "shield" ? "🔒 Shield Assets" : "🔓 Unshield Assets")
+        }
       </Button>
     </Box>
   );
@@ -221,43 +293,61 @@ function SendPanel() {
       let hash = "";
 
       if (isConfidential) {
-        // Confidential Transfer
-        let shieldedAddress = "";
+        // Confidential Transfer using MockFHEWrappedUSDC.confidentialTransfer()
+        // Events won't show amounts!
+        
+        let tokenAddress = "";
         let decimals = 18;
 
-        // @ts-ignore
-        if (sendTokenAddress === "ETH") {
-          shieldedAddress = CONTRACTS["ETH"].shielded;
-          decimals = 18;
-        }
-        // @ts-ignore
-        else if (sendTokenAddress.toLowerCase() === CONTRACTS["USDC"].public.toLowerCase()) {
-          shieldedAddress = CONTRACTS["USDC"].shielded;
+        // Direct cUSDC transfer (already wrapped token)
+        if (sendTokenAddress.toLowerCase() === CONTRACTS["USDC"].shielded.toLowerCase()) {
+          tokenAddress = sendTokenAddress; // Already cUSDC
           decimals = 6;
+        }
+        // Legacy: If public USDC selected, redirect to wrapped version
+        else if (sendTokenAddress.toLowerCase() === CONTRACTS["USDC"].public.toLowerCase()) {
+          tokenAddress = CONTRACTS["USDC"].shielded;
+          decimals = 6;
+        }
+        else if (sendTokenAddress === "ETH") {
+          throw new Error("Confidential ETH transfer not supported yet");
         }
         else {
-          // Fallback
-          // @ts-ignore
-          shieldedAddress = CONTRACTS["USDC"].shielded;
-          decimals = 6;
+          throw new Error("Confidential transfer only supports cUSDC");
+        }
+        
+        // Check if wrapper exists
+        if (tokenAddress === "0x0000000000000000000000000000000000000000") {
+          throw new Error("Wrapped USDC not deployed yet");
         }
 
-        // Convert to BigInt String (Wei) for FHE Encryption
-        const amountWei = parseUnits(sendAmount, decimals);
+        console.log("[Send] Confidential Transfer - Token:", tokenAddress, "Amount:", sendAmount, "To:", sendAddress);
         
-        // Passing Wei string to Network.ts
-        hash = await network.transferConfidential(activeAccount, shieldedAddress, sendAddress, amountWei.toString());
+        // Call confidentialTransfer() - NO AMOUNT IN EVENTS!
+        const iface = new Interface(["function confidentialTransfer(address to, uint256 amount) returns (bool)"]);
+        const amountWei = parseUnits(sendAmount, decimals);
+        console.log("[Send] Amount in Wei:", amountWei.toString());
+        
+        const data = iface.encodeFunctionData("confidentialTransfer", [sendAddress, amountWei]);
+        hash = await network.sendTransaction(activeAccount, { to: tokenAddress, value: "0", data });
+        console.log("[Send] Confidential Transfer TX:", hash);
+        
       } else {
         // Standard Transfer
         if (sendTokenAddress === "ETH") {
+          console.log("[Send] ETH Transfer - Amount:", sendAmount, "to:", sendAddress);
           hash = await network.sendTransaction(activeAccount, { to: sendAddress, value: sendAmount });
+          console.log("[Send] ETH Transfer TX:", hash);
         } else {
+          console.log("[Send] ERC20 Transfer - Token:", sendTokenAddress, "Amount:", sendAmount);
           const iface = new Interface(["function transfer(address to, uint256 amount)"]);
           const tokenMeta = context?.tokenCache?.getToken(network.network_id, sendTokenAddress);
           const decimals = tokenMeta?.decimals ?? 18;
           const amountWei = parseUnits(sendAmount, decimals);
+          console.log("[Send] ERC20 Amount in Wei:", amountWei.toString());
           const data = iface.encodeFunctionData("transfer", [sendAddress, amountWei]);
           hash = await network.sendTransaction(activeAccount, { to: sendTokenAddress, value: "0", data });
+          console.log("[Send] ERC20 Transfer TX:", hash);
         }
       }
 
@@ -289,11 +379,17 @@ function SendPanel() {
           variant={isConfidential ? "contained" : "outlined"}
           color={isConfidential ? "secondary" : "inherit"}
           onClick={() => setIsConfidential(!isConfidential)}
-          startIcon={isConfidential ? <CheckCircle /> : null}
+          startIcon={isConfidential ? <Shield /> : null}
         >
-          {isConfidential ? "Confidential Mode ON" : "Enable Confidential Mode"}
+          {isConfidential ? "🔒 Confidential ON" : "Enable Confidential"}
         </Button>
       </Stack>
+
+      {isConfidential && (
+        <Alert severity="warning" sx={{ mb: 2, fontSize: '0.8rem' }}>
+          <strong>Confidential Mode:</strong> You're sending <strong>eTokens</strong> (encrypted). Amounts are hidden on-chain. Make sure you have shielded balance.
+        </Alert>
+      )}
 
       {status === 'success' ? (
         <Stack spacing={2} alignItems="center" sx={{ py: 4 }}>

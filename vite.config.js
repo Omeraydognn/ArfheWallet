@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import wasm from 'vite-plugin-wasm';
+import wasmPlugin from '@rollup/plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 
 const target = process.env.TARGET || 'chrome';
@@ -10,7 +10,10 @@ const target = process.env.TARGET || 'chrome';
 export default defineConfig({
   plugins: [
     react(),
-    wasm(),
+    wasmPlugin({
+      targetEnv: 'browser',
+      maxFileSize: 10000000 // 10MB for large WASM files
+    }),
     topLevelAwait(),
     nodePolyfills({
       protocolImports: true,
@@ -29,6 +32,13 @@ export default defineConfig({
       ],
     }),
   ],
+  assetsInclude: ['**/*.wasm'],
+  resolve: {
+    alias: {
+      // Fix fhenixjs WASM bindings resolution
+      'wbg': 'fhenixjs/lib/esm/sdk/fhe/tfhe_bg.js'
+    }
+  },
   base: './',
   server: {
     historyApiFallback: true,
@@ -59,7 +69,10 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    exclude: ['cofhejs']
+    exclude: ['fhenixjs'],
+    esbuildOptions: {
+      target: 'esnext'
+    }
   },
   build: {
     target: 'esnext',
@@ -73,7 +86,19 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom', 'ethers', 'antd'],
         },
+      },
+      external: (id) => {
+        // Don't bundle WASM files
+        if (id.endsWith('.wasm')) return false;
+        return false;
       }
     }
+  },
+  worker: {
+    format: 'es',
+    plugins: () => [
+      wasmPlugin({ targetEnv: 'browser', maxFileSize: 10000000 }),
+      topLevelAwait()
+    ]
   }
 });
