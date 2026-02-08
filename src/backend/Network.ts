@@ -495,8 +495,17 @@ class Network {
     const txHash = await this.call("eth_sendRawTransaction", [signedTx]);
 
     console.log(`[Network] Waiting for TX ${txHash}...`);
-    await this.waitForTransaction(txHash);
-    console.log(`[Network] TX Confirmed: ${txHash}`);
+    const receipt = await this.waitForTransaction(txHash);
+    
+    // Check receipt status - 0x0 means reverted
+    if (receipt && receipt.status !== undefined) {
+      const status = typeof receipt.status === "string" ? parseInt(receipt.status, 16) : receipt.status;
+      if (status === 0) {
+        console.error(`[Network] ❌ TX REVERTED: ${txHash}`);
+        throw new Error(`Transaction reverted on-chain. TX: ${txHash}`);
+      }
+    }
+    console.log(`[Network] ✅ TX Confirmed: ${txHash}`);
 
     return txHash;
   }
@@ -519,17 +528,26 @@ class Network {
 
   // --- FHE / SHIELDING METHODS ---
 
-  async getShieldedBalance(contractAddress: string, userAddress: string): Promise<string> {
+  async getShieldedBalance(contractAddress: string, userAddress: string, account?: Account): Promise<string> {
     if (this.network_id !== NetworkId.Ethereum_Sepolia) return "0.0";
 
     try {
-      const { default: FheService } = await import("./FheService.js");
+      const { default: FheCofheService } = await import("./FheCofheService.js");
       const ethers = await import("ethers");
 
-      const instance = FheService.getInstance();
-      if (!instance.isReady()) {
-        console.warn("[Network] FHE not ready, cannot fetch shielded balance");
-        return "0.0";
+      const instance = FheCofheService.getInstance();
+      
+      // Ensure cofhejs is initialized for the correct account
+      if (!instance.isReadyForAccount(userAddress)) {
+        if (account && account.ethers_wallet) {
+          console.log(`[getShieldedBalance] Initializing cofhejs for account: ${userAddress}`);
+          const provider = new ethers.JsonRpcProvider(this.rpc_url);
+          const connectedWallet = account.ethers_wallet.connect(provider);
+          await instance.init(provider, connectedWallet as any);
+        } else if (!instance.isReady()) {
+          console.warn("[Network] cofhejs FHE not ready and no account provided, cannot fetch shielded balance");
+          return "0.0";
+        }
       }
 
       // FHERC20.confidentialBalanceOf returns euint64 handle
@@ -554,11 +572,20 @@ class Network {
       
       console.log(`[getShieldedBalance] Unsealing handle: ${handle}`);
 
-      // Unseal using CoFHE
-      const decrypted = await instance.unseal(handle, "uint64");
+      // Handle 0 means no encrypted balance exists for this user - skip unseal
+      if (handle === BigInt(0)) {
+        console.log("[getShieldedBalance] Handle is 0 (no encrypted balance), returning 0.0");
+        return "0.0";
+      }
+
+      // Unseal using cofhejs (TRUE FHE)
+      const decrypted = await instance.unseal(handle);
 
       if (decrypted !== null && decrypted !== undefined) {
-        const isEth = contractAddress.toLowerCase() === "0xfff9976742d46cc05630d1f6ebab18b2324d6b14".toLowerCase();
+        // Determine decimals based on contract address
+        // cETH: 18 decimals, cUSDC: 6 decimals
+        const WRAPPED_ETH = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "0x17CecF8090B945932e2F592168B636F7A0c986e8").toLowerCase();
+        const isEth = contractAddress.toLowerCase() === WRAPPED_ETH;
         const decimals = isEth ? 18 : 6;
         const formatted = this.formatTokenAmount(decrypted, decimals);
         console.log(`[getShieldedBalance] ✅ Unsealed: ${formatted}`);
@@ -574,26 +601,63 @@ class Network {
   }
 
   /**
-   * Wrap: Converts public USDC tokens to wrapped tokens
-   * SimpleWrappedUSDC.wrap(uint256 amount)
+   * Wrap: Converts public tokens to wrapped tokens
+   * Works for both USDC (6 decimals) and WETH (18 decimals)
+   * For ETH: Automatically deposits to WETH first if needed
    */
   async wrap(account: Account, publicTokenAddress: string, wrappedTokenAddress: string, amount: string): Promise<string> {
     const ethers = await import("ethers");
 
-    // SimpleWrappedUSDC uses 6 decimals (same as USDC)
-    const decimals = 6;
-    const amountValue = ethers.parseUnits(amount, decimals);
-
-    // 1. Check and approve USDC spending
+    // Fetch decimals from the public token
     const ifaceErc20 = new ethers.Interface([
       "function allowance(address owner, address spender) view returns (uint256)",
-      "function approve(address spender, uint256 amount) returns (bool)"
+      "function approve(address spender, uint256 amount) returns (bool)",
+      "function decimals() view returns (uint8)",
+      "function balanceOf(address owner) view returns (uint256)"
     ]);
     
+    const decimalsData = ifaceErc20.encodeFunctionData("decimals", []);
+    const decimalsHex = await this.call("eth_call", [{ to: publicTokenAddress, data: decimalsData }, "latest"]);
+    const decimals = decimalsHex && decimalsHex !== "0x" ? parseInt(decimalsHex, 16) : 18;
+    
+    const amountValue = ethers.parseUnits(amount, decimals);
+
+    // Special handling for WETH: Check if user has enough WETH, if not deposit native ETH first
+    const WETH_ADDRESS = "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9".toLowerCase();
+    if (publicTokenAddress.toLowerCase() === WETH_ADDRESS) {
+      console.log("[Wrap] WETH detected - checking balance...");
+      
+      // Check WETH balance
+      const balanceData = ifaceErc20.encodeFunctionData("balanceOf", [account.GetAddress()]);
+      const balanceHex = await this.call("eth_call", [{ to: publicTokenAddress, data: balanceData }, "latest"]);
+      const wethBalance = balanceHex && balanceHex !== "0x" ? BigInt(balanceHex) : 0n;
+      
+      console.log(`[Wrap] Current WETH balance: ${wethBalance}, needed: ${amountValue}`);
+      
+      // If insufficient WETH, deposit native ETH to WETH first
+      if (wethBalance < amountValue) {
+        const depositAmount = amountValue - wethBalance;
+        console.log(`[Wrap] Insufficient WETH. Depositing ${ethers.formatEther(depositAmount)} ETH to WETH...`);
+        
+        // WETH.deposit() - payable function
+        const wethIface = new ethers.Interface(["function deposit() payable"]);
+        const depositData = wethIface.encodeFunctionData("deposit", []);
+        
+        const depositTx = await this.sendTransaction(account, {
+          to: publicTokenAddress,
+          value: ethers.formatEther(depositAmount), // Send native ETH
+          data: depositData
+        });
+        
+        console.log("[Wrap] ETH → WETH deposit successful ✓ TX:", depositTx);
+        await this.waitForTransaction(depositTx);
+      }
+    }
+
+    // 1. Check and approve token spending
     const allowData = ifaceErc20.encodeFunctionData("allowance", [account.GetAddress(), wrappedTokenAddress]);
     const allowHex = await this.call("eth_call", [{ to: publicTokenAddress, data: allowData }, "latest"]);
     
-    // Fix: Handle empty or invalid hex responses
     let currentAllowance = 0n;
     try {
       currentAllowance = allowHex && allowHex !== "0x" ? BigInt(allowHex) : 0n;
@@ -603,17 +667,17 @@ class Network {
     }
 
     if (currentAllowance < amountValue) {
-      console.log("[Wrap] Approving USDC tokens...");
+      console.log(`[Wrap] Approving ${decimals === 6 ? 'USDC' : 'WETH'} tokens...`);
       const approveData = ifaceErc20.encodeFunctionData("approve", [wrappedTokenAddress, amountValue]);
       const approveTx = await this.sendTransaction(account, { 
         to: publicTokenAddress, 
         data: approveData, 
         value: "0"
       });
-      console.log("[Wrap] USDC approved ✓ TX:", approveTx);
+      console.log("[Wrap] Token approved ✓ TX:", approveTx);
     }
 
-    console.log(`[Wrap] Wrapping ${amount} USDC (${amountValue} units)...`);
+    console.log(`[Wrap] Wrapping ${amount} tokens (${amountValue} units, ${decimals} decimals)...`);
 
     // 2. Call wrap(uint256 amount)
     const iface = new ethers.Interface([
@@ -630,18 +694,47 @@ class Network {
   }
 
   /**
+   * Wrap ETH: Directly wrap native ETH into cETH
+   * Uses the wrapETH() payable function on WrappedETH_V3
+   */
+  async wrapETH(account: Account, wrappedTokenAddress: string, amount: string): Promise<string> {
+    const ethers = await import("ethers");
+
+    console.log(`[WrapETH] Wrapping ${amount} ETH directly to cETH...`);
+
+    // Call wrapETH() with ETH value (WrappedETH_V3 has payable wrapETH())
+    const iface = new ethers.Interface([
+      "function wrapETH() payable external"
+    ]);
+
+    const data = iface.encodeFunctionData("wrapETH", []);
+
+    return this.sendTransaction(account, {
+      to: wrappedTokenAddress,
+      value: amount, // Send native ETH
+      data: data
+    });
+  }
+
+  /**
    * Unwrap: Burns wrapped tokens and returns underlying tokens to sender
-   * 
-   * SimpleWrappedUSDC.unwrap(uint256 amount)
+   * Works for both cUSDC (6 decimals) and cETH (18 decimals)
    */
   async unwrap(account: Account, wrappedTokenAddress: string, amount: string): Promise<string> {
     const ethers = await import("ethers");
 
-    // SimpleWrappedUSDC uses 6 decimals (same as USDC)
-    const decimals = 6;
+    // Fetch decimals from the wrapped token
+    const ifaceErc20 = new ethers.Interface([
+      "function decimals() view returns (uint8)"
+    ]);
+    
+    const decimalsData = ifaceErc20.encodeFunctionData("decimals", []);
+    const decimalsHex = await this.call("eth_call", [{ to: wrappedTokenAddress, data: decimalsData }, "latest"]);
+    const decimals = decimalsHex && decimalsHex !== "0x" ? parseInt(decimalsHex, 16) : 18;
+    
     const amountValue = ethers.parseUnits(amount, decimals);
 
-    console.log(`[Unwrap] Unwrapping ${amount} wUSDC (${amountValue} units)`);
+    console.log(`[Unwrap] Unwrapping ${amount} tokens (${amountValue} units, ${decimals} decimals)`);
 
     const iface = new ethers.Interface([
       "function unwrap(uint256 amount) external"
@@ -658,144 +751,90 @@ class Network {
     });
   }
 
-  async claimUnwrapped(account: Account, shieldedTokenAddress: string, ctHash: string): Promise<string> {
-    const ethers = await import("ethers");
-
-    console.log(`[ClaimUnwrapped] Step 2/2: Claiming unwrapped tokens for ctHash: ${ctHash}`);
-
-    // FHERC20Wrapper.claimUnwrapped signature: function claimUnwrapped(uint256 ctHash)
-    const iface = new ethers.Interface([
-      "function claimUnwrapped(uint256 ctHash) external"
-    ]);
-
-    const data = iface.encodeFunctionData("claimUnwrapped", [ctHash]);
-
-    return this.sendTransaction(account, {
-      to: shieldedTokenAddress,
-      value: "0",
-      data: data,
-      gasLimit: 2000000n
-    });
-  }
-
-  async claimAllUnwrapped(account: Account, shieldedTokenAddress: string): Promise<string> {
-    const ethers = await import("ethers");
-
-    console.log(`[ClaimAllUnwrapped] Claiming all pending unwrap requests...`);
-
-    // FHERC20Wrapper.claimAllUnwrapped signature: function claimAllUnwrapped()
-    const iface = new ethers.Interface([
-      "function claimAllUnwrapped() external"
-    ]);
-
-    const data = iface.encodeFunctionData("claimAllUnwrapped", []);
-
-    return this.sendTransaction(account, {
-      to: shieldedTokenAddress,
-      value: "0",
-      data: data,
-      gasLimit: 5000000n // Higher gas for multiple claims
-    });
-  }
-
-  async getUserClaims(account: Account, shieldedTokenAddress: string): Promise<string[]> {
-    const ethers = await import("ethers");
-
-    // FHERC20Wrapper.getUserClaims signature: function getUserClaims(address user) view returns (uint256[])
-    const iface = new ethers.Interface([
-      "function getUserClaims(address user) view returns (uint256[])"
-    ]);
-
-    const data = iface.encodeFunctionData("getUserClaims", [account.GetAddress()]);
-    const result = await this.call("eth_call", [{ to: shieldedTokenAddress, data }, "latest"]);
-
-    const decoded = iface.decodeFunctionResult("getUserClaims", result);
-    const ctHashes = decoded[0].map((hash: bigint) => hash.toString());
-
-    console.log(`[getUserClaims] Found ${ctHashes.length} pending claims`);
-    return ctHashes;
-  }
-
-  async getClaim(shieldedTokenAddress: string, ctHash: string): Promise<any> {
-    const ethers = await import("ethers");
-
-    // FHERC20Wrapper.getClaim signature: function getClaim(uint256 ctHash) view returns (Claim)
-    // struct Claim { address to; uint64 value; uint64 decryptedAmount; bool decrypted; bool claimed; }
-    const iface = new ethers.Interface([
-      "function getClaim(uint256 ctHash) view returns (tuple(address to, uint64 value, uint64 decryptedAmount, bool decrypted, bool claimed))"
-    ]);
-
-    const data = iface.encodeFunctionData("getClaim", [ctHash]);
-    const result = await this.call("eth_call", [{ to: shieldedTokenAddress, data }, "latest"]);
-
-    const decoded = iface.decodeFunctionResult("getClaim", result);
-    const claim = decoded[0];
-
-    return {
-      to: claim.to,
-      value: claim.value.toString(),
-      decryptedAmount: claim.decryptedAmount.toString(),
-      decrypted: claim.decrypted,
-      claimed: claim.claimed
-    };
-  }
-
   /**
-   * Confidential Transfer: Send encrypted tokens
+   * Confidential Transfer: Send encrypted tokens using cofhejs (TRUE FHE)
    * 
-   * FHERC20.confidentialTransfer(address to, InEuint64 memory inValue)
+   * WrappedETH_V3/WrappedUSDC_V2.transferEncrypted(address to, InEuint64 calldata inValue)
    * Transfers encrypted amount without revealing the value
    */
   async transferConfidential(account: Account, shieldedTokenAddress: string, to: string, amount: string): Promise<string> {
-    const { default: FheService } = await import("./FheService.js");
+    const { default: FheCofheService } = await import("./FheCofheService.js");
     const ethers = await import("ethers");
 
-    // Initialize CoFHE if needed
-    if (!FheService.getInstance().isReady()) {
+    // Initialize cofhejs if needed - MUST be initialized with the SAME account that sends the TX
+    // cofhejs uses signer.getAddress() as the account for the verifier hash
+    // TaskManager uses msg.sender for verification - these must match
+    const txSenderAddress = account.GetAddress();
+    if (!txSenderAddress) throw new Error("Account address not available");
+    
+    if (!FheCofheService.getInstance().isReadyForAccount(txSenderAddress)) {
       if (!account.ethers_wallet) throw new Error("Wallet not accessible");
       const provider = new ethers.JsonRpcProvider(this.rpc_url);
       const connectedWallet = account.ethers_wallet.connect(provider);
-      await FheService.getInstance().init(provider, connectedWallet);
+      console.log(`[TransferConfidential] Initializing cofhejs for account: ${txSenderAddress}`);
+      await FheCofheService.getInstance().init(provider, connectedWallet as any);
     }
 
-    const isEth = shieldedTokenAddress.toLowerCase() === "0xfff9976742d46cc05630d1f6ebab18b2324d6b14".toLowerCase();
+    // Determine decimals based on contract address
+    // cETH: 18 decimals, cUSDC: 6 decimals
+    const WRAPPED_ETH = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "0x17CecF8090B945932e2F592168B636F7A0c986e8").toLowerCase();
+    const isEth = shieldedTokenAddress.toLowerCase() === WRAPPED_ETH;
     const decimals = isEth ? 18 : 6;
     const amountValue = ethers.parseUnits(amount, decimals);
 
     console.log(`[TransferConfidential] Sending ${amount} (${amountValue} units) to ${to}`);
-    console.log(`[TransferConfidential] Encrypting amount...`);
+    console.log(`[TransferConfidential] Encrypting amount with cofhejs...`);
 
-    // Encrypt amount using CoFHE
-    const encrypted = await FheService.getInstance().encrypt(amountValue, "uint64");
+    // Encrypt amount using cofhejs (TRUE FHE)
+    const encrypted = await FheCofheService.getInstance().encrypt(BigInt(amountValue.toString()));
 
-    // CoFheInUint64 structure:
-    // { ctHash: bigint, securityZone: number, utype: FheTypes.Uint64, signature: string }
-    
-    console.log(`[TransferConfidential] Encrypted ctHash: ${encrypted.ctHash}`);
+    console.log(`[TransferConfidential] ✅ Encrypted ctHash: ${encrypted.ctHash}`);
 
-    // FHERC20.confidentialTransfer expects InEuint64:
-    // struct InEuint64 { uint256 ctHash; uint8 securityZone; bytes signature; uint8 utype; }
+    // V4 contract: transferEncrypted(address to, InEuint64 encryptedAmount) - NO plaintext amount
+    // struct InEuint64 { uint256 ctHash; uint8 securityZone; uint8 utype; bytes signature; }
     const iface = new ethers.Interface([
-      "function confidentialTransfer(address to, tuple(uint256 ctHash, uint8 securityZone, bytes signature, uint8 utype) calldata inValue) external returns (uint256)"
+      "function transferEncrypted(address to, tuple(uint256 ctHash, uint8 securityZone, uint8 utype, bytes signature) inValue) external returns (uint256)"
     ]);
 
     const inEuint64 = {
       ctHash: encrypted.ctHash,
       securityZone: encrypted.securityZone,
-      signature: encrypted.signature,
-      utype: encrypted.utype
+      utype: encrypted.utype,
+      signature: encrypted.signature
     };
 
-    const data = iface.encodeFunctionData("confidentialTransfer", [to, inEuint64]);
+    const data = iface.encodeFunctionData("transferEncrypted", [to, inEuint64]);
 
+    console.log(`[TransferConfidential] Contract: ${shieldedTokenAddress}`);
+    console.log(`[TransferConfidential] To (recipient): ${to}`);
+    console.log(`[TransferConfidential] inEuint64:`, JSON.stringify(inEuint64, (_, v) => typeof v === 'bigint' ? v.toString() : v));
+    console.log(`[TransferConfidential] Encoded data length: ${data.length}`);
     console.log(`[TransferConfidential] Sending transaction...`);
 
-    return this.sendTransaction(account, {
+    const txHash = await this.sendTransaction(account, {
       to: shieldedTokenAddress,
       value: "0",
       data: data,
       gasLimit: 3000000n
     });
+
+    // Fetch and log receipt details for debugging
+    try {
+      const receipt = await this.call("eth_getTransactionReceipt", [txHash]);
+      const status = typeof receipt?.status === "string" ? parseInt(receipt.status, 16) : receipt?.status;
+      console.log(`[TransferConfidential] TX Receipt Status: ${status === 1 ? '✅ SUCCESS' : '❌ REVERTED'}`);
+      console.log(`[TransferConfidential] Gas Used: ${receipt?.gasUsed}`);
+      console.log(`[TransferConfidential] Logs count: ${receipt?.logs?.length || 0}`);
+      if (receipt?.logs) {
+        receipt.logs.forEach((log: any, i: number) => {
+          console.log(`[TransferConfidential] Log[${i}]: topic0=${log.topics?.[0]?.slice(0,10)}... topics=${log.topics?.length} data=${log.data?.length}chars`);
+        });
+      }
+    } catch (e) {
+      console.warn("[TransferConfidential] Could not fetch receipt for debug:", e);
+    }
+
+    return txHash;
   }
 }
 

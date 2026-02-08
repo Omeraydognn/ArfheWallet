@@ -37,15 +37,15 @@ function CustomTabPanel(props: { children: React.ReactNode; index: number; value
 }
 
 // Demo Configuration
-// ArfheWallet - Wrapped Token Addresses (SimpleWrappedUSDC - NO FHE)
+// ArfheWallet - Wrapped Token Addresses
 const CONTRACTS = {
   "USDC": {
     public: getAddress("0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"), // Sepolia USDC
-    shielded: getAddress(import.meta.env.VITE_WRAPPED_USDC_ADDRESS || "0xbDe0a2e375b67c802d4651FeCf3B678b1886d15b") // SimpleWrappedUSDC
+    shielded: getAddress((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "0x730Bb4ee9EA1cdB0B45C1DB01cA67a616D2D3C88") // cUSDC
   },
   "ETH": {
-    public: getAddress("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"), // Native ETH marker
-    shielded: getAddress("0x0000000000000000000000000000000000000000") // NOT SUPPORTED YET
+    public: getAddress((import.meta as any).env.VITE_SEPOLIA_WETH_ADDRESS || "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"), // Sepolia WETH
+    shielded: getAddress((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "0x17CecF8090B945932e2F592168B636F7A0c986e8") // cETH
   },
   "LINK": {
     public: getAddress("0x779877A7B0D9E8603169DdbD7836e478b4624789"), // Sepolia LINK
@@ -70,12 +70,6 @@ function ShieldPanel() {
   const handleAction = async () => {
     if (!network || !activeAccount) return;
     
-    // Only USDC supported for now
-    if (token !== "USDC") {
-      setStatus("❌ Only USDC wrapping is supported currently");
-      return;
-    }
-    
     setLoading(true);
     setStatus("Processing... Please sign in wallet.");
     setTxHash("");
@@ -97,8 +91,14 @@ function ShieldPanel() {
         console.log("[Wrap] Public token:", config.public);
         console.log("[Wrap] Wrapper contract:", config.shielded);
         
-        // Wrap: Public Token -> Wrapped Token
-        hash = await network.wrap(activeAccount, config.public, config.shielded, amount);
+        // ETH: Use direct wrapETH() for V2 contract
+        if (token === "ETH") {
+          setStatus("Wrapping ETH → cETH...");
+          hash = await network.wrapETH(activeAccount, config.shielded, amount);
+        } else {
+          // USDC: Use standard wrap (requires approval)
+          hash = await network.wrap(activeAccount, config.public, config.shielded, amount);
+        }
         
         setTxHash(hash);
         setStatus("Pending Confirmation... (Waiting for block)");
@@ -152,15 +152,11 @@ function ShieldPanel() {
       </Typography>
 
       <Alert severity="info" sx={{ mb: 3, fontSize: '0.8rem' }}>
-        <strong>🛡️ CoFHE Privacy Shield:</strong> Shield (wrap) your tokens to enable <strong>confidential transfers</strong> using Fully Homomorphic Encryption. Balance and transaction amounts remain encrypted on-chain.
+        <strong>🛡️ CoFHE Privacy Shield:</strong> Shield (wrap) your tokens (ETH/USDC) to enable <strong>confidential transfers</strong> using Fully Homomorphic Encryption. Balance and transaction amounts remain encrypted on-chain.
         {mode === "unshield" && (
           <>
             <br /><br />
-            <strong>⚠️ Two-Step Unwrap Process:</strong>
-            <br />1️⃣ <strong>Unwrap Request:</strong> Burns encrypted tokens and initiates FHE decryption
-            <br />2️⃣ <strong>Wait & Claim:</strong> After ~10-20 seconds (decryption time), automatically claims your tokens
-            <br /><br />
-            <em>This is a fundamental requirement of FHE - encrypted data must be decrypted asynchronously before withdrawal.</em>
+            <strong>⚠️ Unwrap Process:</strong> Burns encrypted tokens and returns your original tokens (WETH/USDC) instantly.
           </>
         )}
       </Alert>
@@ -293,7 +289,7 @@ function SendPanel() {
       let hash = "";
 
       if (isConfidential) {
-        // Confidential Transfer using MockFHEWrappedUSDC.confidentialTransfer()
+        // Confidential Transfer using FHE Wrapped Tokens
         // Events won't show amounts!
         
         let tokenAddress = "";
@@ -309,27 +305,36 @@ function SendPanel() {
           tokenAddress = CONTRACTS["USDC"].shielded;
           decimals = 6;
         }
+        // Direct cETH transfer (already wrapped token)
+        else if (sendTokenAddress.toLowerCase() === CONTRACTS["ETH"].shielded.toLowerCase()) {
+          tokenAddress = sendTokenAddress; // Already cETH
+          decimals = 18;
+        }
+        // Legacy: If public WETH selected, redirect to wrapped version
+        else if (sendTokenAddress.toLowerCase() === CONTRACTS["ETH"].public.toLowerCase()) {
+          tokenAddress = CONTRACTS["ETH"].shielded;
+          decimals = 18;
+        }
         else if (sendTokenAddress === "ETH") {
-          throw new Error("Confidential ETH transfer not supported yet");
+          // Native ETH - should use WETH wrapper
+          tokenAddress = CONTRACTS["ETH"].shielded;
+          decimals = 18;
         }
         else {
-          throw new Error("Confidential transfer only supports cUSDC");
+          throw new Error("Confidential transfer only supports cUSDC and cETH");
         }
         
         // Check if wrapper exists
         if (tokenAddress === "0x0000000000000000000000000000000000000000") {
-          throw new Error("Wrapped USDC not deployed yet");
+          throw new Error("Token wrapper not deployed yet");
         }
 
         console.log("[Send] Confidential Transfer - Token:", tokenAddress, "Amount:", sendAmount, "To:", sendAddress);
         
-        // Call confidentialTransfer() - NO AMOUNT IN EVENTS!
-        const iface = new Interface(["function confidentialTransfer(address to, uint256 amount) returns (bool)"]);
-        const amountWei = parseUnits(sendAmount, decimals);
-        console.log("[Send] Amount in Wei:", amountWei.toString());
-        
-        const data = iface.encodeFunctionData("confidentialTransfer", [sendAddress, amountWei]);
-        hash = await network.sendTransaction(activeAccount, { to: tokenAddress, value: "0", data });
+        // Use network.transferConfidential() - encrypts amount with cofhejs FHE
+        // Amount is encrypted into InEuint struct (ctHash + signature) before sending
+        setFeedbackMsg("Encrypting amount with FHE...");
+        hash = await network.transferConfidential(activeAccount, tokenAddress, sendAddress, sendAmount);
         console.log("[Send] Confidential Transfer TX:", hash);
         
       } else {
@@ -387,7 +392,7 @@ function SendPanel() {
 
       {isConfidential && (
         <Alert severity="warning" sx={{ mb: 2, fontSize: '0.8rem' }}>
-          <strong>Confidential Mode:</strong> You're sending <strong>eTokens</strong> (encrypted). Amounts are hidden on-chain. Make sure you have shielded balance.
+          <strong>Confidential Mode:</strong> You're sending <strong>encrypted tokens (cUSDC/cETH)</strong>. Amounts are hidden on-chain. Make sure you have shielded balance.
         </Alert>
       )}
 

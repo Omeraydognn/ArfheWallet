@@ -95,7 +95,7 @@ const FHEPrivacyPanel = () => {
       const userAddr = activeAccount.GetAddress();
       if (!userAddr) throw new Error("No Address");
 
-      const balance = await network.getShieldedBalance(contractAddr, userAddr);
+      const balance = await network.getShieldedBalance(contractAddr, userAddr, activeAccount);
 
       setBalances(prev => ({ ...prev, [tokenKey]: balance }));
       setDecrypted(prev => ({ ...prev, [tokenKey]: true }));

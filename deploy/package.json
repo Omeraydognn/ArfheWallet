@@ -1,0 +1,18 @@
+{
+  "name": "arfhe-deploy",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "deploy:eth": "npx hardhat run scripts/deploy-eth.js --network sepolia",
+    "deploy:usdc": "npx hardhat run scripts/deploy-usdc.js --network sepolia",
+    "deploy:all": "npx hardhat run scripts/deploy-all.js --network sepolia"
+  },
+  "devDependencies": {
+    "@fhenixprotocol/cofhe-contracts": "^0.0.14",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.1.0",
+    "dotenv": "^16.4.7",
+    "hardhat": "^2.22.0"
+  }
+}

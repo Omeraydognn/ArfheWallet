@@ -85,14 +85,14 @@ function Home() {
       const address = active_context.activeAccount?.GetAddress();
       if (!address) return;
 
-      // Initialize FHE if on Sepolia
+      // Initialize cofhejs (TRUE FHE) if on Sepolia
       if (activeNetworkId === NetworkId.Ethereum_Sepolia && active_context.activeAccount) {
         try {
-          const { default: FheService } = await import("../backend/FheService.js");
-          const instance = FheService.getInstance();
+          const { default: FheCofheService } = await import("../backend/FheCofheService.js");
+          const instance = FheCofheService.getInstance();
           
-          if (!instance.isReady()) {
-            console.log("[Home] Initializing FHE...");
+          if (!instance.isReadyForAccount(address)) {
+            console.log("[Home] Initializing cofhejs (TRUE FHE) for account:", address);
             const ethers = await import("ethers");
             const provider = new ethers.JsonRpcProvider(net.rpc_url);
             const privateKey = active_context.activeAccount.private_key;
@@ -100,10 +100,10 @@ function Home() {
             const signer = new ethers.Wallet(privateKey, provider);
             
             await instance.init(provider, signer);
-            console.log("[Home] FHE Ready!");
+            console.log("[Home] ✅ cofhejs TRUE FHE Ready!");
           }
         } catch (e) {
-          console.error("[Home] FHE initialization failed:", e);
+          console.error("[Home] cofhejs FHE initialization failed:", e);
         }
       }
 
@@ -114,35 +114,54 @@ function Home() {
 
       // 2. Fetch Wrapped Token Balances (Only on Sepolia)
       const wrappedBalances: any[] = [];
-      const WRAPPED_USDC_ADDRESS = import.meta.env.VITE_WRAPPED_USDC_ADDRESS?.toLowerCase();
+      const WRAPPED_USDC_ADDRESS = (import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS?.toLowerCase();
+      const WRAPPED_ETH_ADDRESS = (import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS?.toLowerCase();
       const IGNORED_CONTRACTS = [
         "0xbde0a2e375b67c802d4651fecf3b678b1886d15b", // SimpleWrappedUSDC (old)
         "0x3e0722a877e52fe755e8bf02372342c63930fd57", // MockFHEWrappedUSDC (old)
         "0x6ab305c679002c0938c2be3f824fcb8b81be5b70", // CoFHEWrappedUSDC v1 (old - no ERC20)
-        "0x5c3f1fe2c451ccc73443865fec914a595c3d1a7c"  // CoFHEWrappedUSDC v2 (old - FHE not on Sepolia)
+        "0x5c3f1fe2c451ccc73443865fec914a595c3d1a7c", // CoFHEWrappedUSDC v2 (old - FHE not on Sepolia)
+        "0x730bb4ee9ea1cdb0b45c1db01ca67a616d2d3c88", // Old WrappedUSDC (no FHE)
+        "0x23bad885b76c95ec9e2b47663022d552d780200f", // Old WrappedETH (no FHE)
+        "0x503e16b7920420277ce1548444dbb30e97f87d40", // WrappedUSDC v2 (no ERC20 sync)
+        "0x3696a9a8ecd0dbd7111dd15f7837d7f38d83a0c0", // WrappedETH v3 (no ERC20 sync)
+        "0x7890673c207a728ef7d9378c7206030749351dad", // WrappedETH v3 (no ERC20 sync on transfer)
+        "0x4b3dd819cfbf1364cabd5c8f9c5c05917d09168c", // WrappedUSDC v2 (no ERC20 sync on transfer)
+        "0x421583e66b21de780b4f94fcecce858c07f3d2d9", // WrappedETH v3 (no ERC20 sync on transfer v2)
+        "0x0125c55244724c1bf1d16b91e046fe7e8a5719e2", // WrappedUSDC v2 (no ERC20 sync on transfer v2)
+        "0x8d0419e8a259366516fc4fbabebdc013cad8770f", // WrappedETH_V3 (plaintext leak in transfer)
+        "0x2210264a3775d5fbc51b1b73667f5590230ac2bd"  // WrappedUSDC_V2 (plaintext leak in transfer)
       ];
       
-      if (activeNetworkId === NetworkId.Ethereum_Sepolia && WRAPPED_USDC_ADDRESS) {
-        console.log("[Home] Fetching wrapped USDC balance...", WRAPPED_USDC_ADDRESS);
-        
-        // Wrapped USDC - Simple ERC20 balance check
-        try {
-          const wrappedUsdcBalance = await net.getTokenBalance(
-            WRAPPED_USDC_ADDRESS,
-            address
-          );
+      if (activeNetworkId === NetworkId.Ethereum_Sepolia) {
+        // Fetch Wrapped USDC - Always show, even if balance is 0
+        if (WRAPPED_USDC_ADDRESS) {
+          console.log("[Home] Fetching wrapped USDC balance...", WRAPPED_USDC_ADDRESS);
           
-          console.log("[Home] Wrapped USDC balance:", wrappedUsdcBalance);
-          
-          if (parseFloat(wrappedUsdcBalance) > 0) {
+          try {
+            // Get encrypted (shielded) balance via FHE unseal - V4 contracts have NO ERC20 balance
+            let wrappedUsdcBalance = "0";
+            try {
+              const shieldedBal = await net.getShieldedBalance(WRAPPED_USDC_ADDRESS, address, active_context.activeAccount);
+              if (shieldedBal && parseFloat(shieldedBal) > 0) {
+                wrappedUsdcBalance = shieldedBal;
+                console.log("[Home] Wrapped USDC shielded balance:", wrappedUsdcBalance);
+              } else {
+                console.log("[Home] Wrapped USDC balance: 0 (no encrypted balance)");
+              }
+            } catch (e) {
+              console.warn("[Home] Failed to fetch shielded USDC balance:", e);
+            }
+            
+            // Always add to list, even if balance is 0
             wrappedBalances.push({
               contractAddress: WRAPPED_USDC_ADDRESS,
               tokenBalance: wrappedUsdcBalance,
               isNative: false,
-              isShielded: true // NEW: MockFHEWrappedUSDC has confidential transfers
+              isShielded: true
             });
 
-            // Cache metadata - UPDATE to cUSDC
+            // Cache metadata
             wallet_context.tokenCache.setToken(activeNetworkId, {
               name: "Confidential USDC",
               symbol: "cUSDC",
@@ -150,9 +169,49 @@ function Home() {
               logoSrc: "",
               contractAddress: WRAPPED_USDC_ADDRESS
             });
+          } catch (e) {
+            console.warn("[Home] Failed to fetch Wrapped USDC balance:", e);
           }
-        } catch (e) {
-          console.warn("[Home] Failed to fetch Wrapped USDC balance:", e);
+        }
+
+        // Fetch Wrapped ETH - Always show, even if balance is 0
+        if (WRAPPED_ETH_ADDRESS) {
+          console.log("[Home] Fetching wrapped ETH balance...", WRAPPED_ETH_ADDRESS);
+          
+          try {
+            // Get encrypted (shielded) balance via FHE unseal - V4 contracts have NO ERC20 balance
+            let wrappedEthBalance = "0";
+            try {
+              const shieldedBal = await net.getShieldedBalance(WRAPPED_ETH_ADDRESS, address, active_context.activeAccount);
+              if (shieldedBal && parseFloat(shieldedBal) > 0) {
+                wrappedEthBalance = shieldedBal;
+                console.log("[Home] Wrapped ETH shielded balance:", wrappedEthBalance);
+              } else {
+                console.log("[Home] Wrapped ETH balance: 0 (no encrypted balance)");
+              }
+            } catch (e) {
+              console.warn("[Home] Failed to fetch shielded ETH balance:", e);
+            }
+            
+            // Always add to list, even if balance is 0
+            wrappedBalances.push({
+              contractAddress: WRAPPED_ETH_ADDRESS,
+              tokenBalance: wrappedEthBalance,
+              isNative: false,
+              isShielded: true
+            });
+
+            // Cache metadata
+            wallet_context.tokenCache.setToken(activeNetworkId, {
+              name: "Confidential ETH",
+              symbol: "cETH",
+              decimals: 18,
+              logoSrc: "",
+              contractAddress: WRAPPED_ETH_ADDRESS
+            });
+          } catch (e) {
+            console.warn("[Home] Failed to fetch Wrapped ETH balance:", e);
+          }
         }
       }
 
@@ -160,7 +219,7 @@ function Home() {
       const allBalances = [...tokenBalances, ...wrappedBalances];
 
       // 3. Extract Contracts for price fetching - EXCLUDE wrapped token addresses
-      const wrappedTokenAddresses = WRAPPED_USDC_ADDRESS ? [WRAPPED_USDC_ADDRESS] : [];
+      const wrappedTokenAddresses = [WRAPPED_USDC_ADDRESS, WRAPPED_ETH_ADDRESS].filter(Boolean);
 
       const contractAddresses = tokenBalances
         .map(t => t.contractAddress)

@@ -4,12 +4,37 @@ import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import wasmPlugin from '@rollup/plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const target = process.env.TARGET || 'chrome';
 
 export default defineConfig({
   plugins: [
     react(),
+    // Serve tfhe WASM file with correct MIME type from node_modules
+    {
+      name: 'serve-tfhe-wasm',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url && req.url.endsWith('tfhe_bg.wasm')) {
+            const wasmPath = path.resolve(__dirname, 'node_modules/tfhe/tfhe_bg.wasm');
+            if (fs.existsSync(wasmPath)) {
+              res.setHeader('Content-Type', 'application/wasm');
+              res.setHeader('Cache-Control', 'public, max-age=3600');
+              const wasmFile = fs.readFileSync(wasmPath);
+              res.end(wasmFile);
+              return;
+            }
+          }
+          next();
+        });
+      }
+    },
     wasmPlugin({
       targetEnv: 'browser',
       maxFileSize: 10000000 // 10MB for large WASM files
@@ -35,8 +60,7 @@ export default defineConfig({
   assetsInclude: ['**/*.wasm'],
   resolve: {
     alias: {
-      // Fix fhenixjs WASM bindings resolution
-      'wbg': 'fhenixjs/lib/esm/sdk/fhe/tfhe_bg.js'
+      // cofhejs web binding support
     }
   },
   base: './',
@@ -69,7 +93,8 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    exclude: ['fhenixjs'],
+    include: ['tweetnacl'],
+    exclude: ['tfhe'],
     esbuildOptions: {
       target: 'esnext'
     }
