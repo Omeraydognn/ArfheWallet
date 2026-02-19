@@ -90,7 +90,7 @@ function Home() {
         try {
           const { default: FheCofheService } = await import("../backend/FheCofheService.js");
           const instance = FheCofheService.getInstance();
-          
+
           if (!instance.isReadyForAccount(address)) {
             console.log("[Home] Initializing cofhejs (TRUE FHE) for account:", address);
             const ethers = await import("ethers");
@@ -98,7 +98,7 @@ function Home() {
             const privateKey = active_context.activeAccount.private_key;
             if (!privateKey) throw new Error("No private key available");
             const signer = new ethers.Wallet(privateKey, provider);
-            
+
             await instance.init(provider, signer);
             console.log("[Home] ✅ cofhejs TRUE FHE Ready!");
           }
@@ -132,12 +132,12 @@ function Home() {
         "0x8d0419e8a259366516fc4fbabebdc013cad8770f", // WrappedETH_V3 (plaintext leak in transfer)
         "0x2210264a3775d5fbc51b1b73667f5590230ac2bd"  // WrappedUSDC_V2 (plaintext leak in transfer)
       ];
-      
+
       if (activeNetworkId === NetworkId.Ethereum_Sepolia) {
         // Fetch Wrapped USDC - Always show, even if balance is 0
         if (WRAPPED_USDC_ADDRESS) {
           console.log("[Home] Fetching wrapped USDC balance...", WRAPPED_USDC_ADDRESS);
-          
+
           try {
             // Get encrypted (shielded) balance via FHE unseal - V4 contracts have NO ERC20 balance
             let wrappedUsdcBalance = "0";
@@ -152,7 +152,7 @@ function Home() {
             } catch (e) {
               console.warn("[Home] Failed to fetch shielded USDC balance:", e);
             }
-            
+
             // Always add to list, even if balance is 0
             wrappedBalances.push({
               contractAddress: WRAPPED_USDC_ADDRESS,
@@ -177,7 +177,7 @@ function Home() {
         // Fetch Wrapped ETH - Always show, even if balance is 0
         if (WRAPPED_ETH_ADDRESS) {
           console.log("[Home] Fetching wrapped ETH balance...", WRAPPED_ETH_ADDRESS);
-          
+
           try {
             // Get encrypted (shielded) balance via FHE unseal - V4 contracts have NO ERC20 balance
             let wrappedEthBalance = "0";
@@ -192,7 +192,7 @@ function Home() {
             } catch (e) {
               console.warn("[Home] Failed to fetch shielded ETH balance:", e);
             }
-            
+
             // Always add to list, even if balance is 0
             wrappedBalances.push({
               contractAddress: WRAPPED_ETH_ADDRESS,
@@ -240,11 +240,50 @@ function Home() {
       });
       setTokens(initialDisplay); // Show list instantly
 
-      // 3. Fetch Prices (Async/Non-blocking) - Only for public tokens
+      // 3. Fetch Prices (Async/Non-blocking)
       let currentPrices: Record<string, number> = {};
       try {
         currentPrices = await net.getTokenPrices(contractAddresses);
       } catch (e) { console.warn("Price fetch skipped"); }
+
+      // Testnet price fallback: fetch mainnet ETH price and map known tokens
+      if (activeNetworkId !== NetworkId.Ethereum_Mainnet && Object.keys(currentPrices).length === 0) {
+        try {
+          const ethRes = await fetch("/api/coingecko/simple/price?ids=ethereum,chainlink,usd-coin&vs_currencies=usd");
+          const ethJson = await ethRes.json();
+          const ethPrice = ethJson.ethereum?.usd ?? 0;
+          const linkPrice = ethJson.chainlink?.usd ?? 0;
+          const usdcPrice = ethJson["usd-coin"]?.usd ?? 1;
+
+          // Map native ETH
+          currentPrices["ETH"] = ethPrice;
+
+          // Map all known testnet tokens to mainnet prices by symbol
+          const symbolPriceMap: Record<string, number> = {
+            "ETH": ethPrice,
+            "WETH": ethPrice,
+            "cETH": ethPrice,
+            "USDC": usdcPrice,
+            "cUSDC": usdcPrice,
+            "EURC": usdcPrice,
+            "wUSDC": usdcPrice,
+            "LINK": linkPrice,
+          };
+
+          // Apply prices by matching token symbol from cache
+          allBalances.forEach((tb: any) => {
+            const meta = wallet_context.tokenCache.getToken(activeNetworkId, tb.contractAddress);
+            const symbol = meta?.symbol ?? (tb.isNative ? "ETH" : "");
+            if (symbol && symbolPriceMap[symbol] !== undefined) {
+              currentPrices[tb.contractAddress.toLowerCase()] = symbolPriceMap[symbol];
+            }
+          });
+
+          console.log("[Home] Testnet prices mapped:", currentPrices);
+        } catch (e) {
+          console.warn("[Home] Testnet price fallback failed:", e);
+        }
+      }
 
       setPrices(currentPrices);
 
@@ -265,12 +304,21 @@ function Home() {
         };
       });
 
-      // Process wrapped token balances (no price data yet, just show balance)
+      // Process wrapped token balances with price mapping
       wrappedBalances.forEach((wb) => {
+        const meta = wallet_context.tokenCache.getToken(activeNetworkId, wb.contractAddress);
+        const symbol = meta?.symbol ?? "";
+        // cETH uses ETH price, cUSDC uses USDC price
+        let p = 0;
+        if (symbol === "cETH") p = currentPrices["ETH"] ?? 0;
+        else if (symbol === "cUSDC") p = currentPrices[wb.contractAddress.toLowerCase()] ?? 1;
+        const valUsd = parseFloat(wb.tokenBalance) * p;
+        totalUsd += valUsd;
+
         balanceMap[wb.contractAddress] = {
           ...wb,
-          priceUsd: 0, // No price for wrapped tokens yet
-          totalValueUsd: 0
+          priceUsd: p,
+          totalValueUsd: valUsd
         };
       });
 
@@ -505,13 +553,13 @@ function ActionButton({ icon, label, onClick }: { icon: any, label: string, onCl
   );
 }
 
-function AssetItem({ symbol, name, balance, value, icon, isShielded = false }: { 
-  symbol: string, 
-  name: string, 
-  balance: string, 
-  value: string, 
+function AssetItem({ symbol, name, balance, value, icon, isShielded = false }: {
+  symbol: string,
+  name: string,
+  balance: string,
+  value: string,
   icon: string,
-  isShielded?: boolean 
+  isShielded?: boolean
 }) {
   return (
     <Paper
@@ -550,11 +598,11 @@ function AssetItem({ symbol, name, balance, value, icon, isShielded = false }: {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="subtitle1" fontWeight={700} color="text.primary">{symbol}</Typography>
               {isShielded && (
-                <Chip 
-                  icon={<Shield sx={{ fontSize: 12 }} />} 
-                  label="Private" 
-                  size="small" 
-                  color="secondary" 
+                <Chip
+                  icon={<Shield sx={{ fontSize: 12 }} />}
+                  label="Private"
+                  size="small"
+                  color="secondary"
                   sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
                 />
               )}
