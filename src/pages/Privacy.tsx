@@ -110,163 +110,213 @@ const FHEPrivacyPanel = () => {
   };
 
   return (
-    <Box sx={{ pb: 12 }}>
-      <Container maxWidth="md" sx={{ py: 4 }}>
-
-        {/* Header */}
-        <Box sx={{ textAlign: 'center', mb: 6 }}>
+    <Box sx={{ pb: 12, position: 'relative', minHeight: '80vh' }}>
+      {/* Blurred Overlay */}
+      <Box sx={{
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        zIndex: 10,
+        backdropFilter: 'blur(12px)',
+        backgroundColor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.4)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        pt: 10 // Offset to center better over the content
+      }}>
+        <Paper elevation={24} sx={{
+          p: { xs: 4, md: 6 },
+          borderRadius: 6,
+          textAlign: 'center',
+          background: theme.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(30,41,59,0.95) 0%, rgba(15,23,42,0.98) 100%)'
+            : 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(240,24df4,248,0.98) 100%)',
+          border: '1px solid',
+          borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+          boxShadow: theme.palette.mode === 'dark' ? '0 25px 50px -12px rgba(0,0,0,0.5)' : '0 25px 50px -12px rgba(0,0,0,0.1)',
+          maxWidth: 500,
+          mx: 2
+        }}>
           <Box sx={{
-            width: 80, height: 80,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            mx: 'auto', mb: 3,
-            boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)'
+            width: 80, height: 80, borderRadius: '50%', mx: 'auto', mb: 3,
+            background: 'rgba(16, 185, 129, 0.1)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
-            <Shield sx={{ fontSize: 40, color: '#fff' }} />
+            <Lock sx={{ fontSize: 40, color: '#10b981' }} />
           </Box>
-          <Typography variant="h4" fontWeight={800} gutterBottom color="text.primary">
-            Privacy Shield
+          <Typography variant="h3" fontWeight={900} sx={{
+            background: 'linear-gradient(to right, #10b981, #3b82f6)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            mb: 2,
+            letterSpacing: '-0.02em'
+          }}>
+            VERY SOON
           </Typography>
-          <Typography variant="subtitle1" color="text.secondary">
-            Manage your on-chain visibility and FHE encryption settings
+          <Typography variant="body1" sx={{ color: 'text.secondary', fontSize: '1.1rem', lineHeight: 1.6 }}>
+            The full FHE Privacy Shield management center is currently under development. You will soon have absolute control over your on-chain visibility.
           </Typography>
-          <Typography variant="h6" color= "#000000ff" >
-        VERY COMİNG SOON with CONTRACT V5 support!
-          </Typography>
-        </Box>
-
-        {/* Shielded Balances */}
-        <Paper elevation={0} sx={{ p: 0, borderRadius: 4, mb: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
-          <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="h6" fontWeight={700}>Shielded Balances</Typography>
-            <Typography variant="caption" color="text.secondary">Only you can view these balances (using FHE Decryption).</Typography>
-          </Box>
-          <List>
-            {['eETH', 'eUSDC'].map((token) => (
-              <ListItem key={token} divider>
-                <ListItemAvatar>
-                  <Avatar sx={{ bgcolor: 'primary.main' }}><Lock /></Avatar>
-                </ListItemAvatar>
-                <ListItemText
-                  primary={token}
-                  secondary={decrypted[token as keyof typeof decrypted] ? "Decrypted" : "Encrypted on-chain"}
-                />
-
-                <Stack direction="row" alignItems="center" spacing={2}>
-                  <Typography variant="h6" fontFamily="monospace">
-                    {loadingBalance === token ? <CircularProgress size={20} /> : balances[token as keyof typeof balances]}
-                  </Typography>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={decrypted[token as keyof typeof decrypted] ? <VisibilityOff /> : <Visibility />}
-                    onClick={() => {
-                      if (decrypted[token as keyof typeof decrypted]) {
-                        // Re-encrypt (Hide)
-                        setBalances(prev => ({ ...prev, [token]: "Encrypted" }));
-                        setDecrypted(prev => ({ ...prev, [token]: false }));
-                      } else {
-                        requestDecrypt(token);
-                      }
-                    }}
-                  >
-                    {decrypted[token as keyof typeof decrypted] ? "Hide" : "Decrypt"}
-                  </Button>
-                </Stack>
-              </ListItem>
-            ))}
-          </List>
         </Paper>
+      </Box>
 
-        {/* Privacy Control Panel */}
-        <Paper elevation={0} sx={{
-          p: 1,
-          borderRadius: 4,
-          background: theme.palette.mode === 'dark' ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.8)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid',
-          borderColor: 'divider',
-          mb: 4,
-        }}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-            <PrivacyOption
-              label="Transparent"
-              active={privacySetting === 'open'}
-              color="error"
-              icon={<LockOpen />}
-              onClick={() => handleSetPrivacy('open')}
-            />
-            <PrivacyOption
-              label="Obscured"
-              active={privacySetting === 'semi-open'}
-              color="warning"
-              icon={<Security />}
-              onClick={() => handleSetPrivacy('semi-open')}
-            />
-            <PrivacyOption
-              label="Fully Encrypted"
-              active={privacySetting === 'full'}
-              color="success"
-              icon={<Lock />}
-              onClick={() => handleSetPrivacy('full')}
-            />
-          </Stack>
-        </Paper>
+      {/* Existing Content Container */}
+      <Box sx={{ pointerEvents: 'none', userSelect: 'none', opacity: 0.6 }}>
+        <Container maxWidth="md" sx={{ py: 4 }}>
 
-        {/* Info Box */}
-        <Paper sx={{
-          p: 3,
-          mb: 4,
-          borderRadius: 3,
-          background: 'linear-gradient(to right, rgba(79, 70, 229, 0.05), transparent)',
-          borderLeft: '4px solid #4f46e5'
-        }}>
-          <Typography variant="body2" color="text.secondary">
-            Current Status:
-            <Box component="span" sx={{ color: 'primary.main', fontWeight: 700, ml: 1 }}>
-              {privacySetting === 'full' ? 'Network Confidentiality Active' : 'Limited Protection'}
+          {/* Header */}
+          <Box sx={{ textAlign: 'center', mb: 6 }}>
+            <Box sx={{
+              width: 80, height: 80,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              mx: 'auto', mb: 3,
+              boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)'
+            }}>
+              <Shield sx={{ fontSize: 40, color: '#fff' }} />
             </Box>
-          </Typography>
-        </Paper>
-
-        {/* Recent Activity */}
-        <Paper elevation={0} sx={{
-          p: 0,
-          borderRadius: 4,
-          overflow: 'hidden',
-          bgcolor: 'background.paper',
-          border: '1px solid',
-          borderColor: 'divider',
-        }}>
-          <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="h6" fontWeight={700} color="text.primary">Encrypted Activity (Demo)</Typography>
+            <Typography variant="h4" fontWeight={800} gutterBottom color="text.primary">
+              Privacy Shield
+            </Typography>
+            <Typography variant="subtitle1" color="text.secondary">
+              Manage your on-chain visibility and FHE encryption settings
+            </Typography>
+            <Typography variant="h6" color="#000000ff" >
+              VERY COMİNG SOON with CONTRACT V5 support!
+            </Typography>
           </Box>
-          <List sx={{ p: 0 }}>
-            {history.map((item) => (
-              <ListItem key={item.id} divider sx={{ borderColor: 'divider' }}>
-                <ListItemAvatar>
-                  <Avatar sx={{
-                    bgcolor: item.encrypted ? 'rgba(79, 70, 229, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                    color: item.encrypted ? 'primary.main' : 'success.main'
-                  }}>
-                    {item.encrypted ? <Lock fontSize="small" /> : <LockOpen fontSize="small" />}
-                  </Avatar>
-                </ListItemAvatar>
-                <ListItemText
-                  primary={<Typography fontWeight={600} color="text.primary">{item.action}</Typography>}
-                  secondary={
-                    <Typography variant="caption" fontFamily="monospace" color="text.secondary">
-                      Tx: {item.hash}
-                    </Typography>
-                  }
-                />
-              </ListItem>
-            ))}
-          </List>
-        </Paper>
 
-      </Container>
+          {/* Shielded Balances */}
+          <Paper elevation={0} sx={{ p: 0, borderRadius: 4, mb: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+            <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="h6" fontWeight={700}>Shielded Balances</Typography>
+              <Typography variant="caption" color="text.secondary">Only you can view these balances (using FHE Decryption).</Typography>
+            </Box>
+            <List>
+              {['eETH', 'eUSDC'].map((token) => (
+                <ListItem key={token} divider>
+                  <ListItemAvatar>
+                    <Avatar sx={{ bgcolor: 'primary.main' }}><Lock /></Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={token}
+                    secondary={decrypted[token as keyof typeof decrypted] ? "Decrypted" : "Encrypted on-chain"}
+                  />
+
+                  <Stack direction="row" alignItems="center" spacing={2}>
+                    <Typography variant="h6" fontFamily="monospace">
+                      {loadingBalance === token ? <CircularProgress size={20} /> : balances[token as keyof typeof balances]}
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={decrypted[token as keyof typeof decrypted] ? <VisibilityOff /> : <Visibility />}
+                      onClick={() => {
+                        if (decrypted[token as keyof typeof decrypted]) {
+                          // Re-encrypt (Hide)
+                          setBalances(prev => ({ ...prev, [token]: "Encrypted" }));
+                          setDecrypted(prev => ({ ...prev, [token]: false }));
+                        } else {
+                          requestDecrypt(token);
+                        }
+                      }}
+                    >
+                      {decrypted[token as keyof typeof decrypted] ? "Hide" : "Decrypt"}
+                    </Button>
+                  </Stack>
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+
+          {/* Privacy Control Panel */}
+          <Paper elevation={0} sx={{
+            p: 1,
+            borderRadius: 4,
+            background: theme.palette.mode === 'dark' ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid',
+            borderColor: 'divider',
+            mb: 4,
+          }}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+              <PrivacyOption
+                label="Transparent"
+                active={privacySetting === 'open'}
+                color="error"
+                icon={<LockOpen />}
+                onClick={() => handleSetPrivacy('open')}
+              />
+              <PrivacyOption
+                label="Obscured"
+                active={privacySetting === 'semi-open'}
+                color="warning"
+                icon={<Security />}
+                onClick={() => handleSetPrivacy('semi-open')}
+              />
+              <PrivacyOption
+                label="Fully Encrypted"
+                active={privacySetting === 'full'}
+                color="success"
+                icon={<Lock />}
+                onClick={() => handleSetPrivacy('full')}
+              />
+            </Stack>
+          </Paper>
+
+          {/* Info Box */}
+          <Paper sx={{
+            p: 3,
+            mb: 4,
+            borderRadius: 3,
+            background: 'linear-gradient(to right, rgba(79, 70, 229, 0.05), transparent)',
+            borderLeft: '4px solid #4f46e5'
+          }}>
+            <Typography variant="body2" color="text.secondary">
+              Current Status:
+              <Box component="span" sx={{ color: 'primary.main', fontWeight: 700, ml: 1 }}>
+                {privacySetting === 'full' ? 'Network Confidentiality Active' : 'Limited Protection'}
+              </Box>
+            </Typography>
+          </Paper>
+
+          {/* Recent Activity */}
+          <Paper elevation={0} sx={{
+            p: 0,
+            borderRadius: 4,
+            overflow: 'hidden',
+            bgcolor: 'background.paper',
+            border: '1px solid',
+            borderColor: 'divider',
+          }}>
+            <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="h6" fontWeight={700} color="text.primary">Encrypted Activity (Demo)</Typography>
+            </Box>
+            <List sx={{ p: 0 }}>
+              {history.map((item) => (
+                <ListItem key={item.id} divider sx={{ borderColor: 'divider' }}>
+                  <ListItemAvatar>
+                    <Avatar sx={{
+                      bgcolor: item.encrypted ? 'rgba(79, 70, 229, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                      color: item.encrypted ? 'primary.main' : 'success.main'
+                    }}>
+                      {item.encrypted ? <Lock fontSize="small" /> : <LockOpen fontSize="small" />}
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={<Typography fontWeight={600} color="text.primary">{item.action}</Typography>}
+                    secondary={
+                      <Typography variant="caption" fontFamily="monospace" color="text.secondary">
+                        Tx: {item.hash}
+                      </Typography>
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+
+        </Container>
+      </Box>
 
       {/* Password Dialog */}
       <Dialog open={passwordOpen} onClose={() => setPasswordOpen(false)}>

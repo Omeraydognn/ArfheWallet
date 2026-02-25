@@ -4,6 +4,7 @@ require("dotenv").config({ path: "../.env" });
 // Extract API keys from Alchemy URLs
 const alchemyUrl = process.env.VITE_ALCHEMY_SEPOLIA_API_KEY || "";
 const alchemyArbSepoliaUrl = process.env.VITE_ALCHEMY_ARBSEPOLIA_API_KEY || "";
+const alchemyBaseSepoliaUrl = process.env.VITE_ALCHEMY_BASESEPOLIA_API_KEY || "";
 
 // Private key for deployment - set this in .env as DEPLOYER_PRIVATE_KEY
 const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000001";
@@ -30,6 +31,11 @@ module.exports = {
       url: alchemyArbSepoliaUrl,
       accounts: [DEPLOYER_PRIVATE_KEY],
       chainId: 421614,
+    },
+    baseSepolia: {
+      url: alchemyBaseSepoliaUrl,
+      accounts: [DEPLOYER_PRIVATE_KEY],
+      chainId: 84532,
     },
   },
   paths: {

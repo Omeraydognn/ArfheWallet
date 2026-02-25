@@ -83,12 +83,25 @@ const CONTRACTS_ARB_SEPOLIA: Record<string, { public: string; shielded: string }
   }
 };
 
+// ArfheWallet - Wrapped Token Addresses (Base Sepolia)
+const CONTRACTS_BASE_SEPOLIA: Record<string, { public: string; shielded: string }> = {
+  "ETH": {
+    public: getAddress((import.meta as any).env.VITE_BASE_SEPOLIA_WETH_ADDRESS || "0x0000000000000000000000000000000000000000"),
+    shielded: getAddress((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "0x0000000000000000000000000000000000000000")
+  },
+  "USDC": {
+    public: getAddress((import.meta as any).env.VITE_BASE_SEPOLIA_USDC_ADDRESS || "0x0000000000000000000000000000000000000000"),
+    shielded: getAddress((import.meta as any).env.VITE_BASE_WRAPPED_USDC_ADDRESS || "0x0000000000000000000000000000000000000000")
+  }
+};
+
 // Backward compatible alias
 const CONTRACTS = CONTRACTS_SEPOLIA;
 
 // Get contracts for the active network
 function getContractsForNetwork(networkId: NetworkId) {
   if (networkId === NetworkId.Arbitrum_Sepolia) return CONTRACTS_ARB_SEPOLIA;
+  if (networkId === NetworkId.Base_Sepolia) return CONTRACTS_BASE_SEPOLIA;
   return CONTRACTS_SEPOLIA;
 }
 
@@ -434,15 +447,19 @@ function SendPanel() {
           "0x2210264a3775d5fbc51b1b73667f5590230ac2bd"
         ];
 
-        const isFheNetwork = networkId === NetworkId.Ethereum_Sepolia || networkId === NetworkId.Arbitrum_Sepolia;
+        const isFheNetwork = networkId === NetworkId.Ethereum_Sepolia || networkId === NetworkId.Arbitrum_Sepolia || networkId === NetworkId.Base_Sepolia;
         const activeContracts = getContractsForNetwork(networkId);
 
         const WRAPPED_USDC = networkId === NetworkId.Arbitrum_Sepolia
           ? ((import.meta as any).env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase()
-          : ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+          : networkId === NetworkId.Base_Sepolia
+            ? ((import.meta as any).env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase()
+            : ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
         const WRAPPED_ETH = networkId === NetworkId.Arbitrum_Sepolia
           ? ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase()
-          : ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+          : networkId === NetworkId.Base_Sepolia
+            ? ((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase()
+            : ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
         const shieldedAddresses = [WRAPPED_USDC, WRAPPED_ETH].filter(Boolean);
         const REAL_WETH = activeContracts["ETH"]?.public?.toLowerCase() || "";
 

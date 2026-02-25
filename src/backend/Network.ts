@@ -404,6 +404,8 @@ class Network {
       const CUSDC_SEP = ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
       const CETH_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
       const CUSDC_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+      const CETH_BASE = ((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+      const CUSDC_BASE = ((import.meta as any).env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
 
       const promises: Promise<any>[] = [];
 
@@ -418,10 +420,10 @@ class Network {
       }
 
       // 2. Direct eth_getLogs for incoming FHE ConfidentialTransfers
-      const isFheNetwork = this.network_id === NetworkId.Ethereum_Sepolia || this.network_id === NetworkId.Arbitrum_Sepolia;
+      const isFheNetwork = this.network_id === NetworkId.Ethereum_Sepolia || this.network_id === NetworkId.Arbitrum_Sepolia || this.network_id === NetworkId.Base_Sepolia;
       if (isFheNetwork) {
-        const ceth = this.network_id === NetworkId.Ethereum_Sepolia ? CETH_SEP : CETH_ARB;
-        const cusdc = this.network_id === NetworkId.Ethereum_Sepolia ? CUSDC_SEP : CUSDC_ARB;
+        const ceth = this.network_id === NetworkId.Ethereum_Sepolia ? CETH_SEP : this.network_id === NetworkId.Arbitrum_Sepolia ? CETH_ARB : CETH_BASE;
+        const cusdc = this.network_id === NetworkId.Ethereum_Sepolia ? CUSDC_SEP : this.network_id === NetworkId.Arbitrum_Sepolia ? CUSDC_ARB : CUSDC_BASE;
         const fheContracts = [ceth, cusdc].filter(Boolean);
 
         if (fheContracts.length > 0) {
@@ -652,13 +654,14 @@ class Network {
       return sentTx.hash;
     } catch (err: any) {
       console.error("[Network] SendTransaction Error:", err);
-      if (err.info?.error?.message) {
-        throw new Error(err.info.error.message);
+
+      const errorMsg = err.info?.error?.message || err.reason || err.message || String(err);
+
+      if (errorMsg.includes("insufficient funds for gas * price + value") || errorMsg.includes("insufficient funds")) {
+        throw new Error("Yetersiz Bakiye: Bu işlemi gerçekleştirmek ve ağ ücretlerini (gas fee) karşılamak için yeterli ETH'niz bulunmuyor.");
       }
-      if (err.reason) {
-        throw new Error(err.reason);
-      }
-      throw err;
+
+      throw new Error(errorMsg);
     }
   }
 
@@ -681,7 +684,7 @@ class Network {
   // --- FHE / SHIELDING METHODS ---
 
   async getShieldedBalance(contractAddress: string, userAddress: string, account?: Account): Promise<string> {
-    if (this.network_id !== NetworkId.Ethereum_Sepolia && this.network_id !== NetworkId.Arbitrum_Sepolia) return "0.0";
+    if (this.network_id !== NetworkId.Ethereum_Sepolia && this.network_id !== NetworkId.Arbitrum_Sepolia && this.network_id !== NetworkId.Base_Sepolia) return "0.0";
 
     try {
       const { default: FheCofheService } = await import("./FheCofheService.js");
@@ -738,7 +741,8 @@ class Network {
         // cETH: 18 decimals, cUSDC: 6 decimals
         const WRAPPED_ETH_SEP = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
         const WRAPPED_ETH_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
-        const isEth = contractAddress.toLowerCase() === WRAPPED_ETH_SEP || contractAddress.toLowerCase() === WRAPPED_ETH_ARB;
+        const WRAPPED_ETH_BASE = ((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+        const isEth = contractAddress.toLowerCase() === WRAPPED_ETH_SEP || contractAddress.toLowerCase() === WRAPPED_ETH_ARB || contractAddress.toLowerCase() === WRAPPED_ETH_BASE;
         const decimals = isEth ? 18 : 6;
         const formatted = this.formatTokenAmount(decrypted, decimals);
         console.log(`[getShieldedBalance] ✅ Unsealed: ${formatted}`);
@@ -934,7 +938,8 @@ class Network {
     // cETH: 18 decimals, cUSDC: 6 decimals
     const WRAPPED_ETH_SEP = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
     const WRAPPED_ETH_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
-    const isEth = shieldedTokenAddress.toLowerCase() === WRAPPED_ETH_SEP || shieldedTokenAddress.toLowerCase() === WRAPPED_ETH_ARB;
+    const WRAPPED_ETH_BASE = ((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+    const isEth = shieldedTokenAddress.toLowerCase() === WRAPPED_ETH_SEP || shieldedTokenAddress.toLowerCase() === WRAPPED_ETH_ARB || shieldedTokenAddress.toLowerCase() === WRAPPED_ETH_BASE;
     const decimals = isEth ? 18 : 6;
     const amountValue = ethers.parseUnits(amount, decimals);
 

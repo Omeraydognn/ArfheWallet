@@ -143,7 +143,7 @@ function Home() {
     try {
 
       // Initialize cofhejs (TRUE FHE) if on a FHE-enabled network
-      const isFheNetwork = activeNetworkId === NetworkId.Ethereum_Sepolia || activeNetworkId === NetworkId.Arbitrum_Sepolia;
+      const isFheNetwork = activeNetworkId === NetworkId.Ethereum_Sepolia || activeNetworkId === NetworkId.Arbitrum_Sepolia || activeNetworkId === NetworkId.Base_Sepolia;
       if (isFheNetwork && active_context.activeAccount) {
         try {
           const { default: FheCofheService } = await import("../backend/FheCofheService.js");
@@ -174,10 +174,14 @@ function Home() {
       const wrappedBalances: any[] = [];
       const WRAPPED_USDC_ADDRESS = activeNetworkId === NetworkId.Arbitrum_Sepolia
         ? ((import.meta as any).env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase()
-        : ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+        : activeNetworkId === NetworkId.Base_Sepolia
+          ? ((import.meta as any).env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase()
+          : ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
       const WRAPPED_ETH_ADDRESS = activeNetworkId === NetworkId.Arbitrum_Sepolia
         ? ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase()
-        : ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+        : activeNetworkId === NetworkId.Base_Sepolia
+          ? ((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase()
+          : ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
       const IGNORED_CONTRACTS = [
         "0xbde0a2e375b67c802d4651fecf3b678b1886d15b", // SimpleWrappedUSDC (old)
         "0x3e0722a877e52fe755e8bf02372342c63930fd57", // MockFHEWrappedUSDC (old)
