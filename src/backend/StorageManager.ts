@@ -60,6 +60,30 @@ class StorageManager {
       return false;
     }
   }
+
+  /**
+   * Removes a value from local storage
+   * @param key The key to remove
+   */
+  removeLocal(key: string): void {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.error(`Error removing local storage item for key "${key}":`, error);
+    }
+  }
+
+  /**
+   * Removes a value from session storage
+   * @param key The key to remove
+   */
+  removeSession(key: string): void {
+    try {
+      sessionStorage.removeItem(key);
+    } catch (error) {
+      console.error(`Error removing session storage item for key "${key}":`, error);
+    }
+  }
 }
 
 export default StorageManager;

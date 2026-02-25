@@ -30,18 +30,11 @@ function AppRoutes() {
 
       <Route element={<AppLayout />}>
         <Route path="home" element={<Home />} />
-        {/* Nice and easy... */}
         <Route path="explore" element={<Explore />} />
         <Route path="history" element={<History />} />
         <Route path="privacy" element={<Privacy />} />
-
-        <Route path="explore" element={<Explore />} />
         <Route path="revoke" element={<Revoke />} />
         <Route path="graphexplorer" element={<GraphExplorer />} />
-
-
-
-        <Route path="revoke" element={<Revoke />} />
         <Route path="settings" element={<Settings />} />
         <Route path="settings/security" element={<SettingsSecurity />} />
       </Route>

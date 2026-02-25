@@ -6,7 +6,7 @@ import './AppLayout.css';
 import { Box } from '@mui/material';
 import { ActiveAccountProvider } from './ActiveAccountProvider';
 
-function AppLayout() {
+const AppLayout: React.FC = () => {
   const [network, setNetwork] = React.useState(1);
 
   return (

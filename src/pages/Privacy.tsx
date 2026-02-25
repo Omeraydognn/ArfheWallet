@@ -119,9 +119,9 @@ const FHEPrivacyPanel = () => {
         backdropFilter: 'blur(12px)',
         backgroundColor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.4)',
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         justifyContent: 'center',
-        pt: 10 // Offset to center better over the content
+        pt: { xs: 12, md: 16 } // Positioned near top to prevent scrolling down
       }}>
         <Paper elevation={24} sx={{
           p: { xs: 4, md: 6 },

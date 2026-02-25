@@ -433,13 +433,38 @@ class Network {
               const transferTopic = id("ConfidentialTransfer(address,address)");
               const paddedAddress = zeroPadValue(address, 32);
 
-              const incomingLogs = await this.call("eth_getLogs", [{
-                fromBlock: "0x0",
-                toBlock: toBlock,
-                address: fheContracts,
-                topics: [transferTopic, null, paddedAddress]
-              }]);
-              return { incomingFheLogs: incomingLogs.slice(-100) }; // Only take the last 100 to limit block queries
+              const latestBlockHex = toBlock === "latest" ? await this.call("eth_blockNumber", []) : toBlock;
+              let currentBlock = parseInt(latestBlockHex, 16);
+              // Fetch at most the last 100 blocks, in 10-block chunks
+              const targetOldestBlock = Math.max(0, currentBlock - 100);
+              let allIncomingLogs: any[] = [];
+
+              while (currentBlock > targetOldestBlock && allIncomingLogs.length < 100) {
+                const chunkStart = Math.max(targetOldestBlock, currentBlock - 9);
+                const fromHex = "0x" + chunkStart.toString(16);
+                const toHex = "0x" + currentBlock.toString(16);
+
+                try {
+                  const chunkLogs = await this.call("eth_getLogs", [{
+                    fromBlock: fromHex,
+                    toBlock: toHex,
+                    address: fheContracts,
+                    topics: [transferTopic, null, paddedAddress]
+                  }]);
+
+                  if (chunkLogs && chunkLogs.length > 0) {
+                    allIncomingLogs = [...allIncomingLogs, ...chunkLogs];
+                  }
+                } catch (chunkErr) {
+                  console.warn(`[Network] getLogs chunk failed ${fromHex} to ${toHex}`, chunkErr);
+                  // If a chunk fails, we just stop fetching older logs to prevent spam and return what we have
+                  break;
+                }
+
+                currentBlock = chunkStart - 1;
+              }
+
+              return { incomingFheLogs: allIncomingLogs.slice(-100) };
             } catch (e) {
               console.warn("eth_getLogs failed for FHE:", e);
               return { incomingFheLogs: [] };
