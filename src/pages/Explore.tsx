@@ -328,9 +328,9 @@ const Explore = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {transactions.map((tx) => (
+                    {transactions.map((tx, idx) => (
                       <TableRow
-                        key={tx.uniqueId || tx.hash}
+                        key={`${tx.uniqueId || tx.hash}-${idx}`}
                         hover
                         onClick={() => handleTxClick(tx)}
                         sx={{ cursor: 'pointer' }}

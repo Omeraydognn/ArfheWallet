@@ -1,5 +1,5 @@
 import { formatEther, parseUnits, TransactionRequest } from "ethers";
-import { Alchemy, Network as AlchemyNetwork } from "alchemy-sdk";
+import { Alchemy, Network as AlchemyNetwork, SortingOrder } from "alchemy-sdk";
 import Account from "./Account.js";
 import TokenCache, { TokenCacheItem } from "./TokenCache.js";
 
@@ -24,7 +24,7 @@ class Network {
     this.network_id = network_id;
     this.network_name = network_name;
 
-    let rawKey = explicitApiKey || import.meta.env.VITE_ALCHEMY_API_KEY || "";
+    let rawKey = explicitApiKey || (import.meta as any).env.VITE_ALCHEMY_API_KEY || "";
 
     if (rawKey.startsWith("http")) {
       const parts = rawKey.split("/");
@@ -54,6 +54,18 @@ class Network {
         case NetworkId.Ethereum_Mainnet:
           sdkNetwork = AlchemyNetwork.ETH_MAINNET;
           break;
+        case NetworkId.Arbitrum_One:
+          sdkNetwork = AlchemyNetwork.ARB_MAINNET;
+          break;
+        case NetworkId.Arbitrum_Sepolia:
+          sdkNetwork = AlchemyNetwork.ARB_SEPOLIA;
+          break;
+        case NetworkId.Base_Mainnet:
+          sdkNetwork = AlchemyNetwork.BASE_MAINNET;
+          break;
+        case NetworkId.Base_Sepolia:
+          sdkNetwork = AlchemyNetwork.BASE_SEPOLIA;
+          break;
       }
 
       const config = {
@@ -63,7 +75,6 @@ class Network {
       this.alchemy = new Alchemy(config);
       this.explorerService = new ExplorerService(this.alchemy);
     }
-
     if (!this.rpc_url) {
       if (!this.api_key || this.api_key === "CUSTOM_URL") {
         switch (network_id) {
@@ -75,6 +86,18 @@ class Network {
             break;
           case NetworkId.Fhenix_Sepolia:
             this.rpc_url = "https://api.helium.fhenix.zone";
+            break;
+          case NetworkId.Arbitrum_One:
+            this.rpc_url = "https://arbitrum.publicnode.com";
+            break;
+          case NetworkId.Arbitrum_Sepolia:
+            this.rpc_url = "https://arbitrum-sepolia.publicnode.com";
+            break;
+          case NetworkId.Base_Mainnet:
+            this.rpc_url = "https://base.publicnode.com";
+            break;
+          case NetworkId.Base_Sepolia:
+            this.rpc_url = "https://base-sepolia.publicnode.com";
             break;
           default:
             this.rpc_url = "";
@@ -120,16 +143,20 @@ class Network {
 
   async getTokenMetadata(tokenCacheObj: TokenCache, contractAddress: string): Promise<TokenCacheItem> {
     if (this.alchemy) {
-      const metadata = await this.alchemy.core.getTokenMetadata(contractAddress);
-      const item: TokenCacheItem = {
-        name: metadata.name ?? "Unknown Token",
-        symbol: metadata.symbol ?? "",
-        decimals: metadata.decimals ?? 18,
-        logoSrc: metadata.logo ?? "",
-        contractAddress: contractAddress,
-      };
-      tokenCacheObj.setToken(this.network_id, item);
-      return item;
+      try {
+        const metadata = await this.alchemy.core.getTokenMetadata(contractAddress);
+        const item: TokenCacheItem = {
+          name: metadata.name ?? "Unknown Token",
+          symbol: metadata.symbol ?? "",
+          decimals: metadata.decimals ?? 18,
+          logoSrc: metadata.logo ?? "",
+          contractAddress: contractAddress,
+        };
+        tokenCacheObj.setToken(this.network_id, item);
+        return item;
+      } catch (e) {
+        console.warn("[Network] Alchemy getTokenMetadata fallback failed", e);
+      }
     }
 
     const metadata = await this.call("alchemy_getTokenMetadata", [contractAddress]);
@@ -164,8 +191,12 @@ class Network {
 
   async getBalance(address: string): Promise<string> {
     if (this.alchemy) {
-      const big = await this.alchemy.core.getBalance(address);
-      return big.toString();
+      try {
+        const big = await this.alchemy.core.getBalance(address);
+        return big.toString();
+      } catch (e) {
+        // Fallback
+      }
     }
     const result = await this.call("eth_getBalance", [address, "latest"]);
     return BigInt(result).toString();
@@ -260,14 +291,14 @@ class Network {
         "function balanceOf(address owner) view returns (uint256)",
         "function decimals() view returns (uint8)"
       ];
-      
+
       const provider = new ethers.JsonRpcProvider(this.rpc_url);
       const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
       const [balance, decimals] = await Promise.all([
         contract.balanceOf(walletAddress),
         contract.decimals()
       ]);
-      
+
       return this.formatTokenAmount(balance, decimals);
     } catch (error) {
       console.error(`[Network] Failed to fetch balance for ${tokenAddress}:`, error);
@@ -345,55 +376,106 @@ class Network {
     }
   }
 
-  async getHistory(address: string, tokenCacheObj: TokenCache | undefined): Promise<TransactionHistory[]> {
-    if (!tokenCacheObj) return [];
-    if (!this.alchemy) {
+  async getHistory(address: string, tokenCacheObj: TokenCache | undefined, toBlock: string = "latest"): Promise<{ history: TransactionHistory[], nextBlock?: string }> {
+    if (!tokenCacheObj) return { history: [] };
+    if (!this.alchemy && !this.isAlchemyConfigured()) {
       console.warn("Alchemy SDK not configured for this network");
-      return [];
+      return { history: [] };
     }
 
     try {
-      const category = ["external", "erc20"] as any;
-      const optionsBase = {
-        fromBlock: "0x0",
-        toBlock: "latest",
-        category: category,
-        withMetadata: true,
-        maxCount: 20
-      };
-
-      const [sentRes, receivedRes] = await Promise.all([
-        this.alchemy.core.getAssetTransfers({
-          ...optionsBase,
-          fromAddress: address
-        }),
-        this.alchemy.core.getAssetTransfers({
-          ...optionsBase,
-          toAddress: address
-        })
-      ]);
-
-      const allTransfers = [...sentRes.transfers, ...receivedRes.transfers];
-
-      allTransfers.sort((a, b) => {
-        const tA = (a as any).metadata.blockTimestamp;
-        const tB = (b as any).metadata.blockTimestamp;
-        return tA < tB ? 1 : tA > tB ? -1 : 0;
-      });
-
-      const history: TransactionHistory[] = [];
-      const limited = allTransfers.slice(0, 15);
-
-      let explorerBase = "https://etherscan.io";
-      if (this.network_id === NetworkId.Ethereum_Sepolia) {
-        explorerBase = "https://sepolia.etherscan.io";
+      const category = ["external", "erc20"] as any[];
+      // Most L2s (Arbitrum, Base) do not support the "internal" category for getAssetTransfers on standard Alchemy tiers
+      if (this.network_id === NetworkId.Ethereum_Mainnet || this.network_id === NetworkId.Ethereum_Sepolia) {
+        category.push("internal");
       }
 
-      for (const tx of limited) {
-        const isNative = (tx.category === "external");
-        const contractAddress = isNative ? "ETH" : tx.rawContract.address?.toLowerCase() ?? "ETH";
+      const optionsBase = {
+        fromBlock: "0x0",
+        toBlock: toBlock,
+        category: category,
+        withMetadata: true as const,
+        excludeZeroValue: false,
+        maxCount: 100,
+        order: SortingOrder.DESCENDING
+      };
 
-        if (!isNative && !tokenCacheObj.hasToken(this.network_id, contractAddress)) {
+      const CETH_SEP = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+      const CUSDC_SEP = ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+      const CETH_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+      const CUSDC_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+
+      const promises: Promise<any>[] = [];
+
+      // 1. Alchemy Fetches (Sent & Received normal transfers)
+      if (this.alchemy) {
+        promises.push(this.alchemy.core.getAssetTransfers({ ...optionsBase, fromAddress: address }).catch(e => { console.warn("[getHistory] Alchemy sent transfers failed:", e); return { transfers: [] }; }));
+        promises.push(this.alchemy.core.getAssetTransfers({ ...optionsBase, toAddress: address }).catch(e => { console.warn("[getHistory] Alchemy recv transfers failed:", e); return { transfers: [] }; }));
+      } else {
+        // Fallback to raw call if SDK isn't happy but URL works
+        promises.push(this.call("alchemy_getAssetTransfers", [{ ...optionsBase, fromAddress: address }]).catch(e => { console.warn("[getHistory] RPC sent transfers failed:", e); return { transfers: [] }; }));
+        promises.push(this.call("alchemy_getAssetTransfers", [{ ...optionsBase, toAddress: address }]).catch(e => { console.warn("[getHistory] RPC recv transfers failed:", e); return { transfers: [] }; }));
+      }
+
+      // 2. Direct eth_getLogs for incoming FHE ConfidentialTransfers
+      const isFheNetwork = this.network_id === NetworkId.Ethereum_Sepolia || this.network_id === NetworkId.Arbitrum_Sepolia;
+      if (isFheNetwork) {
+        const ceth = this.network_id === NetworkId.Ethereum_Sepolia ? CETH_SEP : CETH_ARB;
+        const cusdc = this.network_id === NetworkId.Ethereum_Sepolia ? CUSDC_SEP : CUSDC_ARB;
+        const fheContracts = [ceth, cusdc].filter(Boolean);
+
+        if (fheContracts.length > 0) {
+          promises.push((async () => {
+            try {
+              const { id, zeroPadValue } = await import("ethers");
+              const transferTopic = id("ConfidentialTransfer(address,address)");
+              const paddedAddress = zeroPadValue(address, 32);
+
+              const incomingLogs = await this.call("eth_getLogs", [{
+                fromBlock: "0x0",
+                toBlock: toBlock,
+                address: fheContracts,
+                topics: [transferTopic, null, paddedAddress]
+              }]);
+              return { incomingFheLogs: incomingLogs.slice(-100) }; // Only take the last 100 to limit block queries
+            } catch (e) {
+              console.warn("eth_getLogs failed for FHE:", e);
+              return { incomingFheLogs: [] };
+            }
+          })());
+        }
+      }
+
+      // Wait for all data
+      const results = await Promise.all(promises);
+      const sentRes = results[0];
+      const receivedRes = results[1];
+      const fheLogsRes = results.length > 2 ? results[2] : { incomingFheLogs: [] };
+
+      let allTransfers = [
+        ...(sentRes.transfers || []),
+        ...(receivedRes.transfers || [])
+      ];
+
+      // Format Alchemy Transfers
+      const history: TransactionHistory[] = [];
+      let explorerBase = "https://etherscan.io";
+      if (this.network_id === NetworkId.Ethereum_Sepolia) explorerBase = "https://sepolia.etherscan.io";
+      else if (this.network_id === NetworkId.Arbitrum_One) explorerBase = "https://arbiscan.io";
+      else if (this.network_id === NetworkId.Arbitrum_Sepolia) explorerBase = "https://sepolia.arbiscan.io";
+      else if (this.network_id === NetworkId.Base_Mainnet) explorerBase = "https://basescan.org";
+      else if (this.network_id === NetworkId.Base_Sepolia) explorerBase = "https://sepolia.basescan.org";
+
+      for (const tx of allTransfers) {
+        const isNative = (tx.category === "external" || tx.category === "internal");
+
+        // CRITICAL FIX: If external, the contract address shouldn't be hardcoded to "ETH", it should be where the tx was sent to (tx.to)!
+        let contractAddress = tx.rawContract?.address?.toLowerCase();
+        if (!contractAddress) {
+          contractAddress = isNative ? (tx.to?.toLowerCase() ?? "ETH") : "ETH";
+        }
+
+        if (!isNative && contractAddress !== "eth" && !tokenCacheObj.hasToken(this.network_id, contractAddress)) {
           const basicItem: TokenCacheItem = {
             name: tx.asset || "Unknown",
             symbol: tx.asset || "???",
@@ -403,24 +485,115 @@ class Network {
           };
         }
 
+        const isShielded = [CETH_SEP, CUSDC_SEP, CETH_ARB, CUSDC_ARB].includes(contractAddress) && contractAddress !== "";
+        const isWrapOrUnwrap = isShielded && tx.value && tx.value > 0;
+
+        const finalValue = isShielded && (!tx.value || tx.value === 0 || tx.value?.toString() === "0")
+          ? "Encrypted"
+          : tx.value?.toString() || "0";
+
+        let methodLabel = "Transfer";
+        if (isShielded) {
+          if (tx.category === "external" && tx.value > 0) methodLabel = "Wrap";
+          else if (tx.category === "internal" && tx.value > 0) methodLabel = "Unwrap";
+          else methodLabel = "Shield Transfer";
+        } else if (!isNative && tx.category !== "erc20") {
+          methodLabel = "Contract Call";
+        }
+
         history.push({
           hash: tx.hash,
           from: tx.from,
           to: tx.to || "",
           contractAddress: contractAddress,
-          value: tx.value?.toString() || "0",
-          timestamp: (tx as any).metadata.blockTimestamp,
+          value: finalValue,
+          timestamp: tx.metadata?.blockTimestamp || new Date().toISOString(),
+          blockNum: (tx as any).blockNum || "0x0",
           isNative: isNative,
           status: "Success",
-          explorerUrl: `${explorerBase}/tx/${tx.hash}`
+          explorerUrl: `${explorerBase}/tx/${tx.hash}`,
+          isShielded: isShielded,
+          methodLabel: methodLabel
         });
       }
 
-      return history;
+      // Process FHE Logs (Incoming ConfidentialTransfers missing from Alchemy)
+      if (fheLogsRes && fheLogsRes.incomingFheLogs && fheLogsRes.incomingFheLogs.length > 0) {
+        for (const log of fheLogsRes.incomingFheLogs) {
+          // Avoid duplicates (if user sent to themselves, Alchemy external caught it)
+          if (history.find(h => h.hash === log.transactionHash)) continue;
+
+          // Fetch Block for timestamp
+          let timestamp = new Date().toISOString();
+          try {
+            const block = await this.call("eth_getBlockByNumber", [log.blockNumber, false]);
+            if (block && block.timestamp) {
+              const epoch = parseInt(block.timestamp, 16);
+              timestamp = new Date(epoch * 1000).toISOString();
+            }
+          } catch (e) { }
+
+          // Topic 1 is the sender
+          const fromTopic = log.topics[1];
+          const fromAddr = fromTopic ? "0x" + fromTopic.slice(26) : "Unknown";
+
+          history.push({
+            hash: log.transactionHash,
+            from: fromAddr,
+            to: address,
+            contractAddress: log.address.toLowerCase(),
+            value: "Encrypted",
+            timestamp: timestamp,
+            blockNum: log.blockNumber || "0x0",
+            isNative: false,
+            status: "Success",
+            explorerUrl: `${explorerBase}/tx/${log.transactionHash}`,
+            isShielded: true,
+            methodLabel: "Shield Transfer"
+          });
+        }
+      }
+
+      // Sort combined history
+      history.sort((a, b) => {
+        const tA = a.timestamp;
+        const tB = b.timestamp;
+        return tA < tB ? 1 : tA > tB ? -1 : 0;
+      });
+
+      // Squeeze unique hashes and limit
+      const uniqueObj: any = {};
+      const uniqueHistory: TransactionHistory[] = [];
+      let minBlockNum = Infinity;
+
+      for (const h of history) {
+        if (!uniqueObj[h.hash]) {
+          uniqueObj[h.hash] = true;
+          uniqueHistory.push(h);
+        }
+      }
+
+      const paginated = uniqueHistory.slice(0, 50);
+      let nextBlock: string | undefined = undefined;
+
+      if (paginated.length === 50) {
+        // Find lowest block number to continue from
+        for (const tx of paginated) {
+          const bNum = parseInt(tx.blockNum, 16);
+          if (!isNaN(bNum) && bNum < minBlockNum) {
+            minBlockNum = bNum;
+          }
+        }
+        if (minBlockNum !== Infinity && minBlockNum > 1) {
+          nextBlock = "0x" + (minBlockNum - 1).toString(16);
+        }
+      }
+
+      return { history: paginated, nextBlock };
 
     } catch (err) {
       console.error("Error fetching history:", err);
-      return [];
+      return { history: [] };
     }
   }
 
@@ -438,76 +611,55 @@ class Network {
     if (!account.ethers_wallet) throw new Error("Account is missing ethers_wallet");
 
     const wallet = account.ethers_wallet;
-
-    const nonceHex = await this.call("eth_getTransactionCount", [wallet.address, "pending"]);
-    const nonce = BigInt(nonceHex);
-
-    let gasPrice = tx.gasPrice
-      ? parseUnits(tx.gasPrice, "gwei")
-      : BigInt(await this.call("eth_gasPrice", []));
-
-    gasPrice = (gasPrice * 120n) / 100n;
+    const { JsonRpcProvider, parseUnits } = await import("ethers");
+    const provider = new JsonRpcProvider(this.rpc_url);
+    const connectedWallet = wallet.connect(provider);
 
     const valueWei = tx.value ? parseUnits(tx.value, "ether") : 0n;
 
-    const chainIdHex = await this.call("eth_chainId", []);
-    const chainId = parseInt(chainIdHex, 16);
-
-    const txRequest: TransactionRequest = {
+    const txRequest: any = {
       to: tx.to,
       value: valueWei,
-      gasPrice,
-      nonce: Number(nonce),
       data: tx.data ?? "0x",
-      chainId,
     };
 
     if (tx.gasLimit) {
       txRequest.gasLimit = tx.gasLimit;
-    } else {
-      try {
-        const estimateHex = await this.call("eth_estimateGas", [{
-          from: wallet.address,
-          to: tx.to,
-          data: txRequest.data,
-          value: "0x" + valueWei.toString(16),
-        }]);
-        const estimate = BigInt(estimateHex);
-        txRequest.gasLimit = (estimate * 120n) / 100n;
-      } catch (error) {
-        console.warn("[Network] Gas Estimate Failed, defaulting.", error);
-        if (!tx.data || tx.data === "0x") {
-          txRequest.gasLimit = 21_000n;
-        } else {
-          txRequest.gasLimit = 1000000n;
-        }
-      }
     }
 
-    console.log("[Network] Sending TX:", {
+    if (tx.gasPrice) {
+      txRequest.gasPrice = parseUnits(tx.gasPrice, "gwei");
+    }
+
+    console.log("[Network] Sending TX via Provider:", {
       to: txRequest.to,
-      gasLimit: (txRequest.gasLimit ?? "0").toString(),
       dataLen: txRequest.data ? txRequest.data.toString().length : 0,
       value: (txRequest.value ?? "0").toString()
     });
 
-    const signedTx = await wallet.signTransaction(txRequest);
-    const txHash = await this.call("eth_sendRawTransaction", [signedTx]);
+    try {
+      const sentTx = await connectedWallet.sendTransaction(txRequest);
+      console.log(`[Network] Waiting for TX ${sentTx.hash}...`);
 
-    console.log(`[Network] Waiting for TX ${txHash}...`);
-    const receipt = await this.waitForTransaction(txHash);
-    
-    // Check receipt status - 0x0 means reverted
-    if (receipt && receipt.status !== undefined) {
-      const status = typeof receipt.status === "string" ? parseInt(receipt.status, 16) : receipt.status;
-      if (status === 0) {
-        console.error(`[Network] ❌ TX REVERTED: ${txHash}`);
-        throw new Error(`Transaction reverted on-chain. TX: ${txHash}`);
+      const receipt = await sentTx.wait();
+
+      if (receipt && receipt.status === 0) {
+        console.error(`[Network] ❌ TX REVERTED: ${sentTx.hash}`);
+        throw new Error(`Transaction reverted on-chain. TX: ${sentTx.hash}`);
       }
-    }
-    console.log(`[Network] ✅ TX Confirmed: ${txHash}`);
 
-    return txHash;
+      console.log(`[Network] ✅ TX Confirmed: ${sentTx.hash}`);
+      return sentTx.hash;
+    } catch (err: any) {
+      console.error("[Network] SendTransaction Error:", err);
+      if (err.info?.error?.message) {
+        throw new Error(err.info.error.message);
+      }
+      if (err.reason) {
+        throw new Error(err.reason);
+      }
+      throw err;
+    }
   }
 
   async waitForTransaction(txHash: string): Promise<any> {
@@ -529,16 +681,16 @@ class Network {
   // --- FHE / SHIELDING METHODS ---
 
   async getShieldedBalance(contractAddress: string, userAddress: string, account?: Account): Promise<string> {
-    if (this.network_id !== NetworkId.Ethereum_Sepolia) return "0.0";
+    if (this.network_id !== NetworkId.Ethereum_Sepolia && this.network_id !== NetworkId.Arbitrum_Sepolia) return "0.0";
 
     try {
       const { default: FheCofheService } = await import("./FheCofheService.js");
       const ethers = await import("ethers");
 
       const instance = FheCofheService.getInstance();
-      
+
       // Ensure cofhejs is initialized for the correct account
-      if (!instance.isReadyForAccount(userAddress)) {
+      if (!instance.isReadyForAccount(userAddress, this.network_id)) {
         if (account && account.ethers_wallet) {
           console.log(`[getShieldedBalance] Initializing cofhejs for account: ${userAddress}`);
           const provider = new ethers.JsonRpcProvider(this.rpc_url);
@@ -554,7 +706,7 @@ class Network {
       const iface = new ethers.Interface([
         "function confidentialBalanceOf(address account) view returns (uint256)"
       ]);
-      
+
       const data = iface.encodeFunctionData("confidentialBalanceOf", [userAddress]);
 
       // eth_call to get encrypted balance handle
@@ -569,7 +721,7 @@ class Network {
 
       // Handle is euint64 (encrypted uint64)
       const handle = BigInt(resultHex);
-      
+
       console.log(`[getShieldedBalance] Unsealing handle: ${handle}`);
 
       // Handle 0 means no encrypted balance exists for this user - skip unseal
@@ -584,14 +736,15 @@ class Network {
       if (decrypted !== null && decrypted !== undefined) {
         // Determine decimals based on contract address
         // cETH: 18 decimals, cUSDC: 6 decimals
-        const WRAPPED_ETH = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "0x17CecF8090B945932e2F592168B636F7A0c986e8").toLowerCase();
-        const isEth = contractAddress.toLowerCase() === WRAPPED_ETH;
+        const WRAPPED_ETH_SEP = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+        const WRAPPED_ETH_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+        const isEth = contractAddress.toLowerCase() === WRAPPED_ETH_SEP || contractAddress.toLowerCase() === WRAPPED_ETH_ARB;
         const decimals = isEth ? 18 : 6;
         const formatted = this.formatTokenAmount(decrypted, decimals);
         console.log(`[getShieldedBalance] ✅ Unsealed: ${formatted}`);
         return formatted;
       }
-      
+
       console.warn("[getShieldedBalance] ⚠️ Unseal returned null");
       return "0.0";
     } catch (e) {
@@ -615,40 +768,42 @@ class Network {
       "function decimals() view returns (uint8)",
       "function balanceOf(address owner) view returns (uint256)"
     ]);
-    
+
     const decimalsData = ifaceErc20.encodeFunctionData("decimals", []);
     const decimalsHex = await this.call("eth_call", [{ to: publicTokenAddress, data: decimalsData }, "latest"]);
     const decimals = decimalsHex && decimalsHex !== "0x" ? parseInt(decimalsHex, 16) : 18;
-    
+
     const amountValue = ethers.parseUnits(amount, decimals);
 
     // Special handling for WETH: Check if user has enough WETH, if not deposit native ETH first
-    const WETH_ADDRESS = "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9".toLowerCase();
-    if (publicTokenAddress.toLowerCase() === WETH_ADDRESS) {
+    const WETH_ADDRESS_SEP = ((import.meta as any).env.VITE_SEPOLIA_WETH_ADDRESS || "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9").toLowerCase();
+    const WETH_ADDRESS_ARB = ((import.meta as any).env.VITE_ARB_SEPOLIA_WETH_ADDRESS || "").toLowerCase();
+
+    if (publicTokenAddress.toLowerCase() === WETH_ADDRESS_SEP || (WETH_ADDRESS_ARB && publicTokenAddress.toLowerCase() === WETH_ADDRESS_ARB)) {
       console.log("[Wrap] WETH detected - checking balance...");
-      
+
       // Check WETH balance
       const balanceData = ifaceErc20.encodeFunctionData("balanceOf", [account.GetAddress()]);
       const balanceHex = await this.call("eth_call", [{ to: publicTokenAddress, data: balanceData }, "latest"]);
       const wethBalance = balanceHex && balanceHex !== "0x" ? BigInt(balanceHex) : 0n;
-      
+
       console.log(`[Wrap] Current WETH balance: ${wethBalance}, needed: ${amountValue}`);
-      
+
       // If insufficient WETH, deposit native ETH to WETH first
       if (wethBalance < amountValue) {
         const depositAmount = amountValue - wethBalance;
         console.log(`[Wrap] Insufficient WETH. Depositing ${ethers.formatEther(depositAmount)} ETH to WETH...`);
-        
+
         // WETH.deposit() - payable function
         const wethIface = new ethers.Interface(["function deposit() payable"]);
         const depositData = wethIface.encodeFunctionData("deposit", []);
-        
+
         const depositTx = await this.sendTransaction(account, {
           to: publicTokenAddress,
           value: ethers.formatEther(depositAmount), // Send native ETH
           data: depositData
         });
-        
+
         console.log("[Wrap] ETH → WETH deposit successful ✓ TX:", depositTx);
         await this.waitForTransaction(depositTx);
       }
@@ -657,7 +812,7 @@ class Network {
     // 1. Check and approve token spending
     const allowData = ifaceErc20.encodeFunctionData("allowance", [account.GetAddress(), wrappedTokenAddress]);
     const allowHex = await this.call("eth_call", [{ to: publicTokenAddress, data: allowData }, "latest"]);
-    
+
     let currentAllowance = 0n;
     try {
       currentAllowance = allowHex && allowHex !== "0x" ? BigInt(allowHex) : 0n;
@@ -669,9 +824,9 @@ class Network {
     if (currentAllowance < amountValue) {
       console.log(`[Wrap] Approving ${decimals === 6 ? 'USDC' : 'WETH'} tokens...`);
       const approveData = ifaceErc20.encodeFunctionData("approve", [wrappedTokenAddress, amountValue]);
-      const approveTx = await this.sendTransaction(account, { 
-        to: publicTokenAddress, 
-        data: approveData, 
+      const approveTx = await this.sendTransaction(account, {
+        to: publicTokenAddress,
+        data: approveData,
         value: "0"
       });
       console.log("[Wrap] Token approved ✓ TX:", approveTx);
@@ -727,11 +882,11 @@ class Network {
     const ifaceErc20 = new ethers.Interface([
       "function decimals() view returns (uint8)"
     ]);
-    
+
     const decimalsData = ifaceErc20.encodeFunctionData("decimals", []);
     const decimalsHex = await this.call("eth_call", [{ to: wrappedTokenAddress, data: decimalsData }, "latest"]);
     const decimals = decimalsHex && decimalsHex !== "0x" ? parseInt(decimalsHex, 16) : 18;
-    
+
     const amountValue = ethers.parseUnits(amount, decimals);
 
     console.log(`[Unwrap] Unwrapping ${amount} tokens (${amountValue} units, ${decimals} decimals)`);
@@ -766,8 +921,8 @@ class Network {
     // TaskManager uses msg.sender for verification - these must match
     const txSenderAddress = account.GetAddress();
     if (!txSenderAddress) throw new Error("Account address not available");
-    
-    if (!FheCofheService.getInstance().isReadyForAccount(txSenderAddress)) {
+
+    if (!FheCofheService.getInstance().isReadyForAccount(txSenderAddress, this.network_id)) {
       if (!account.ethers_wallet) throw new Error("Wallet not accessible");
       const provider = new ethers.JsonRpcProvider(this.rpc_url);
       const connectedWallet = account.ethers_wallet.connect(provider);
@@ -777,8 +932,9 @@ class Network {
 
     // Determine decimals based on contract address
     // cETH: 18 decimals, cUSDC: 6 decimals
-    const WRAPPED_ETH = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "0x17CecF8090B945932e2F592168B636F7A0c986e8").toLowerCase();
-    const isEth = shieldedTokenAddress.toLowerCase() === WRAPPED_ETH;
+    const WRAPPED_ETH_SEP = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+    const WRAPPED_ETH_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+    const isEth = shieldedTokenAddress.toLowerCase() === WRAPPED_ETH_SEP || shieldedTokenAddress.toLowerCase() === WRAPPED_ETH_ARB;
     const decimals = isEth ? 18 : 6;
     const amountValue = ethers.parseUnits(amount, decimals);
 
@@ -827,7 +983,7 @@ class Network {
       console.log(`[TransferConfidential] Logs count: ${receipt?.logs?.length || 0}`);
       if (receipt?.logs) {
         receipt.logs.forEach((log: any, i: number) => {
-          console.log(`[TransferConfidential] Log[${i}]: topic0=${log.topics?.[0]?.slice(0,10)}... topics=${log.topics?.length} data=${log.data?.length}chars`);
+          console.log(`[TransferConfidential] Log[${i}]: topic0=${log.topics?.[0]?.slice(0, 10)}... topics=${log.topics?.length} data=${log.data?.length}chars`);
         });
       }
     } catch (e) {

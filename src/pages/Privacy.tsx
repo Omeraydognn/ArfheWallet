@@ -131,6 +131,9 @@ const FHEPrivacyPanel = () => {
           <Typography variant="subtitle1" color="text.secondary">
             Manage your on-chain visibility and FHE encryption settings
           </Typography>
+          <Typography variant="h6" color= "#000000ff" >
+        VERY COMİNG SOON with CONTRACT V5 support!
+          </Typography>
         </Box>
 
         {/* Shielded Balances */}

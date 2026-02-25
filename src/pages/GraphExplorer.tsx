@@ -21,6 +21,7 @@ import { ZoomIn, ZoomOut, Search, Clear, Hub, YoutubeSearchedFor, SwapHoriz } fr
 import { WalletContext } from "../AppContext.js";
 import { ActiveAccountContext } from "../ActiveAccountProvider.js";
 import { GraphNode, GraphEdge } from "../backend/ExplorerService.js";
+import { NetworkId } from "../backend/NetworkTypes.js";
 import { isAddress } from 'ethers';
 
 // Register layout
@@ -477,8 +478,13 @@ const GraphExplorer = () => {
                     fullWidth
                     sx={{ mt: 1 }}
                     onClick={() => {
-                      // NetworkId.Ethereum_Sepolia is 4
-                      const baseUrl = net?.network_id === 4 ? 'https://sepolia.etherscan.io' : 'https://etherscan.io';
+                      let baseUrl = 'https://etherscan.io';
+                      if (net?.network_id === NetworkId.Ethereum_Sepolia) baseUrl = 'https://sepolia.etherscan.io';
+                      else if (net?.network_id === NetworkId.Arbitrum_One) baseUrl = 'https://arbiscan.io';
+                      else if (net?.network_id === NetworkId.Arbitrum_Sepolia) baseUrl = 'https://sepolia.arbiscan.io';
+                      else if (net?.network_id === NetworkId.Base_Mainnet) baseUrl = 'https://basescan.org';
+                      else if (net?.network_id === NetworkId.Base_Sepolia) baseUrl = 'https://sepolia.basescan.org';
+                      else if (net?.network_id === NetworkId.Fhenix_Sepolia) baseUrl = 'https://explorer.helium.fhenix.zone';
                       window.open(`${baseUrl}/tx/${selectedEdge.hash}`, '_blank');
                     }}
                   >

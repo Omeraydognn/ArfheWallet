@@ -62,8 +62,10 @@ class FheCofheService {
   private initPromise: Promise<void> | null = null;
   public initError: string | null = null;
   private currentAccount: string | null = null; // Track which account cofhejs was initialized with
+  private currentChainId: number = 11155111; // Track which chain cofhejs was initialized with
+  private currentNetworkId?: number; // Track which NetworkId enum cofhejs was initialized with
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): FheCofheService {
     if (!FheCofheService.instance) {
@@ -82,10 +84,12 @@ class FheCofheService {
    * This prevents InvalidSigner errors caused by cofhejs using the wrong account address
    * when computing the verification hash.
    */
-  isReadyForAccount(accountAddress: string): boolean {
+  isReadyForAccount(accountAddress: string, networkId?: number): boolean {
     if (!this._isReady) return false;
     if (!this.currentAccount) return false;
-    return this.currentAccount.toLowerCase() === accountAddress.toLowerCase();
+    if (this.currentAccount.toLowerCase() !== accountAddress.toLowerCase()) return false;
+    if (networkId !== undefined && this.currentNetworkId !== networkId) return false;
+    return true;
   }
 
   /**
@@ -97,19 +101,21 @@ class FheCofheService {
    * TaskManager verifies using msg.sender (the tx sender).
    * These MUST match, or InvalidSigner error occurs.
    */
-  async init(provider: JsonRpcProvider, signer: Wallet): Promise<void> {
+  async init(provider: JsonRpcProvider, signer: Wallet, networkId?: number): Promise<void> {
     const signerAddress = await signer.getAddress();
+    const network = await provider.getNetwork();
+    const chainId = Number(network.chainId);
 
-    // If already initialized with the SAME account, skip
-    if (this._isReady && this.currentAccount?.toLowerCase() === signerAddress.toLowerCase()) {
-      console.log("[FheCofheService] Already initialized for account:", signerAddress);
+    // If already initialized with the SAME account AND chain AND networkId, skip
+    if (this._isReady && this.currentAccount?.toLowerCase() === signerAddress.toLowerCase() && this.currentChainId === chainId && this.currentNetworkId === networkId) {
+      console.log("[FheCofheService] Already initialized for account:", signerAddress, "on chain:", chainId);
       return;
     }
 
-    // If initialized with a DIFFERENT account, reset first
-    if (this._isReady && this.currentAccount?.toLowerCase() !== signerAddress.toLowerCase()) {
-      console.log(`[FheCofheService] ⚠️ Account changed: ${this.currentAccount} → ${signerAddress}`);
-      console.log("[FheCofheService] Resetting cofhejs for new account...");
+    // If initialized with a DIFFERENT account or chain or networkId, reset first
+    if (this._isReady && (this.currentAccount?.toLowerCase() !== signerAddress.toLowerCase() || this.currentChainId !== chainId || this.currentNetworkId !== networkId)) {
+      console.log(`[FheCofheService] ⚠️ Environment changed: Account ${this.currentAccount} → ${signerAddress}, Chain ${this.currentChainId} → ${chainId}, Network ${this.currentNetworkId} → ${networkId}`);
+      console.log("[FheCofheService] Resetting cofhejs for new environment...");
       this.reset();
     }
 
@@ -124,7 +130,7 @@ class FheCofheService {
         this.provider = provider;
         this.signer = signer;
 
-        console.log("[FheCofheService] 🚀 Initializing cofhejs on Sepolia...");
+        console.log(`[FheCofheService] 🚀 Initializing cofhejs on chain ${chainId}...`);
         console.log("[FheCofheService] Signer:", signerAddress);
 
         // Build abstract provider/signer for cofhejs
@@ -150,6 +156,9 @@ class FheCofheService {
 
         this._isReady = true;
         this.currentAccount = signerAddress;
+        this.currentChainId = chainId;
+        this.currentNetworkId = networkId;
+        this.currentNetworkId = networkId;
 
       } catch (error: any) {
         this.initError = error?.message || String(error);
@@ -199,7 +208,7 @@ class FheCofheService {
    * 
    * @see https://cofhe-docs.fhenix.zone/cofhejs/guides/sealing-unsealing
    */
-  async unseal(ctHash: bigint): Promise<bigint> {
+  async unseal(ctHash: bigint, maxRetries = 10, retryDelayMs = 10000): Promise<bigint> {
     if (!this._isReady) throw new Error("cofhejs not initialized");
 
     // Ensure permit exists before attempting unseal
@@ -214,40 +223,62 @@ class FheCofheService {
     console.log(`[FheCofheService] 🔓 Unsealing ctHash: ${ctHash}`);
     console.log(`[FheCofheService] 🔓 ctHash hex: 0x${ctHash.toString(16).padStart(64, '0')}`);
 
-    // Try cofhejs.unseal first
-    const result = await cofhejs.unseal(ctHash, FheTypes.Uint64);
-
-    if (!result.success) {
-      const errorMsg = (result.error as any)?.message || String(result.error);
-      console.error(`[FheCofheService] ❌ Unseal failed:`, errorMsg);
-      console.error(`[FheCofheService] ❌ Full error:`, result.error);
-      
-      // If permit-related error, mark permit as invalid for retry next time
-      if (errorMsg.includes("403") || errorMsg.includes("Permit") || errorMsg.includes("permit") || errorMsg.includes("sealed data not found") || errorMsg.includes("IssuerSignature")) {
-        console.log("[FheCofheService] Marking permit as invalid for retry");
-        this._hasPermit = false;
-      }
-      
-      // Try manual sealoutput as fallback
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log("[FheCofheService] 🔄 Trying manual sealoutput...");
-        const value = await this.manualUnseal(ctHash);
+        // Try cofhejs.unseal first
+        const result = await cofhejs.unseal(ctHash, FheTypes.Uint64);
+
+        if (!result.success) {
+          const errorMsg = (result.error as any)?.message || String(result.error);
+          console.error(`[FheCofheService] ❌ Unseal failed (attempt ${attempt}):`, errorMsg);
+
+          // If permit-related error, mark permit as invalid for retry next time
+          if (errorMsg.includes("403") || errorMsg.includes("Permit") || errorMsg.includes("permit") || errorMsg.includes("IssuerSignature")) {
+            console.log("[FheCofheService] Marking permit as invalid for retry");
+            this._hasPermit = false;
+          }
+
+          // Fallback to manual unseal (which throws if it fails)
+          console.log(`[FheCofheService] 🔄 Trying manual sealoutput (attempt ${attempt})...`);
+
+          const value = await this.manualUnseal(ctHash);
+          console.log(`[FheCofheService] ✅ Unsealed via manual (attempt ${attempt}): ${value}`);
+          return value;
+        }
+
+        const value = BigInt(result.data as any);
+        console.log(`[FheCofheService] ✅ Unsealed: ${value}`);
         return value;
-      } catch (manualErr: any) {
-        console.error("[FheCofheService] ❌ Manual unseal also failed:", manualErr?.message);
+
+      } catch (err: any) {
+        const errorMsg = (err?.message || String(err)).toLowerCase();
+
+        // CoFHE is still processing (428 or manual unseal 'CT source is not ready')
+        const isPending =
+          errorMsg.includes("sealed data not found") ||
+          errorMsg.includes("428") ||
+          errorMsg.includes("precondition") ||
+          errorMsg.includes("ct source is not ready");
+
+        if (isPending && attempt < maxRetries) {
+          console.log(`[FheCofheService] ⏳ CoFHE processing... waiting ${retryDelayMs / 1000}s before attempt ${attempt + 1}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+          continue; // Move to next loop iteration
+        }
+
+        // If it's a completely different error, or we reached max retries
+        if (attempt >= maxRetries) {
+          console.error(`[FheCofheService] ❌ Reached max retries. Unseal failed.`);
+          throw err;
+        }
       }
-      
-      throw new Error(`Unseal failed: ${result.error}`);
     }
 
-    const value = BigInt(result.data as any);
-    console.log(`[FheCofheService] ✅ Unsealed: ${value}`);
-    return value;
+    throw new Error("Unseal failed after retries");
   }
 
   /**
    * Manual unseal: Directly call sealoutput endpoint bypassing cofhejs
-   * This is a fallback when cofhejs.unseal fails, with better error reporting
    */
   private async manualUnseal(ctHash: bigint): Promise<bigint> {
     // Get permit from cofhejs
@@ -269,7 +300,7 @@ class FheCofheService {
     const thresholdNetworkUrl = "https://testnet-cofhe-tn.fhenix.zone";
     const body = {
       ct_tempkey: ctHash.toString(16).padStart(64, "0"),
-      host_chain_id: 11155111,
+      host_chain_id: this.currentChainId,
       permit: permission,
     };
 
@@ -328,7 +359,7 @@ class FheCofheService {
         if (permitResult.success) {
           this._hasPermit = true;
           console.log("[FheCofheService] ✅ Permit created successfully (attempt " + attempt + ")");
-          
+
           // Log permit details for debugging
           try {
             const permissionResult = cofhejs.getPermission();
@@ -346,7 +377,7 @@ class FheCofheService {
           } catch (logErr) {
             console.warn("[FheCofheService] Could not log permit details:", logErr);
           }
-          
+
           return true;
         } else {
           const errorMsg = (permitResult.error as any)?.message || String(permitResult.error);
@@ -399,6 +430,7 @@ class FheCofheService {
     this.initPromise = null;
     this.initError = null;
     this.currentAccount = null;
+    this.currentChainId = 11155111;
     console.log("[FheCofheService] Service reset");
   }
 }

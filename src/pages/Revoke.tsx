@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useCallback } from 'react';
 import {
   Container,
   Paper,
@@ -9,12 +9,20 @@ import {
   Chip,
   Alert,
   Snackbar,
-  LinearProgress
+  LinearProgress,
+  Avatar,
+  Stack,
+  Divider,
+  Tooltip
 } from '@mui/material';
 import {
   VerifiedUserRounded,
   RefreshRounded,
-  SearchRounded
+  SearchRounded,
+  LinkOffRounded,
+  LanguageRounded,
+  AccessTimeRounded,
+  CheckCircleOutlineRounded
 } from '@mui/icons-material';
 import { WalletContext } from '../AppContext';
 import { formatUnits, Interface, MaxUint256, JsonRpcProvider, Contract } from 'ethers';
@@ -70,64 +78,64 @@ class RevokeService {
    * @param onProgress - Progress callback (0-100)
    */
   async scanApprovals(
-    ownerAddress: string, 
+    ownerAddress: string,
     scanDepth: number = 10000,
     onProgress?: (progress: number, message: string) => void
   ): Promise<TokenApproval[]> {
-    
+
     console.log('╔════════════════════════════════════════════════════╗');
     console.log('║   ETHERS.JS APPROVAL SCANNER (AGÜ Project)     ║');
     console.log('╚════════════════════════════════════════════════════╝');
     console.log(' Owner:', ownerAddress);
-    
+
     // Blok numaralarını hesapla
     const latestBlock = await this.provider.getBlockNumber();
     const startBlock = Math.max(0, latestBlock - scanDepth);
     const endBlock = latestBlock;
 
     console.log(` Scanning blocks: ${startBlock} → ${endBlock} (${endBlock - startBlock} blocks)`);
-    
+
     // Owner topic (indexed parameter)
     const ownerTopic = '0x' + ownerAddress.slice(2).toLowerCase().padStart(64, '0');
 
     // STEP 1: Tüm Approval eventlerini tara (CHUNKED - Alchemy Free tier için)
     console.log('\n STEP 1: Fetching all Approval events (chunked scanning)...');
-    
+
     const CHUNK_SIZE = 10; // Alchemy Free tier max 10 blok
     const allLogs: any[] = [];
     const totalChunks = Math.ceil((endBlock - startBlock) / CHUNK_SIZE);
-    
+
     console.log(`    Will scan ${totalChunks} chunks of ${CHUNK_SIZE} blocks each`);
-    
+
     // Progress tracking
     let processedChunks = 0;
-    
+
     for (let currentBlock = startBlock; currentBlock <= endBlock; currentBlock += CHUNK_SIZE) {
       const chunkEnd = Math.min(currentBlock + CHUNK_SIZE - 1, endBlock);
-      
+
       try {
         const chunkLogs = await this.provider.getLogs({
           topics: [this.approvalTopic, ownerTopic],
           fromBlock: currentBlock,
           toBlock: chunkEnd
         });
-        
+
         allLogs.push(...chunkLogs);
         processedChunks++;
-        
+
         // 🔥 Gerçek zamanlı progress güncelle!
         const progressPercent = Math.round((processedChunks / totalChunks) * 70); // 0-70% (STEP 1)
         const progressMessage = `🔎 Scanning blocks... ${processedChunks}/${totalChunks} chunks`;
-        
+
         if (onProgress) {
           onProgress(30 + progressPercent, progressMessage); // 30-100% aralığı
         }
-        
+
         // Her 10 chunk'ta bir konsola yazdır
         if (processedChunks % 10 === 0 || processedChunks === totalChunks) {
           console.log(`    Progress: ${processedChunks}/${totalChunks} chunks (${progressPercent}%)`);
         }
-        
+
       } catch (err: any) {
         console.warn(`    Failed to scan blocks ${currentBlock}-${chunkEnd}: ${err.message}`);
         // Continue with next chunk
@@ -163,7 +171,7 @@ class RevokeService {
       try {
         // Token metadata çek (symbol, decimals, name)
         const tokenContract = new Contract(tokenAddress, ERC20_ABI, this.provider);
-        
+
         const [symbol, decimals, name] = await Promise.all([
           tokenContract.symbol().catch(() => 'UNKNOWN'),
           tokenContract.decimals().catch(() => 18),
@@ -174,7 +182,7 @@ class RevokeService {
 
         // Bu token için tüm approval loglarını filtrele
         const tokenLogs = allLogs.filter((log: any) => log.address.toLowerCase() === tokenAddress);
-        
+
         // Spender'ları grupla ve en son logu al
         const latestApprovals = this.getLatestApprovalsPerSpender(tokenLogs);
 
@@ -192,7 +200,7 @@ class RevokeService {
 
             // Unlimited mı kontrol et
             const isUnlimited = currentAllowance >= MaxUint256 / 2n;
-            const allowanceFormatted = isUnlimited 
+            const allowanceFormatted = isUnlimited
               ? '∞ UNLIMITED'
               : formatUnits(currentAllowance, decimals);
 
@@ -261,53 +269,77 @@ class RevokeService {
   }
 }
 
+const CHAIN_LABELS: Record<string, { name: string; color: string }> = {
+  "eip155:1": { name: "Ethereum", color: "#627EEA" },
+  "eip155:11155111": { name: "Sepolia", color: "#9B59B6" },
+  "eip155:137": { name: "Polygon", color: "#8247E5" },
+  "eip155:42161": { name: "Arbitrum", color: "#28A0F0" },
+  "eip155:10": { name: "Optimism", color: "#FF0420" },
+  "eip155:8453": { name: "Base", color: "#0052FF" },
+};
+
 const RevokeAlchemyPage = () => {
   const context = useContext(WalletContext);
   const activeAccount = context?.accountManager?.GetActive();
   const network = context?.networkProvider?.getActiveNetwork();
   const wcService = context?.walletConnectService;
-  
+
   const [approvals, setApprovals] = useState<TokenApproval[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [scanProgress, setScanProgress] = useState(0); // 0-100 progress bar
-  const [scanMessage, setScanMessage] = useState(''); // Loading mesajı
+  const [disconnectingAll, setDisconnectingAll] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanMessage, setScanMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Fetch WalletConnect sessions
-  const fetchSessions = async () => {
-    if (!wcService || !wcService.client) {
+  // Fetch WalletConnect sessions via service helper
+  const fetchSessions = useCallback(() => {
+    if (!wcService) {
       setSessions([]);
       return;
     }
-
     try {
-      const activeSessions = wcService.client.session.getAll();
+      const activeSessions = wcService.getActiveSessions();
       setSessions(activeSessions || []);
     } catch (err) {
       console.error('[Revoke] Failed to fetch WC sessions:', err);
       setSessions([]);
     }
-  };
+  }, [wcService]);
 
-  // Disconnect WalletConnect session
+  // Auto-refresh when sessions change
+  useEffect(() => {
+    if (!wcService) return;
+    wcService.setOnSessionUpdate(() => fetchSessions());
+    return () => wcService.setOnSessionUpdate(() => { });
+  }, [wcService, fetchSessions]);
+
+  // Disconnect single WalletConnect session
   const handleDisconnectSession = async (topic: string) => {
-    if (!wcService || !wcService.client) return;
-    
+    if (!wcService) return;
     try {
-      await wcService.client.disconnect({
-        topic,
-        reason: {
-          code: 6000,
-          message: 'User disconnected'
-        }
-      });
-      setSuccess('dApp disconnected!');
+      await wcService.disconnect(topic);
+      setSuccess('dApp disconnected successfully');
       fetchSessions();
     } catch (err: any) {
       console.error('[Revoke] Disconnect error:', err);
       setError('Failed to disconnect: ' + err.message);
+    }
+  };
+
+  // Disconnect ALL sessions silently
+  const handleDisconnectAll = async () => {
+    if (!wcService) return;
+    setDisconnectingAll(true);
+    try {
+      const count = await wcService.disconnectAll();
+      setSuccess(`All ${count} connection(s) disconnected`);
+      fetchSessions();
+    } catch (err: any) {
+      setError('Failed to disconnect all: ' + err.message);
+    } finally {
+      setDisconnectingAll(false);
     }
   };
 
@@ -327,11 +359,11 @@ const RevokeAlchemyPage = () => {
 
     try {
       const ownerAddress = activeAccount.GetAddress();
-      
+
       if (!ownerAddress) {
         throw new Error('No wallet address found');
       }
-      
+
       // RevokeService instance oluştur
       setScanMessage('📡 Connecting to blockchain...');
       setScanProgress(10);
@@ -342,7 +374,7 @@ const RevokeAlchemyPage = () => {
       // Bunun yerine 500 blok tarayalım (50 request = ~10 saniye)
       setScanMessage('🔎 Scanning last 500 blocks for approvals...');
       setScanProgress(30);
-      
+
       // 🔥 Progress callback ile gerçek zamanlı güncelleme!
       const results = await scanner.scanApprovals(ownerAddress, 500, (progress, message) => {
         setScanProgress(progress);
@@ -408,16 +440,16 @@ const RevokeAlchemyPage = () => {
         <Box sx={{ textAlign: 'center', mb: 4 }}>
           <Typography variant="h4" fontWeight={800} gutterBottom
             sx={{ background: 'linear-gradient(90deg, #fff, #6366f1, #fff', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-             Revoke
+            Revoke
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Review and revoke your ERC20 token permissions granted to dApps and smart contracts.
           </Typography>
-          
-          <Button 
-            startIcon={loading ? <CircularProgress size={16} /> : <RefreshRounded />} 
-            onClick={() => { fetchApprovals(); fetchSessions(); }} 
-            disabled={loading} 
+
+          <Button
+            startIcon={loading ? <CircularProgress size={16} /> : <RefreshRounded />}
+            onClick={() => { fetchApprovals(); fetchSessions(); }}
+            disabled={loading}
             sx={{ mt: 2 }}
             variant="contained"
           >
@@ -434,19 +466,19 @@ const RevokeAlchemyPage = () => {
             <Typography variant="h6" fontWeight={600} gutterBottom>
               {scanMessage || 'Geçmiş izinler taranıyor...'}
             </Typography>
-            <LinearProgress 
-              variant="determinate" 
-              value={scanProgress} 
-              sx={{ 
-                mt: 2, 
-                height: 8, 
+            <LinearProgress
+              variant="determinate"
+              value={scanProgress}
+              sx={{
+                mt: 2,
+                height: 8,
                 borderRadius: 4,
                 transition: 'all 0.3s ease-in-out', // 🔥 Smooth animation
                 '& .MuiLinearProgress-bar': {
                   background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
                   transition: 'transform 0.3s ease-in-out' // 🔥 Smooth bar fill
                 }
-              }} 
+              }}
             />
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
               {scanProgress}% tamamlandı
@@ -457,16 +489,116 @@ const RevokeAlchemyPage = () => {
         {/* WalletConnect Sessions */}
         {sessions.length > 0 && (
           <Box sx={{ mb: 4 }}>
-            <Typography variant="h6" gutterBottom> Connected dApps ({sessions.length})</Typography>
-            {sessions.map(s => (
-              <Paper key={s.topic} sx={{ p: 2, mb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Box>
-                  <Typography fontWeight={600}>{s.peer.metadata.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">{s.peer.metadata.url}</Typography>
-                </Box>
-                <Button size="small" color="error" onClick={() => handleDisconnectSession(s.topic)}>Disconnect</Button>
-              </Paper>
-            ))}
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+              <Typography variant="h6" fontWeight={700}>
+                Connected dApps ({sessions.length})
+              </Typography>
+              {sessions.length > 1 && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="error"
+                  startIcon={disconnectingAll ? <CircularProgress size={14} /> : <LinkOffRounded />}
+                  onClick={handleDisconnectAll}
+                  disabled={disconnectingAll}
+                  sx={{ borderRadius: 2, fontWeight: 600, textTransform: 'none' }}
+                >
+                  Disconnect All
+                </Button>
+              )}
+            </Stack>
+            {sessions.map((s: any) => {
+              const peerMeta = s.peer?.metadata || {};
+              const chains = Object.values(s.namespaces || {}).flatMap((ns: any) => ns.chains || ns.accounts?.map((a: string) => a.split(':').slice(0, 2).join(':')) || []);
+              const uniqueChains = [...new Set(chains)];
+              const expiryDate = s.expiry ? new Date(s.expiry * 1000) : null;
+              const isExpired = expiryDate ? expiryDate < new Date() : false;
+
+              return (
+                <Paper
+                  key={s.topic}
+                  elevation={0}
+                  sx={{
+                    p: 2.5,
+                    mb: 1.5,
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: isExpired ? 'error.light' : 'divider',
+                    bgcolor: isExpired ? 'rgba(239,68,68,0.04)' : 'background.paper',
+                    transition: 'all 0.2s',
+                    '&:hover': { borderColor: 'primary.main', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' },
+                  }}
+                >
+                  <Stack direction="row" alignItems="center" spacing={2}>
+                    <Avatar
+                      src={peerMeta.icons?.[0]}
+                      sx={{ width: 44, height: 44, bgcolor: 'primary.main', border: '2px solid', borderColor: 'divider' }}
+                    >
+                      {peerMeta.name?.[0]?.toUpperCase() || '?'}
+                    </Avatar>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography fontWeight={700} sx={{ fontSize: '0.95rem' }}>
+                        {peerMeta.name || 'Unknown dApp'}
+                      </Typography>
+                      <Stack direction="row" alignItems="center" spacing={0.5}>
+                        <LanguageRounded sx={{ fontSize: 12, color: 'text.secondary' }} />
+                        <Typography variant="caption" color="text.secondary" noWrap>
+                          {peerMeta.url || 'No URL'}
+                        </Typography>
+                      </Stack>
+                      <Stack direction="row" gap={0.5} sx={{ mt: 0.75 }} flexWrap="wrap">
+                        {uniqueChains.map((chain: string) => {
+                          const label = CHAIN_LABELS[chain];
+                          return (
+                            <Chip
+                              key={chain}
+                              size="small"
+                              label={label?.name || chain}
+                              sx={{
+                                fontSize: '0.65rem',
+                                height: 20,
+                                fontWeight: 600,
+                                bgcolor: label ? `${label.color}15` : '#88888815',
+                                color: label?.color || '#888',
+                                border: '1px solid',
+                                borderColor: label ? `${label.color}30` : '#88888830',
+                              }}
+                            />
+                          );
+                        })}
+                        {expiryDate && (
+                          <Tooltip title={`Expires: ${expiryDate.toLocaleString()}`} arrow>
+                            <Chip
+                              size="small"
+                              icon={<AccessTimeRounded sx={{ fontSize: 12 }} />}
+                              label={isExpired ? 'Expired' : expiryDate.toLocaleDateString()}
+                              sx={{
+                                fontSize: '0.65rem',
+                                height: 20,
+                                fontWeight: 600,
+                                color: isExpired ? '#ef4444' : 'text.secondary',
+                                '& .MuiChip-icon': { color: 'inherit' },
+                              }}
+                              variant="outlined"
+                            />
+                          </Tooltip>
+                        )}
+                      </Stack>
+                    </Box>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="error"
+                      onClick={() => handleDisconnectSession(s.topic)}
+                      startIcon={<LinkOffRounded sx={{ fontSize: 16 }} />}
+                      sx={{ borderRadius: 2, fontWeight: 600, textTransform: 'none', minWidth: 110 }}
+                    >
+                      Disconnect
+                    </Button>
+                  </Stack>
+                </Paper>
+              );
+            })}
           </Box>
         )}
 
@@ -490,7 +622,7 @@ const RevokeAlchemyPage = () => {
                   <strong>Allowance:</strong> {a.allowance}
                 </Typography>
                 <Button fullWidth variant="contained" color="error" onClick={() => handleRevoke(a)} sx={{ mt: 1 }}>
-                   Revoke Permission
+                  Revoke Permission
                 </Button>
               </Paper>
             ))}

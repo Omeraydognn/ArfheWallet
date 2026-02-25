@@ -1,7 +1,6 @@
 import { Network } from "./Network.js";
 import { NetworkId } from "./NetworkTypes.js";
 
-const DEMO_KEY = "demo";
 
 export default class SepoliaNetwork extends Network {
   constructor() {

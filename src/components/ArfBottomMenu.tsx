@@ -55,8 +55,8 @@ function CustomTabPanel(props: { children: React.ReactNode; index: number; value
   );
 }
 
-// ArfheWallet - Wrapped Token Addresses
-const CONTRACTS = {
+// ArfheWallet - Wrapped Token Addresses (Ethereum Sepolia)
+const CONTRACTS_SEPOLIA = {
   "USDC": {
     public: getAddress("0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"),
     shielded: getAddress((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "0x730Bb4ee9EA1cdB0B45C1DB01cA67a616D2D3C88")
@@ -70,6 +70,41 @@ const CONTRACTS = {
     shielded: getAddress("0x0000000000000000000000000000000000000000")
   }
 };
+
+// ArfheWallet - Wrapped Token Addresses (Arbitrum Sepolia)
+const CONTRACTS_ARB_SEPOLIA: Record<string, { public: string; shielded: string }> = {
+  "ETH": {
+    public: getAddress((import.meta as any).env.VITE_ARB_SEPOLIA_WETH_ADDRESS || "0x0000000000000000000000000000000000000000"),
+    shielded: getAddress((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "0x0000000000000000000000000000000000000000")
+  },
+  "USDC": {
+    public: getAddress((import.meta as any).env.VITE_ARB_SEPOLIA_USDC_ADDRESS || "0x0000000000000000000000000000000000000000"),
+    shielded: getAddress((import.meta as any).env.VITE_ARB_WRAPPED_USDC_ADDRESS || "0x0000000000000000000000000000000000000000")
+  }
+};
+
+// Backward compatible alias
+const CONTRACTS = CONTRACTS_SEPOLIA;
+
+// Get contracts for the active network
+function getContractsForNetwork(networkId: NetworkId) {
+  if (networkId === NetworkId.Arbitrum_Sepolia) return CONTRACTS_ARB_SEPOLIA;
+  return CONTRACTS_SEPOLIA;
+}
+
+// Get explorer URL for the active network
+function getExplorerBaseForNetwork(networkId: NetworkId | undefined) {
+  switch (networkId) {
+    case NetworkId.Ethereum_Mainnet: return "https://etherscan.io";
+    case NetworkId.Ethereum_Sepolia: return "https://sepolia.etherscan.io";
+    case NetworkId.Arbitrum_One: return "https://arbiscan.io";
+    case NetworkId.Arbitrum_Sepolia: return "https://sepolia.arbiscan.io";
+    case NetworkId.Base_Mainnet: return "https://basescan.org";
+    case NetworkId.Base_Sepolia: return "https://sepolia.basescan.org";
+    case NetworkId.Fhenix_Sepolia: return "https://explorer.helium.fhenix.zone";
+    default: return "https://etherscan.io";
+  }
+}
 
 // Shared input card style
 const inputCardSx = {
@@ -119,8 +154,9 @@ function ShieldPanel() {
     setTxHash("");
 
     try {
+      const activeContracts = getContractsForNetwork(network.network_id);
       // @ts-ignore
-      const config = CONTRACTS[token];
+      const config = activeContracts[token];
       if (!config) throw new Error("Invalid Token Config");
 
       if (config.shielded === "0x0000000000000000000000000000000000000000") {
@@ -306,7 +342,7 @@ function ShieldPanel() {
                   {txHash.slice(0, 10)}...{txHash.slice(-6)}
                 </Typography>
                 <Link
-                  href={`https://sepolia.etherscan.io/tx/${txHash}`}
+                  href={`${getExplorerBaseForNetwork(network?.network_id)}/tx/${txHash}`}
                   target="_blank"
                   rel="noopener"
                   sx={{ color: '#fff', display: 'flex', alignItems: 'center' }}
@@ -398,10 +434,17 @@ function SendPanel() {
           "0x2210264a3775d5fbc51b1b73667f5590230ac2bd"
         ];
 
-        const WRAPPED_USDC = ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
-        const WRAPPED_ETH = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+        const isFheNetwork = networkId === NetworkId.Ethereum_Sepolia || networkId === NetworkId.Arbitrum_Sepolia;
+        const activeContracts = getContractsForNetwork(networkId);
+
+        const WRAPPED_USDC = networkId === NetworkId.Arbitrum_Sepolia
+          ? ((import.meta as any).env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase()
+          : ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+        const WRAPPED_ETH = networkId === NetworkId.Arbitrum_Sepolia
+          ? ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase()
+          : ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
         const shieldedAddresses = [WRAPPED_USDC, WRAPPED_ETH].filter(Boolean);
-        const REAL_WETH = CONTRACTS["ETH"].public.toLowerCase();
+        const REAL_WETH = activeContracts["ETH"]?.public?.toLowerCase() || "";
 
         const tokenBalances = await network.getTokenBalances(context?.tokenCache, address);
         const seenSymbols = new Set<string>();
@@ -411,25 +454,50 @@ function SendPanel() {
             const addr = tb.contractAddress.toLowerCase();
             if (IGNORED_CONTRACTS.includes(addr)) return false;
             if (shieldedAddresses.includes(addr)) return false;
+
+            // Allow native ETH immediately
+            if (tb.isNative) return true;
+
             const meta = context?.tokenCache?.getToken(networkId, tb.contractAddress);
+
+            // Allow our recognized public WETH unconditionally, by hardcoded address
+            if (addr === REAL_WETH) return true;
+
             const symbol = meta?.symbol ?? "";
+
+            // Ignore other random testnet WETHs that aren't the primary one
             if (symbol === "WETH" && addr !== REAL_WETH) return false;
-            if (!tb.isNative && symbol && seenSymbols.has(symbol)) return false;
-            if (symbol) seenSymbols.add(symbol);
+
+            // Keep track of unique symbols so we don't list duplicates if they have the same symbol
+            if (symbol) {
+              if (seenSymbols.has(symbol)) return false;
+              seenSymbols.add(symbol);
+            }
+
             return true;
           })
           .map(tb => {
+            const addr = tb.contractAddress.toLowerCase();
             const meta = context?.tokenCache?.getToken(networkId, tb.contractAddress);
+            let symbol = meta?.symbol;
+
+            // Inject symbol manually for known assets if meta is missing
+            if (!symbol) {
+              if (tb.isNative) symbol = "ETH";
+              else if (addr === REAL_WETH) symbol = "WETH";
+              else symbol = "???";
+            }
+
             return {
               contractAddress: tb.contractAddress,
-              symbol: meta?.symbol ?? (tb.isNative ? "ETH" : "???"),
+              symbol: symbol,
               balance: tb.tokenBalance
             };
           });
         setOwnedTokens(publicTokensWithBalance);
 
-        // Fetch shielded token balances (only on Sepolia)
-        if (networkId === NetworkId.Ethereum_Sepolia && (WRAPPED_USDC || WRAPPED_ETH)) {
+        // Fetch shielded token balances (on FHE-enabled networks)
+        if (isFheNetwork && (WRAPPED_USDC || WRAPPED_ETH)) {
           const shielded: { contractAddress: string; symbol: string; balance: string }[] = [];
 
           if (WRAPPED_ETH) {
@@ -476,23 +544,24 @@ function SendPanel() {
       let hash = "";
 
       if (isConfidential) {
+        const activeContracts = getContractsForNetwork(network.network_id);
         let tokenAddress = "";
         let decimals = 18;
 
-        if (sendTokenAddress.toLowerCase() === CONTRACTS["USDC"].shielded.toLowerCase()) {
+        if (sendTokenAddress.toLowerCase() === activeContracts["USDC"]?.shielded.toLowerCase()) {
           tokenAddress = sendTokenAddress;
           decimals = 6;
-        } else if (sendTokenAddress.toLowerCase() === CONTRACTS["USDC"].public.toLowerCase()) {
-          tokenAddress = CONTRACTS["USDC"].shielded;
+        } else if (sendTokenAddress.toLowerCase() === activeContracts["USDC"]?.public.toLowerCase()) {
+          tokenAddress = activeContracts["USDC"]?.shielded;
           decimals = 6;
-        } else if (sendTokenAddress.toLowerCase() === CONTRACTS["ETH"].shielded.toLowerCase()) {
+        } else if (sendTokenAddress.toLowerCase() === activeContracts["ETH"]?.shielded.toLowerCase()) {
           tokenAddress = sendTokenAddress;
           decimals = 18;
-        } else if (sendTokenAddress.toLowerCase() === CONTRACTS["ETH"].public.toLowerCase()) {
-          tokenAddress = CONTRACTS["ETH"].shielded;
+        } else if (sendTokenAddress.toLowerCase() === activeContracts["ETH"]?.public.toLowerCase()) {
+          tokenAddress = activeContracts["ETH"]?.shielded;
           decimals = 18;
         } else if (sendTokenAddress === "ETH") {
-          tokenAddress = CONTRACTS["ETH"].shielded;
+          tokenAddress = activeContracts["ETH"]?.shielded;
           decimals = 18;
         } else {
           throw new Error("Confidential transfer only supports cUSDC and cETH");
@@ -609,7 +678,7 @@ function SendPanel() {
           <Typography variant="h6" fontWeight={700}>Transfer Complete</Typography>
           {txHash && (
             <Link
-              href={`https://sepolia.etherscan.io/tx/${txHash}`}
+              href={`${getExplorerBaseForNetwork(network?.network_id)}/tx/${txHash}`}
               target="_blank" rel="noopener"
               underline="hover"
               sx={{ fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5 }}
@@ -910,89 +979,340 @@ export default function ArfBottomMenu() {
 
 function ScanDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const context = useContext(WalletContext);
+  const wcService = context?.walletConnectService;
   const [uri, setUri] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [status, setStatus] = React.useState<"idle" | "connecting" | "success" | "warning" | "error">("idle");
   const [msg, setMsg] = React.useState("");
 
+  // Count active sessions
+  const sessionCount = React.useMemo(() => {
+    try { return wcService?.getActiveSessions()?.length || 0; } catch { return 0; }
+  }, [open, wcService]);
+
   const handleConnect = async () => {
-    if (!uri) return;
+    const trimmedUri = uri.trim();
+    if (!trimmedUri) return;
     setLoading(true);
     setMsg("");
+    setStatus("connecting");
     try {
-      await context?.walletConnectService.pair(uri);
-      setMsg("Connected!");
-      setTimeout(onClose, 1000);
+      await context?.walletConnectService.pair(trimmedUri);
+      setMsg("Pairing initiated — approve the connection");
+      setStatus("success");
+      setTimeout(() => { onClose(); setUri(""); setStatus("idle"); setMsg(""); }, 1800);
     } catch (e: any) {
-      if (e.toString().includes("Expired")) {
-        setMsg("QR Code Expired. Please refresh dApp.");
+      const errMsg = e?.message || String(e);
+      if (errMsg === "ALREADY_PAIRED" || errMsg.includes("Pairing already exists")) {
+        setMsg("Already connected to this dApp");
+        setStatus("warning");
+      } else if (errMsg === "URI_EXPIRED" || errMsg.includes("Expired")) {
+        setMsg("QR code expired — refresh the dApp");
+        setStatus("error");
+      } else if (errMsg.includes("not initialized")) {
+        setMsg("Wallet initializing — try again");
+        setStatus("warning");
       } else {
-        setMsg("Connection failed");
+        setMsg("Connection failed — check the URI");
+        setStatus("error");
       }
-      console.error(e);
+      console.error("[WC] Pair error:", errMsg);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleClose = () => {
+    onClose();
+    // Reset state after close animation
+    setTimeout(() => { setUri(""); setStatus("idle"); setMsg(""); }, 300);
+  };
+
+  const statusColors = {
+    idle: { bg: 'transparent', text: 'text.secondary' },
+    connecting: { bg: 'rgba(99, 102, 241, 0.08)', text: '#6366f1' },
+    success: { bg: 'rgba(34, 197, 94, 0.08)', text: '#16a34a' },
+    warning: { bg: 'rgba(245, 158, 11, 0.08)', text: '#d97706' },
+    error: { bg: 'rgba(239, 68, 68, 0.08)', text: '#dc2626' },
+  };
+
+  const statusIcons: Record<string, React.ReactNode> = {
+    connecting: <CircularProgress size={16} sx={{ color: '#6366f1' }} />,
+    success: <CheckCircle sx={{ fontSize: 18, color: '#16a34a' }} />,
+    warning: <ErrorIcon sx={{ fontSize: 18, color: '#d97706' }} />,
+    error: <ErrorIcon sx={{ fontSize: 18, color: '#dc2626' }} />,
+  };
+
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       fullWidth
+      maxWidth="xs"
       PaperProps={{
         sx: {
-          borderRadius: 4,
+          borderRadius: 5,
           bgcolor: 'background.paper',
           backgroundImage: 'none',
+          overflow: 'hidden',
+          boxShadow: '0 24px 48px rgba(0,0,0,0.12)',
         }
       }}
     >
-      <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 0 }}>
-        Connect dApp
-      </DialogTitle>
-      <DialogContent>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-          Paste the WalletConnect URI to pair with a dApp.
+      {/* ─── Premium Header ─── */}
+      <Box sx={{
+        position: 'relative',
+        textAlign: 'center',
+        pt: 4,
+        pb: 3,
+        px: 3,
+        background: 'linear-gradient(160deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)',
+        overflow: 'hidden',
+      }}>
+        {/* Subtle grid pattern overlay */}
+        <Box sx={{
+          position: 'absolute',
+          inset: 0,
+          opacity: 0.05,
+          backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.5) 1px, transparent 0)',
+          backgroundSize: '20px 20px',
+        }} />
+
+        {/* Glow effect */}
+        <Box sx={{
+          position: 'absolute',
+          top: -40,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 200,
+          height: 200,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, transparent 70%)',
+          filter: 'blur(40px)',
+        }} />
+
+        {/* WC Icon with animated ring */}
+        <Box sx={{
+          position: 'relative',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 72,
+          height: 72,
+          borderRadius: '50%',
+          mb: 2,
+          background: 'linear-gradient(135deg, #3396FF 0%, #66B8FF 100%)',
+          boxShadow: '0 8px 32px rgba(51, 150, 255, 0.4)',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            inset: -4,
+            borderRadius: '50%',
+            border: '2px solid rgba(51, 150, 255, 0.3)',
+            animation: loading ? 'wcPulse 1.5s ease-in-out infinite' : 'none',
+          },
+          '@keyframes wcPulse': {
+            '0%, 100%': { transform: 'scale(1)', opacity: 0.5 },
+            '50%': { transform: 'scale(1.15)', opacity: 0 },
+          },
+        }}>
+          <QrCode sx={{ fontSize: 32, color: '#fff' }} />
+        </Box>
+
+        <Typography variant="h6" sx={{ color: '#fff', fontWeight: 800, letterSpacing: '-0.02em', position: 'relative' }}>
+          WalletConnect
         </Typography>
-        <TextField
-          autoFocus
-          fullWidth
-          placeholder="wc:..."
-          value={uri}
-          onChange={e => setUri(e.target.value)}
-          multiline
-          rows={3}
+        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.6)', display: 'block', mt: 0.5, position: 'relative' }}>
+          Connect to decentralized applications
+        </Typography>
+
+        {/* Active sessions badge */}
+        {sessionCount > 0 && (
+          <Chip
+            size="small"
+            label={`${sessionCount} active`}
+            sx={{
+              mt: 1.5,
+              position: 'relative',
+              bgcolor: 'rgba(34, 197, 94, 0.15)',
+              color: '#4ade80',
+              fontWeight: 700,
+              fontSize: '0.7rem',
+              height: 24,
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+            }}
+          />
+        )}
+      </Box>
+
+      {/* ─── Content ─── */}
+      <Box sx={{ px: 3, pt: 3, pb: 1 }}>
+        {/* Step indicators */}
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2.5 }}>
+          {[
+            { num: 1, label: "Paste URI", active: status === "idle" || status === "connecting" },
+            { num: 2, label: "Connecting", active: status === "connecting" },
+            { num: 3, label: "Approve", active: status === "success" },
+          ].map((step, i) => (
+            <React.Fragment key={step.num}>
+              <Stack direction="row" alignItems="center" spacing={0.75}>
+                <Box sx={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.65rem',
+                  fontWeight: 800,
+                  bgcolor: step.active ? '#6366f1' : 'action.hover',
+                  color: step.active ? '#fff' : 'text.disabled',
+                  transition: 'all 0.3s',
+                }}>
+                  {step.num}
+                </Box>
+                <Typography variant="caption" sx={{
+                  fontWeight: 600,
+                  fontSize: '0.7rem',
+                  color: step.active ? 'text.primary' : 'text.disabled',
+                  transition: 'color 0.3s',
+                }}>
+                  {step.label}
+                </Typography>
+              </Stack>
+              {i < 2 && (
+                <Box sx={{
+                  flex: 1,
+                  height: 1,
+                  bgcolor: i === 0 && (status === "connecting" || status === "success") ? '#6366f1' : 'divider',
+                  transition: 'background-color 0.3s',
+                }} />
+              )}
+            </React.Fragment>
+          ))}
+        </Stack>
+
+        {/* URI Input Card */}
+        <Paper
+          elevation={0}
           sx={{
-            '& .MuiOutlinedInput-root': {
-              borderRadius: 3,
-              fontFamily: 'monospace',
-              fontSize: '0.85rem',
+            p: 2,
+            borderRadius: 3,
+            border: '1px solid',
+            borderColor: uri ? 'primary.main' : 'divider',
+            bgcolor: 'action.hover',
+            transition: 'border-color 0.2s',
+          }}
+        >
+          <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            display: 'block',
+            mb: 1,
+            fontSize: '0.65rem',
+          }}>
+            Connection URI
+          </Typography>
+          <TextField
+            autoFocus
+            fullWidth
+            placeholder="wc:a1b2c3d4..."
+            value={uri}
+            onChange={e => setUri(e.target.value)}
+            multiline
+            maxRows={4}
+            minRows={2}
+            variant="standard"
+            InputProps={{
+              disableUnderline: true,
+              style: {
+                fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+                fontSize: '0.8rem',
+                lineHeight: 1.6,
+                color: uri ? 'inherit' : undefined,
+              },
+            }}
+            disabled={loading}
+          />
+        </Paper>
+
+        {/* Status Feedback */}
+        {msg && (
+          <Fade in>
+            <Paper
+              elevation={0}
+              sx={{
+                mt: 2,
+                p: 1.5,
+                borderRadius: 2.5,
+                bgcolor: statusColors[status].bg,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+              }}
+            >
+              {statusIcons[status]}
+              <Typography
+                variant="caption"
+                fontWeight={700}
+                sx={{ color: statusColors[status].text, fontSize: '0.78rem' }}
+              >
+                {msg}
+              </Typography>
+            </Paper>
+          </Fade>
+        )}
+      </Box>
+
+      {/* ─── Actions ─── */}
+      <Box sx={{ px: 3, pt: 1.5, pb: 3 }}>
+        <Button
+          fullWidth
+          variant="contained"
+          size="large"
+          onClick={handleConnect}
+          disabled={loading || !uri.trim()}
+          sx={{
+            borderRadius: 3,
+            py: 1.5,
+            fontWeight: 700,
+            fontSize: '0.95rem',
+            textTransform: 'none',
+            background: 'linear-gradient(135deg, #3396FF 0%, #6366f1 100%)',
+            boxShadow: '0 4px 14px rgba(51, 150, 255, 0.35)',
+            transition: 'all 0.2s',
+            '&:hover': {
+              background: 'linear-gradient(135deg, #2680E0 0%, #4f46e5 100%)',
+              boxShadow: '0 8px 24px rgba(51, 150, 255, 0.4)',
+              transform: 'translateY(-1px)',
+            },
+            '&.Mui-disabled': {
+              background: '#e0e0e0',
+              boxShadow: 'none',
             }
           }}
-        />
-        {msg && (
-          <Typography
-            color={msg.includes("fail") || msg.includes("Expired") ? "error" : "success.main"}
-            variant="caption"
-            fontWeight={600}
-            sx={{ mt: 1, display: 'block' }}
-          >
-            {msg}
-          </Typography>
-        )}
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button onClick={onClose} sx={{ fontWeight: 600 }}>Cancel</Button>
-        <Button
-          onClick={handleConnect}
-          disabled={loading || !uri}
-          variant="contained"
-          sx={{ borderRadius: 3, fontWeight: 600, px: 3 }}
-          endIcon={loading ? <CircularProgress size={16} color="inherit" /> : null}
+          endIcon={loading ? <CircularProgress size={18} color="inherit" /> : null}
         >
           {loading ? "Connecting..." : "Connect"}
         </Button>
-      </DialogActions>
+
+        <Button
+          fullWidth
+          onClick={handleClose}
+          disabled={loading}
+          sx={{
+            mt: 1,
+            borderRadius: 3,
+            py: 1,
+            fontWeight: 600,
+            textTransform: 'none',
+            color: 'text.secondary',
+            '&:hover': { bgcolor: 'action.hover' },
+          }}
+        >
+          Cancel
+        </Button>
+      </Box>
     </Dialog>
   );
 }

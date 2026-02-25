@@ -2,10 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   Typography,
   Box,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemAvatar,
   Avatar,
   Paper,
   Stack,
@@ -38,6 +34,51 @@ const demoData = [
   { x: 4, y: 1.5 },
   { x: 5, y: 5 },
 ];
+
+import { getAddress } from "ethers";
+
+const KNOWN_LOGOS: Record<string, string> = {
+  "ETH": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png",
+  "WETH": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png",
+  "cETH": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png",
+  "USDC": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+  "cUSDC": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+  "USDT": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png",
+  "LINK": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x514910771AF9Ca656af840dff83E8264EcF986CA/logo.png",
+  "EURC": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c/logo.png"
+};
+
+// Token logo resolver: Alchemy → TrustWallet CDN → symbol fallback
+const getTokenLogoUrl = (contractAddress: string, logoSrc?: string, symbol?: string, name?: string): string => {
+  // 1. Use Alchemy logo if available (skip broken local placeholders like /logos/eth.png)
+  if (logoSrc && logoSrc.length > 0 && !logoSrc.startsWith("/logos/")) return logoSrc;
+
+  // 2. Known tokens by symbol
+  if (symbol && KNOWN_LOGOS[symbol]) return KNOWN_LOGOS[symbol];
+  if (contractAddress === "ETH" || name === "Ethereum") return KNOWN_LOGOS["ETH"];
+
+  // 3. TrustWallet assets CDN (requires checksummed address)
+  if (contractAddress && contractAddress.startsWith("0x")) {
+    try {
+      const checksummed = getAddress(contractAddress);
+      return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/${checksummed}/logo.png`;
+    } catch {
+      return "";
+    }
+  }
+  return "";
+};
+
+
+// Generate a deterministic color from a string
+const stringToColor = (str: string): string => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 55%, 50%)`;
+};
 
 function Home() {
   const wallet_context = React.useContext(WalletContext);
@@ -74,24 +115,41 @@ function Home() {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (forceRefresh = false) => {
     if (!wallet_context || !active_context) return;
+
+    const net = wallet_context.networkProvider.getActiveNetwork();
+    if (!net) return;
+
+    const address = active_context.activeAccount?.GetAddress();
+    if (!address) return;
+
+    // ── Cache check: skip API calls if data is fresh ──
+    const dataCache = wallet_context.dataCacheService;
+    if (!forceRefresh && dataCache) {
+      const cached = dataCache.get(address, activeNetworkId);
+      if (cached) {
+        console.log("[Home] Using cached data (age: " + Math.round((dataCache.getAge(address, activeNetworkId) ?? 0) / 1000) + "s)");
+        setBalances(cached.balances);
+        setTokens(cached.tokens);
+        setPrices(cached.prices);
+        setTotalBalanceUsd(cached.totalUsd);
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
-      const net = wallet_context.networkProvider.getActiveNetwork();
-      if (!net) return;
 
-      const address = active_context.activeAccount?.GetAddress();
-      if (!address) return;
-
-      // Initialize cofhejs (TRUE FHE) if on Sepolia
-      if (activeNetworkId === NetworkId.Ethereum_Sepolia && active_context.activeAccount) {
+      // Initialize cofhejs (TRUE FHE) if on a FHE-enabled network
+      const isFheNetwork = activeNetworkId === NetworkId.Ethereum_Sepolia || activeNetworkId === NetworkId.Arbitrum_Sepolia;
+      if (isFheNetwork && active_context.activeAccount) {
         try {
           const { default: FheCofheService } = await import("../backend/FheCofheService.js");
           const instance = FheCofheService.getInstance();
 
-          if (!instance.isReadyForAccount(address)) {
+          if (!instance.isReadyForAccount(address, activeNetworkId)) {
             console.log("[Home] Initializing cofhejs (TRUE FHE) for account:", address);
             const ethers = await import("ethers");
             const provider = new ethers.JsonRpcProvider(net.rpc_url);
@@ -114,8 +172,12 @@ function Home() {
 
       // 2. Fetch Wrapped Token Balances (Only on Sepolia)
       const wrappedBalances: any[] = [];
-      const WRAPPED_USDC_ADDRESS = (import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS?.toLowerCase();
-      const WRAPPED_ETH_ADDRESS = (import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS?.toLowerCase();
+      const WRAPPED_USDC_ADDRESS = activeNetworkId === NetworkId.Arbitrum_Sepolia
+        ? ((import.meta as any).env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase()
+        : ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+      const WRAPPED_ETH_ADDRESS = activeNetworkId === NetworkId.Arbitrum_Sepolia
+        ? ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase()
+        : ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
       const IGNORED_CONTRACTS = [
         "0xbde0a2e375b67c802d4651fecf3b678b1886d15b", // SimpleWrappedUSDC (old)
         "0x3e0722a877e52fe755e8bf02372342c63930fd57", // MockFHEWrappedUSDC (old)
@@ -133,7 +195,7 @@ function Home() {
         "0x2210264a3775d5fbc51b1b73667f5590230ac2bd"  // WrappedUSDC_V2 (plaintext leak in transfer)
       ];
 
-      if (activeNetworkId === NetworkId.Ethereum_Sepolia) {
+      if (isFheNetwork) {
         // Fetch Wrapped USDC - Always show, even if balance is 0
         if (WRAPPED_USDC_ADDRESS) {
           console.log("[Home] Fetching wrapped USDC balance...", WRAPPED_USDC_ADDRESS);
@@ -229,10 +291,11 @@ function Home() {
       // We render the tokens immediately with 0 price, then update later.
       const initialDisplay = allBalances.map(tb => {
         const cachedMeta = wallet_context.tokenCache.getToken(activeNetworkId, tb.contractAddress);
+        const sym = cachedMeta?.symbol ?? (tb.isNative ? "ETH" : "???");
         return {
           name: cachedMeta?.name ?? (tb.isNative ? "Ethereum" : "Unknown Token"),
-          symbol: cachedMeta?.symbol ?? (tb.isNative ? "ETH" : "???"),
-          logoSrc: cachedMeta?.logoSrc ?? (tb.isNative ? "/logos/eth.png" : ""),
+          symbol: sym,
+          logoSrc: getTokenLogoUrl(tb.contractAddress, cachedMeta?.logoSrc, sym),
           contractAddress: tb.contractAddress,
           decimals: cachedMeta?.decimals ?? 18,
           isShielded: tb.isShielded ?? false
@@ -325,17 +388,41 @@ function Home() {
       setBalances(balanceMap);
       setTotalBalanceUsd(totalUsd);
 
+      // ── Store final display data in cache ──
+      // (tokens will be set below, so we store after final token list is determined)
+
       const cached = wallet_context.tokenCache.getAllTokens(activeNetworkId) ?? [];
 
       // FIX: Use 'balanceMap' (local var) instead of 'balances' (stale state)
-      // Filter out old wrapped USDC contracts
-      const displayTokens = cached.filter(t => {
-        if (IGNORED_CONTRACTS.includes(t.contractAddress.toLowerCase())) return false; // IGNORE OLD
-        if (t.symbol === "ETH") return true;
-        // Check local map
+      // We must ensure that any token with a positive balance in balanceMap is displayed,
+      // even if it wasn't in the initial 'cached' list (which often misses wrapped tokens if they have 0 public balance)
+
+      const tokensToDisplay: any[] = [];
+      const seenContracts = new Set<string>();
+
+      // 1. Add all tokens from cache that have > 0 balance or are ETH
+      cached.forEach(t => {
+        if (IGNORED_CONTRACTS.includes(t.contractAddress.toLowerCase())) return;
         const entry = balanceMap[t.contractAddress];
-        return entry && parseFloat(entry.tokenBalance) > 0;
+        if (t.symbol === "ETH" || (entry && parseFloat(entry.tokenBalance) > 0)) {
+          tokensToDisplay.push(t);
+          seenContracts.add(t.contractAddress);
+        }
       });
+
+      // 2. Add any wrapped tokens (like cUSDC) that we explicitly fetched and have > 0 balance,
+      // but were NOT in the cached public list
+      wrappedBalances.forEach(wb => {
+        if (!seenContracts.has(wb.contractAddress) && parseFloat(wb.tokenBalance) > 0) {
+          const meta = wallet_context.tokenCache.getToken(activeNetworkId, wb.contractAddress);
+          if (meta) {
+            tokensToDisplay.push(meta);
+            seenContracts.add(wb.contractAddress);
+          }
+        }
+      });
+
+      const displayTokens = tokensToDisplay;
 
       // Update the list or fallback to showing what we found in balances if cache is desync
       if (displayTokens.length > 0) {
@@ -354,6 +441,27 @@ function Home() {
           isShielded: b.isShielded ?? false
         }));
         setTokens(fallback);
+      }
+
+      // ── Persist to cache for next mount ──
+      if (dataCache) {
+        const finalTokens = displayTokens.length > 0
+          ? displayTokens.map(t => ({ ...t, isShielded: balanceMap[t.contractAddress]?.isShielded ?? false }))
+          : Object.values(balanceMap).map((b: any) => ({
+            name: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.name ?? (b.isNative ? "Ethereum" : "Token"),
+            symbol: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.symbol ?? (b.isNative ? "ETH" : "???"),
+            logoSrc: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.logoSrc ?? "",
+            contractAddress: b.contractAddress,
+            decimals: 18,
+            isShielded: b.isShielded ?? false
+          }));
+        dataCache.set(address, activeNetworkId, {
+          balances: balanceMap,
+          tokens: finalTokens,
+          prices: currentPrices,
+          totalUsd,
+        });
+        console.log("[Home] Data cached for", address, activeNetworkId);
       }
 
     } catch (err) {
@@ -387,7 +495,19 @@ function Home() {
             fontWeight: 600
           }}
         >
-          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: activeNetworkId === NetworkId.Ethereum_Mainnet ? '#10b981' : '#f59e0b', mr: 1 }} />
+          <Box sx={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            bgcolor: activeNetworkId === NetworkId.Ethereum_Mainnet ? '#10b981' :
+              activeNetworkId === NetworkId.Ethereum_Sepolia ? '#f59e0b' :
+                activeNetworkId === NetworkId.Arbitrum_One ? '#2563eb' :
+                  activeNetworkId === NetworkId.Arbitrum_Sepolia ? '#60a5fa' :
+                    activeNetworkId === NetworkId.Base_Mainnet ? '#0052ff' :
+                      activeNetworkId === NetworkId.Base_Sepolia ? '#93c5fd' :
+                        '#94a3b8',
+            mr: 1
+          }} />
           {activeNetwork?.network_name}
         </Button>
         <Menu
@@ -402,10 +522,36 @@ function Home() {
           <MenuItem onClick={() => handleNetworkClose(NetworkId.Ethereum_Sepolia)}>
             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#f59e0b', mr: 1 }} /> Sepolia
           </MenuItem>
+          <MenuItem onClick={() => handleNetworkClose(NetworkId.Arbitrum_One)}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#2563eb', mr: 1 }} /> Arbitrum One
+          </MenuItem>
+          <MenuItem onClick={() => handleNetworkClose(NetworkId.Arbitrum_Sepolia)}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#60a5fa', mr: 1 }} /> Arbitrum Sepolia
+          </MenuItem>
+          <MenuItem onClick={() => handleNetworkClose(NetworkId.Base_Mainnet)}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#0052ff', mr: 1 }} /> Base Mainnet
+          </MenuItem>
+          <MenuItem onClick={() => handleNetworkClose(NetworkId.Base_Sepolia)}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#93c5fd', mr: 1 }} /> Base Sepolia
+          </MenuItem>
         </Menu>
 
-        <IconButton onClick={fetchData} disabled={loading} sx={{ bgcolor: 'background.paper', ml: 1 }}>
-          <Refresh className={loading ? "animate-spin" : ""} />
+        <IconButton
+          onClick={() => fetchData(true)}
+          disabled={loading}
+          sx={{
+            bgcolor: 'background.paper',
+            ml: 1,
+            '& svg': {
+              animation: loading ? 'spin 1.5s linear infinite' : 'none'
+            },
+            '@keyframes spin': {
+              '0%': { transform: 'rotate(0deg)' },
+              '100%': { transform: 'rotate(360deg)' }
+            }
+          }}
+        >
+          <Refresh />
         </IconButton>
       </Box>
 
@@ -489,133 +635,200 @@ function Home() {
 
       {/* 3. Assets List */}
       <Box sx={{ px: 2 }}>
-        <Typography variant="h6" sx={{ px: 2, mb: 1, fontWeight: 700, color: 'text.primary' }}>
-          Assets
-        </Typography>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 1, mb: 2 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em' }}>
+            Assets
+          </Typography>
+          {tokens.length > 0 && (
+            <Chip
+              label={`${tokens.length} token${tokens.length !== 1 ? 's' : ''}`}
+              size="small"
+              sx={{
+                height: 22,
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                bgcolor: 'action.hover',
+                color: 'text.secondary',
+              }}
+            />
+          )}
+        </Stack>
 
-        <List disablePadding>
-          {tokens.map((token: any) => {
+        <Box>
+          {tokens.map((token: any, idx: number) => {
             const b = balances[token.contractAddress];
-            const balanceStr = b ? parseFloat(b.tokenBalance).toFixed(4) : "0.0000";
-            const valStr = b?.totalValueUsd ? `$${b.totalValueUsd.toFixed(2)}` : "$0.00";
+            const rawBalance = b ? parseFloat(b.tokenBalance) : 0;
+            const balanceStr = rawBalance > 0
+              ? (rawBalance < 0.0001 ? '<0.0001' : rawBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }))
+              : '0';
+            const valUsd = b?.totalValueUsd ?? 0;
+            const valStr = valUsd > 0 ? `$${valUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00';
 
             return (
               <AssetItem
-                key={token.contractAddress}
+                key={`${token.contractAddress}-${idx}`}
                 symbol={token.symbol}
                 name={token.name}
                 balance={balanceStr}
                 value={valStr}
-                icon={token.logoSrc}
+                icon={getTokenLogoUrl(token.contractAddress, token.logoSrc, token.symbol, token.name)}
                 isShielded={token.isShielded ?? false}
+                isLast={idx === tokens.length - 1}
               />
             );
           })}
-          {/* Fallback if no tokens found yet */}
           {tokens.length === 0 && !loading && (
-            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
-              No assets found on this network.
-            </Typography>
+            <Box sx={{
+              textAlign: 'center',
+              py: 6,
+              px: 3,
+              bgcolor: 'background.paper',
+              borderRadius: 3,
+              border: '1px dashed',
+              borderColor: 'divider'
+            }}>
+              <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                No assets found on this network
+              </Typography>
+            </Box>
           )}
-        </List>
+        </Box>
       </Box>
 
     </Box>
   );
 }
 
-// Helper Components
-function ActionButton({ icon, label, onClick }: { icon: any, label: string, onClick: () => void }) {
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-      <Button
-        onClick={onClick}
-        variant="text"
-        sx={{
-          width: 56,
-          height: 56,
-          borderRadius: 4,
-          minWidth: 'auto',
-          bgcolor: 'background.paper',
-          color: 'text.primary',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-          '&:hover': {
-            bgcolor: 'action.hover',
-            transform: 'translateY(-2px)',
-            boxShadow: '0 6px 16px rgba(0,0,0,0.1)'
-          }
-        }}
-      >
-        {icon}
-      </Button>
-      <Typography variant="caption" fontWeight={600} color="text.secondary">{label}</Typography>
-    </Box>
-  );
-}
-
-function AssetItem({ symbol, name, balance, value, icon, isShielded = false }: {
+function AssetItem({ symbol, name, balance, value, icon, isShielded = false, isLast = false }: {
   symbol: string,
   name: string,
   balance: string,
   value: string,
   icon: string,
-  isShielded?: boolean
+  isShielded?: boolean,
+  isLast?: boolean
 }) {
+  const [imgError, setImgError] = useState(false);
+  const fallbackColor = stringToColor(symbol || name);
+
   return (
-    <Paper
-      elevation={0}
+    <Box
       sx={{
-        mb: 1.5,
-        p: 0,
-        borderRadius: 3,
-        overflow: 'hidden',
-        bgcolor: 'background.paper',
-        border: '1px solid rgba(0,0,0,0.04)',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-        transition: 'all 0.2s',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        px: 2,
+        py: 1.5,
+        borderRadius: 2.5,
+        cursor: 'default',
+        transition: 'background-color 0.15s ease',
         '&:hover': {
-          bgcolor: 'action.hover',
-          boxShadow: '0 4px 8px rgba(0,0,0,0.04)',
-        }
+          bgcolor: 'rgba(99, 102, 241, 0.04)',
+        },
+        ...(!isLast && {
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        })
       }}
     >
-      <ListItem>
-        <ListItemAvatar>
-          <Avatar
-            src={icon}
-            sx={{
-              bgcolor: isShielded ? 'rgba(139, 92, 246, 0.1)' : 'rgba(79, 70, 229, 0.1)',
-              color: isShielded ? 'secondary.main' : 'primary.main',
-              width: 42,
-              height: 42,
-            }}
+      {/* Token Logo */}
+      <Box sx={{ position: 'relative', flexShrink: 0 }}>
+        <Avatar
+          src={!imgError ? icon : undefined}
+          onError={() => setImgError(true)}
+          sx={{
+            width: 40,
+            height: 40,
+            bgcolor: imgError || !icon ? fallbackColor : 'transparent',
+            color: '#fff',
+            fontSize: '1rem',
+            fontWeight: 700,
+            border: '2px solid',
+            borderColor: 'divider',
+          }}
+        >
+          {(imgError || !icon) && (symbol ? symbol.substring(0, 2) : '?')}
+        </Avatar>
+        {isShielded && (
+          <Box sx={{
+            position: 'absolute',
+            bottom: -2,
+            right: -2,
+            width: 16,
+            height: 16,
+            borderRadius: '50%',
+            bgcolor: '#10b981',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '2px solid',
+            borderColor: 'background.default',
+          }}>
+            <Shield sx={{ fontSize: 9, color: '#fff' }} />
+          </Box>
+        )}
+      </Box>
+
+      {/* Token Info */}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em' }}
           >
-            {symbol?.[0]}
-          </Avatar>
-        </ListItemAvatar>
-        <ListItemText
-          primary={
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="subtitle1" fontWeight={700} color="text.primary">{symbol}</Typography>
-              {isShielded && (
-                <Chip
-                  icon={<Shield sx={{ fontSize: 12 }} />}
-                  label="Private"
-                  size="small"
-                  color="secondary"
-                  sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
-                />
-              )}
-            </Box>
-          }
-          secondary={<Typography variant="caption" color="text.secondary">{name}</Typography>}
-        />
-        <Box sx={{ textAlign: 'right' }}>
-          <Typography variant="subtitle1" fontWeight={700} color="text.primary">{value}</Typography>
-          <Typography variant="caption" color="text.secondary">{balance} {symbol}</Typography>
+            {symbol}
+          </Typography>
+          {isShielded && (
+            <Chip
+              label="Private"
+              size="small"
+              sx={{
+                height: 18,
+                fontSize: '0.6rem',
+                fontWeight: 700,
+                bgcolor: 'rgba(16, 185, 129, 0.12)',
+                color: '#10b981',
+                '& .MuiChip-label': { px: 0.75 },
+              }}
+            />
+          )}
         </Box>
-      </ListItem>
-    </Paper>
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.secondary',
+            display: 'block',
+            lineHeight: 1.3,
+            fontSize: '0.72rem',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {name}
+        </Typography>
+      </Box>
+
+      {/* Balance & Value */}
+      <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+        <Typography
+          variant="body2"
+          sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em', lineHeight: 1.3 }}
+        >
+          {value}
+        </Typography>
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.secondary',
+            fontSize: '0.72rem',
+            lineHeight: 1.3,
+          }}
+        >
+          {balance} {symbol}
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 

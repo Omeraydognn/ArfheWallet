@@ -3,6 +3,7 @@ import NetworkProvider from "./backend/NetworkProvider.js";
 import AccountManager from "./backend/AccountManager.js";
 import TokenCache from "./backend/TokenCache.js";
 import StorageManager from "./backend/StorageManager.js";
+import DataCacheService from "./backend/DataCacheService.js";
 
 import { WalletConnectService } from "./backend/WalletConnectService";
 
@@ -17,6 +18,8 @@ export class AppContext {
   networkProvider: NetworkProvider;
   // token cache
   tokenCache: TokenCache;
+  // data cache (balances, prices with TTL)
+  dataCacheService: DataCacheService;
   // wallet connect
   walletConnectService: WalletConnectService;
 
@@ -25,6 +28,7 @@ export class AppContext {
     this.accountManager = new AccountManager(this.storageManager);
     this.networkProvider = new NetworkProvider();
     this.tokenCache = new TokenCache();
+    this.dataCacheService = new DataCacheService();
     this.walletConnectService = new WalletConnectService(this.accountManager);
   }
 }
