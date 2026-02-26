@@ -16,6 +16,7 @@ import {
   Grid,
   Button,
   useTheme,
+  alpha
 } from '@mui/material';
 import { ZoomIn, ZoomOut, Search, Clear, Hub, YoutubeSearchedFor, SwapHoriz } from '@mui/icons-material';
 import { WalletContext } from "../AppContext.js";
@@ -309,7 +310,10 @@ const GraphExplorer = () => {
           alignItems: 'center',
           width: '100%',
           borderRadius: 50,
-          bgcolor: 'background.paper'
+          bgcolor: alpha(theme.palette.background.paper, 0.85),
+          backdropFilter: 'blur(20px)',
+          border: '1px solid',
+          borderColor: 'divider',
         }}>
           <InputAdornment position="start" sx={{ pl: 2 }}>
             <Search sx={{ color: 'text.secondary' }} />
@@ -386,9 +390,11 @@ const GraphExplorer = () => {
       <Box sx={{ position: 'absolute', bottom: 120, left: 20, zIndex: 20, pointerEvents: 'none' }}>
         <Paper elevation={3} sx={{
           p: 2,
-          borderRadius: 3,
-          bgcolor: 'background.paper',
-          // backdropFilter: 'blur(10px)', // removed for clearer compatibility
+          borderRadius: 4,
+          bgcolor: alpha(theme.palette.background.paper, 0.85),
+          backdropFilter: 'blur(20px)',
+          border: '1px solid',
+          borderColor: 'divider',
           display: { xs: 'none', md: 'block' }
         }}>
           <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mb: 1, display: 'block' }}>FLOW LEGEND</Typography>
@@ -416,7 +422,10 @@ const GraphExplorer = () => {
           borderRadius: 4, // More rounded
           boxShadow: '0 8px 32px rgba(0,0,0,0.2)', // Stronger shadow for floating effect
           zIndex: 100, // Ensure it's above everything else
-          bgcolor: 'background.paper',
+          bgcolor: alpha(theme.palette.background.paper, 0.85),
+          backdropFilter: 'blur(20px)',
+          border: '1px solid',
+          borderColor: 'divider',
           backgroundImage: 'none', // Override if needed
         }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -501,7 +510,7 @@ const GraphExplorer = () => {
 };
 
 const DataCard = ({ label, value, copyable, highlight }: any) => (
-  <Card variant="outlined" sx={{ bgcolor: 'background.default', border: '1px solid', borderColor: 'divider' }}>
+  <Card variant="outlined" sx={{ bgcolor: 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider', borderRadius: 3 }}>
     <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
       <Typography variant="caption" color="text.secondary">{label}</Typography>
       <Typography variant="body2" fontFamily={copyable ? 'monospace' : 'inherit'} sx={{

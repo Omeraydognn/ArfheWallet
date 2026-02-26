@@ -13,7 +13,9 @@ import {
   Avatar,
   Stack,
   Divider,
-  Tooltip
+  Tooltip,
+  useTheme,
+  alpha
 } from '@mui/material';
 import {
   VerifiedUserRounded,
@@ -283,6 +285,7 @@ const RevokeAlchemyPage = () => {
   const activeAccount = context?.accountManager?.GetActive();
   const network = context?.networkProvider?.getActiveNetwork();
   const wcService = context?.walletConnectService;
+  const theme = useTheme();
 
   const [approvals, setApprovals] = useState<TokenApproval[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -459,30 +462,39 @@ const RevokeAlchemyPage = () => {
 
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-        {/* 🎨 ŞIKALI LOADING SCREEN - Abdullah Gül Üniversitesi Projesi */}
+        {/* 🎨 ŞIKALI LOADING SCREEN */}
         {loading && (
-          <Paper sx={{ p: 4, mb: 3, textAlign: 'center', background: 'linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%)' }}>
-            <SearchRounded sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
-            <Typography variant="h6" fontWeight={600} gutterBottom>
-              {scanMessage || 'Geçmiş izinler taranıyor...'}
+          <Paper sx={{
+            p: 6,
+            mb: 4,
+            textAlign: 'center',
+            borderRadius: 4,
+            background: 'linear-gradient(135deg, rgba(102,126,234,0.05) 0%, rgba(118,75,162,0.05) 100%)',
+            border: '1px solid',
+            borderColor: 'divider',
+            backdropFilter: 'blur(10px)'
+          }}>
+            <SearchRounded sx={{ fontSize: 60, color: 'primary.main', mb: 2, opacity: 0.8 }} />
+            <Typography variant="h6" fontWeight={700} gutterBottom>
+              {scanMessage || 'Scanning past permissions...'}
             </Typography>
-            <LinearProgress
-              variant="determinate"
-              value={scanProgress}
-              sx={{
-                mt: 2,
-                height: 8,
-                borderRadius: 4,
-                transition: 'all 0.3s ease-in-out', // 🔥 Smooth animation
-                '& .MuiLinearProgress-bar': {
-                  background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
-                  transition: 'transform 0.3s ease-in-out' // 🔥 Smooth bar fill
-                }
-              }}
-            />
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-              {scanProgress}% tamamlandı
-            </Typography>
+            <Box sx={{ width: '80%', maxWidth: 400, mx: 'auto', mt: 3 }}>
+              <LinearProgress
+                variant="determinate"
+                value={scanProgress}
+                sx={{
+                  height: 6,
+                  borderRadius: 3,
+                  bgcolor: 'action.hover',
+                  '& .MuiLinearProgress-bar': {
+                    background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
+                  }
+                }}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: 'block', fontWeight: 600 }}>
+                {scanProgress}% complete
+              </Typography>
+            </Box>
           </Paper>
         )}
 
@@ -521,12 +533,14 @@ const RevokeAlchemyPage = () => {
                   sx={{
                     p: 2.5,
                     mb: 1.5,
-                    borderRadius: 3,
+                    borderRadius: 4,
                     border: '1px solid',
-                    borderColor: isExpired ? 'error.light' : 'divider',
-                    bgcolor: isExpired ? 'rgba(239,68,68,0.04)' : 'background.paper',
+                    borderColor: isExpired ? 'error.light' : 'rgba(0,0,0,0.05)',
+                    bgcolor: isExpired ? 'rgba(239,68,68,0.04)' : alpha(theme.palette.background.paper, 0.85),
+                    backdropFilter: 'blur(20px)',
+                    boxShadow: '0 8px 32px -8px rgba(0,0,0,0.08)',
                     transition: 'all 0.2s',
-                    '&:hover': { borderColor: 'primary.main', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' },
+                    '&:hover': { borderColor: 'primary.main', boxShadow: '0 8px 32px 0px rgba(99,102,241,0.15)', transform: 'translateY(-2px)' },
                   }}
                 >
                   <Stack direction="row" alignItems="center" spacing={2}>
@@ -607,8 +621,18 @@ const RevokeAlchemyPage = () => {
           <Box>
             <Typography variant="h6" gutterBottom> Token Permissions ({approvals.length})</Typography>
             {approvals.map((a, i) => (
-              <Paper key={i} sx={{ p: 2, mb: 2, borderLeft: a.isUnlimited ? '4px solid red' : '4px solid #667eea' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+              <Paper key={i} sx={{
+                p: 2.5,
+                mb: 2,
+                borderRadius: 4,
+                bgcolor: alpha(theme.palette.background.paper, 0.85),
+                backdropFilter: 'blur(20px)',
+                boxShadow: '0 8px 32px -8px rgba(0,0,0,0.08)',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderLeft: a.isUnlimited ? '4px solid #ef4444' : '4px solid #6366f1'
+              }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, alignItems: 'center' }}>
                   <Typography fontWeight={600}>{a.tokenSymbol} - {a.tokenName}</Typography>
                   <Chip label={a.isUnlimited ? ' UNLIMITED' : '✓ Limited'} color={a.isUnlimited ? 'error' : 'warning'} size="small" />
                 </Box>
@@ -630,10 +654,19 @@ const RevokeAlchemyPage = () => {
         )}
 
         {!loading && approvals.length === 0 && sessions.length === 0 && (
-          <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'rgba(34, 197, 94, 0.1)' }}>
-            <VerifiedUserRounded sx={{ fontSize: 64, color: '#22c55e', mb: 2 }} />
-            <Typography variant="h6">All Clear!</Typography>
-            <Typography variant="body2" color="text.secondary">No active approvals or connections.</Typography>
+          <Paper sx={{
+            p: 8,
+            textAlign: 'center',
+            bgcolor: alpha(theme.palette.success.main, 0.05),
+            backdropFilter: 'blur(20px)',
+            border: '1px solid',
+            borderColor: alpha(theme.palette.success.main, 0.2),
+            borderRadius: 4,
+            boxShadow: '0 10px 40px -10px rgba(34,197,94,0.1)'
+          }}>
+            <VerifiedUserRounded sx={{ fontSize: 72, color: theme.palette.success.main, mb: 3 }} />
+            <Typography variant="h5" fontWeight={800} gutterBottom>All Clear!</Typography>
+            <Typography variant="body1" color="text.secondary" fontWeight={500}>Your wallet is secure. No active approvals or connections.</Typography>
           </Paper>
         )}
 

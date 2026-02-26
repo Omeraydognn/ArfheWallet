@@ -66,9 +66,12 @@ export default defineConfig({
   base: './',
   server: {
     historyApiFallback: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups'
+    },
     proxy: {
       '/api/1inch': {
-        target: 'https://api.1inch.io/v5.0/1', 
+        target: 'https://api.1inch.io/v5.0/1',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/1inch/, ''),
       },

@@ -2,8 +2,15 @@ import * as React from "react";
 import { Typography, Box, Button, Grid, Alert, Stack, TextField, Paper, Container, IconButton, InputAdornment } from "@mui/material";
 import { AppContext, WalletContext } from "../AppContext.js";
 import { useNavigate } from "react-router";
-import { Visibility, VisibilityOff } from "@mui/icons-material";
+import { Visibility, VisibilityOff, Google } from "@mui/icons-material";
 import { Mnemonic } from "ethers";
+
+// --- Web3Auth Imports ---
+import { Web3Auth } from "@web3auth/modal";
+import { CHAIN_NAMESPACES, WEB3AUTH_NETWORK } from "@web3auth/base";
+import { EthereumPrivateKeyProvider } from "@web3auth/ethereum-provider";
+
+const clientId = "BPi5PB_UiIZ-cPz1GtV5i1I2iOSOHuimiXBI0e-Oe_u6X3oVAbCiAZOTEBtTXw4tsluTITPqA8zMsfxIKMjiqNQ"; // Web3Auth public testing clientId
 
 enum AuthStep {
   CHOICE,
@@ -108,7 +115,9 @@ function ImportWallet({ accountManager, onDone }) {
   const [mnemonic, setMnemonic] = React.useState("");
   const [error, setError] = React.useState(null);
 
-  const handleImport = () => {
+  const [isScanning, setIsScanning] = React.useState(false);
+
+  const handleImport = async () => {
     if (!accountManager) return;
 
     if (!Mnemonic.isValidMnemonic(mnemonic.trim())) {
@@ -116,15 +125,27 @@ function ImportWallet({ accountManager, onDone }) {
       return;
     }
 
+    setIsScanning(true);
     try {
       const index = accountManager.ImportAccount(mnemonic.trim());
       if (index === -1) {
         setError("Failed to import account.");
+        setIsScanning(false);
         return;
       }
+
+      const rpcs = [
+        (import.meta as any).env.VITE_ALCHEMY_MAINNET_API_KEY || "https://cloudflare-eth.com",
+        (import.meta as any).env.VITE_ALCHEMY_SEPOLIA_API_KEY || "https://rpc.sepolia.org",
+        (import.meta as any).env.VITE_ALCHEMY_ARBSEPOLIA_API_KEY || "https://sepolia-rollup.arbitrum.io/rpc",
+        (import.meta as any).env.VITE_ALCHEMY_BASESEPOLIA_API_KEY || "https://sepolia.base.org"
+      ];
+      await accountManager.AutoDiscoverAccounts(rpcs, 3, index);
+
       onDone();
-    } catch (e) {
+    } catch (e: any) {
       setError(e.message);
+      setIsScanning(false);
     }
   };
 
@@ -162,10 +183,11 @@ function ImportWallet({ accountManager, onDone }) {
         variant="contained"
         fullWidth
         onClick={handleImport}
+        disabled={!accountManager || isScanning}
         size="large"
         sx={{ mt: 3, borderRadius: 3, height: 48 }}
       >
-        Import Wallet
+        {isScanning ? "Scanning Derived Accounts..." : "Import Wallet"}
       </Button>
     </Box>
   );
@@ -267,6 +289,7 @@ export default function Auth() {
 
   const [step, setStep] = React.useState(AuthStep.CHOICE);
   const [accountExists, setAccountExists] = React.useState(false);
+  const [isSocialLoading, setIsSocialLoading] = React.useState(false);
 
   React.useEffect(() => {
     if (!accountManager) return;
@@ -307,10 +330,10 @@ export default function Auth() {
           <Box sx={{ textAlign: 'center', mb: 4 }}>
             <Typography variant="h5" fontWeight={800} letterSpacing={1} sx={{
               background: 'linear-gradient(90deg, #fff, #6366f1, #fff)',
-        backgroundSize: '200% auto',
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-        animation: 'shine 3s linear infinite'
+              backgroundSize: '200% auto',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              animation: 'shine 3s linear infinite'
             }}>
               ARFHE WALLET
             </Typography>
@@ -325,11 +348,92 @@ export default function Auth() {
                   <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 2 }}>
                     Welcome to the next generation of privacy-first crypto wallets.
                   </Typography>
+
                   <Button
+                    fullWidth
                     variant="contained"
+                    disabled={isSocialLoading}
+                    onClick={async () => {
+                      setIsSocialLoading(true);
+                      try {
+                        const chainConfig = {
+                          chainNamespace: CHAIN_NAMESPACES.EIP155,
+                          chainId: "0x1", // Mainnet
+                          rpcTarget: (import.meta as any).env.VITE_ALCHEMY_MAINNET_API_KEY || "https://cloudflare-eth.com", // Alchemy RPC
+                          displayName: "Ethereum Mainnet",
+                          blockExplorerUrl: "https://etherscan.io",
+                          ticker: "ETH",
+                          tickerName: "Ethereum",
+                        };
+
+                        const privateKeyProvider = new EthereumPrivateKeyProvider({ config: { chainConfig } });
+
+                        const web3auth = new Web3Auth({
+                          clientId,
+                          web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_MAINNET,
+                          privateKeyProvider,
+                        });
+
+                        await web3auth.initModal();
+                        await web3auth.connect();
+
+                        if (web3auth.provider) {
+                          const privateKey = await web3auth.provider.request({ method: "eth_private_key" }) as string;
+                          let accountName = "Social Account";
+                          try {
+                            const userInfo = await web3auth.getUserInfo();
+                            if (userInfo.email) {
+                              accountName = userInfo.email;
+                            } else if (userInfo.name) {
+                              accountName = userInfo.name;
+                            }
+                          } catch (e) {
+                            console.warn("Could not fetch user info from Web3Auth", e);
+                          }
+
+                          if (privateKey) {
+                            const importedIndex = accountManager?.ImportPrivateKey(privateKey, accountName);
+
+                            const rpcs = [
+                              chainConfig.rpcTarget,
+                              (import.meta as any).env.VITE_ALCHEMY_SEPOLIA_API_KEY || "https://rpc.sepolia.org",
+                              (import.meta as any).env.VITE_ALCHEMY_ARBSEPOLIA_API_KEY || "https://sepolia-rollup.arbitrum.io/rpc",
+                              (import.meta as any).env.VITE_ALCHEMY_BASESEPOLIA_API_KEY || "https://sepolia.base.org"
+                            ];
+                            await accountManager?.AutoDiscoverAccounts(rpcs, 3, importedIndex);
+
+                            handleDone();
+                          }
+                        }
+                      } catch (error) {
+                        console.error("Web3Auth Login error:", error);
+                      } finally {
+                        setIsSocialLoading(false);
+                      }
+                    }}
+                    startIcon={<Google />}
+                    sx={{
+                      borderRadius: 3,
+                      height: 48,
+                      bgcolor: '#0f172a',
+                      color: 'white',
+                      '&:hover': { bgcolor: '#1e293b' }
+                    }}
+                  >
+                    {isSocialLoading ? "Connecting & Scanning..." : "Continue with Social"}
+                  </Button>
+
+                  <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
+                    <Box sx={{ flex: 1, height: '1px', bgcolor: 'grey.300' }} />
+                    <Typography variant="caption" sx={{ px: 2, color: 'text.secondary', fontWeight: 600 }}>OR</Typography>
+                    <Box sx={{ flex: 1, height: '1px', bgcolor: 'grey.300' }} />
+                  </Box>
+
+                  <Button
+                    variant="outlined"
                     size="large"
                     onClick={() => setStep(AuthStep.CREATE)}
-                    sx={{ borderRadius: 3, height: 48 }}
+                    sx={{ borderRadius: 3, height: 48, borderColor: '#e5e7eb', color: 'text.primary' }}
                   >
                     Create New Wallet
                   </Button>

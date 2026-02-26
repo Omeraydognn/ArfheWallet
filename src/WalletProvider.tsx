@@ -28,22 +28,34 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [appContext.accountManager, appContext.networkProvider]);
 
   // --- Auto-Lock Feature ---
-  const AUTO_LOCK_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-
   React.useEffect(() => {
     let timeoutId: NodeJS.Timeout;
 
+    // Default to 5 minutes, read from storage if available
+    const getTimeout = () => {
+      const saved = appContext.storageManager.getLocal<number>('autoLockTimeout');
+      if (typeof saved === 'number') {
+        return saved;
+      }
+      return 5 * 60 * 1000;
+    };
+
     const resetTimer = () => {
       clearTimeout(timeoutId);
+      const currentTimeout = getTimeout();
+      if (currentTimeout <= 0) return; // 0 or negative means never lock
+
       // Only lock if we are NOT already on the auth or splash screens
       if (location.pathname !== '/auth' && location.pathname !== '/') {
         timeoutId = setTimeout(() => {
           // Lock the wallet by removing the session password and redirecting
           appContext.storageManager.removeLocal('passwd');
           navigate('/auth', { replace: true });
-        }, AUTO_LOCK_TIMEOUT);
+        }, currentTimeout);
       }
     };
+
+    const handleStorageUpdate = () => resetTimer();
 
     // Listeners for user activity
     window.addEventListener('mousemove', resetTimer);
@@ -51,6 +63,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('click', resetTimer);
     window.addEventListener('scroll', resetTimer);
     window.addEventListener('touchstart', resetTimer);
+    window.addEventListener('autolock_updated', handleStorageUpdate);
 
     // Initial set
     resetTimer();
@@ -62,6 +75,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('click', resetTimer);
       window.removeEventListener('scroll', resetTimer);
       window.removeEventListener('touchstart', resetTimer);
+      window.removeEventListener('autolock_updated', handleStorageUpdate);
     };
   }, [navigate, location.pathname, appContext.storageManager]);
 

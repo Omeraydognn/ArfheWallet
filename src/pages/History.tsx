@@ -16,7 +16,10 @@ import {
   alpha,
   useTheme,
   Button,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogContent,
+  IconButton
 } from "@mui/material";
 import {
   Lock,
@@ -27,9 +30,13 @@ import {
   SwapVert,
   OpenInNew,
   FilterList,
+  Close,
+  ContentCopy,
+  ReceiptLong,
 } from "@mui/icons-material";
 import { WalletContext } from "../AppContext";
 import { TransactionHistory } from "../backend/NetworkTypes";
+import { useToast } from "../components/ToastProvider";
 
 type FilterType = "all" | "confidential" | "public";
 
@@ -44,6 +51,8 @@ export default function History() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [nextBlock, setNextBlock] = useState<string | undefined>(undefined);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [selectedTx, setSelectedTx] = useState<TransactionHistory | null>(null);
+  const { showToast } = useToast();
 
   const theme = useTheme();
 
@@ -206,11 +215,14 @@ export default function History() {
         <Paper
           elevation={0}
           sx={{
-            borderRadius: 3,
-            bgcolor: "background.paper",
+            borderRadius: 4,
+            bgcolor: "rgba(255, 255, 255, 0.85)",
+            backdropFilter: "blur(20px)",
             border: "1px solid",
-            borderColor: "divider",
+            borderColor: "rgba(0,0,0,0.05)",
+            boxShadow: "0 10px 40px -10px rgba(0,0,0,0.05)",
             overflow: "hidden",
+            mb: 4
           }}
         >
           {/* Loading State */}
@@ -230,13 +242,14 @@ export default function History() {
 
           {/* Empty State */}
           {!loading && filteredTransactions.length === 0 && (
-            <Box sx={{ p: 5, textAlign: "center" }}>
-              <Typography variant="body1" color="text.secondary" fontWeight={500}>
+            <Box sx={{ p: 8, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <ReceiptLong sx={{ fontSize: 64, color: "text.disabled", mb: 2, opacity: 0.5 }} />
+              <Typography variant="h6" color="text.secondary" fontWeight={700}>
                 {activeFilter === "confidential"
-                  ? "No confidential transactions found"
+                  ? "No Confidential Transactions"
                   : activeFilter === "public"
-                    ? "No public transactions found"
-                    : "No transactions found"}
+                    ? "No Public Transactions"
+                    : "No Transactions Yet"}
               </Typography>
               <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: "block" }}>
                 {activeFilter !== "all"
@@ -273,13 +286,12 @@ export default function History() {
                   key={`${tx.hash}-${index}`}
                   disablePadding
                   sx={{
-                    borderBottom:
-                      index < filteredTransactions.length - 1 ? "1px solid" : "none",
-                    borderColor: "divider",
+                    borderBottom: index < filteredTransactions.length - 1 ? "1px solid" : "none",
+                    borderColor: "rgba(0,0,0,0.04)",
                   }}
                 >
                   <ListItemButton
-                    onClick={() => window.open(tx.explorerUrl, "_blank")}
+                    onClick={() => setSelectedTx(tx)}
                     sx={{
                       py: 1.5,
                       px: 2,
@@ -436,6 +448,134 @@ export default function History() {
           </Box>
         )}
       </Container>
+
+      {/* Transaction Details Modal */}
+      {selectedTx && (
+        <Dialog
+          open={Boolean(selectedTx)}
+          onClose={() => setSelectedTx(null)}
+          fullWidth
+          maxWidth="sm"
+          PaperProps={{
+            sx: {
+              borderRadius: 4,
+              overflow: "hidden",
+              backgroundImage: "none",
+              bgcolor: "background.paper",
+              boxShadow: "0 24px 48px rgba(0,0,0,0.15)",
+            },
+          }}
+        >
+          {/* Header */}
+          <Box
+            sx={{
+              p: 3,
+              pb: 2,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              bgcolor: "primary.main",
+              color: "white",
+            }}
+          >
+            <Typography variant="h6" fontWeight={700}>
+              Transaction Details
+            </Typography>
+            <IconButton size="small" onClick={() => setSelectedTx(null)} sx={{ color: "white" }}>
+              <Close />
+            </IconButton>
+          </Box>
+
+          <DialogContent sx={{ p: 4 }}>
+            <Stack spacing={3}>
+              <Box textAlign="center">
+                <Typography variant="caption" color="text.secondary" fontWeight={600} textTransform="uppercase" letterSpacing={1}>
+                  Status
+                </Typography>
+                <Box mt={0.5}>
+                  <Chip
+                    label={selectedTx.status}
+                    color={selectedTx.status === "Success" ? "success" : "error"}
+                    sx={{ fontWeight: 700, borderRadius: 2 }}
+                  />
+                </Box>
+              </Box>
+
+              <Box sx={{ p: 2, bgcolor: "action.hover", borderRadius: 3 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="body2" color="text.secondary">Date & Time</Typography>
+                  <Typography variant="body2" fontWeight={600}>{new Date(selectedTx.timestamp).toLocaleString()}</Typography>
+                </Stack>
+              </Box>
+
+              <Stack spacing={1}>
+                {/* Hash */}
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>Transaction Hash</Typography>
+                <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <Typography variant="body2" sx={{ fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", mr: 2 }}>
+                    {selectedTx.hash}
+                  </Typography>
+                  <IconButton size="small" onClick={() => {
+                    navigator.clipboard.writeText(selectedTx.hash);
+                    showToast("Hash copied!", "success");
+                  }}>
+                    <ContentCopy fontSize="small" />
+                  </IconButton>
+                </Paper>
+
+                {/* From / To */}
+                <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mt: 2 }}>From / To</Typography>
+                <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+                  <Stack spacing={1.5}>
+                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                      <Typography variant="body2" color="text.secondary">From:</Typography>
+                      <Box display="flex" alignItems="center">
+                        <Typography variant="body2" sx={{ fontFamily: "monospace", mr: 1, ...((selectedTx.from.toLowerCase() === userAddress) && { fontWeight: 700, color: 'primary.main' }) }}>
+                          {selectedTx.from.slice(0, 10)}...{selectedTx.from.slice(-8)}
+                        </Typography>
+                        <IconButton size="small" onClick={() => {
+                          navigator.clipboard.writeText(selectedTx.from);
+                          showToast("Address copied!", "success");
+                        }}>
+                          <ContentCopy sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Box>
+                    </Box>
+                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                      <Typography variant="body2" color="text.secondary">To:</Typography>
+                      <Box display="flex" alignItems="center">
+                        <Typography variant="body2" sx={{ fontFamily: "monospace", mr: 1, ...((selectedTx.to.toLowerCase() === userAddress) && { fontWeight: 700, color: 'primary.main' }) }}>
+                          {selectedTx.to ? `${selectedTx.to.slice(0, 10)}...${selectedTx.to.slice(-8)}` : "Contract Creation"}
+                        </Typography>
+                        {selectedTx.to && (
+                          <IconButton size="small" onClick={() => {
+                            navigator.clipboard.writeText(selectedTx.to);
+                            showToast("Address copied!", "success");
+                          }}>
+                            <ContentCopy sx={{ fontSize: 14 }} />
+                          </IconButton>
+                        )}
+                      </Box>
+                    </Box>
+                  </Stack>
+                </Paper>
+              </Stack>
+            </Stack>
+          </DialogContent>
+
+          <Box sx={{ p: 3, pt: 0, display: "flex", justifyContent: "center" }}>
+            <Button
+              variant="outlined"
+              color="primary"
+              endIcon={<OpenInNew />}
+              onClick={() => window.open(selectedTx.explorerUrl, "_blank")}
+              sx={{ borderRadius: 3, px: 4, py: 1, fontWeight: 700, textTransform: "none" }}
+            >
+              View on Block Explorer
+            </Button>
+          </Box>
+        </Dialog>
+      )}
     </Box>
   );
 }

@@ -22,7 +22,9 @@ import {
   DialogContent,
   DialogActions,
   IconButton,
-  Stack
+  Stack,
+  useTheme,
+  alpha
 } from '@mui/material';
 import {
   Bolt,
@@ -61,6 +63,7 @@ const Explore = () => {
   const active_context = useContext(ActiveAccountContext);
   const net = wallet_context?.networkProvider?.getActiveNetwork();
   const myAddress = active_context?.activeAccount?.GetAddress();
+  const theme = useTheme();
 
   // State
   const [loading, setLoading] = useState(true);
@@ -281,7 +284,16 @@ const Explore = () => {
 
           {/* Stats / Sidebar */}
           <Box sx={{ width: { xs: '100%', lg: '30%' }, maxWidth: { lg: 350 } }}>
-            <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
+            <Paper sx={{
+              p: 3,
+              borderRadius: 4,
+              bgcolor: alpha(theme.palette.background.paper, 0.85),
+              backdropFilter: 'blur(20px)',
+              boxShadow: '0 8px 32px -8px rgba(0,0,0,0.08)',
+              border: '1px solid',
+              borderColor: 'divider',
+              backgroundImage: 'none'
+            }}>
               <Typography variant="h6" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
                 <Public sx={{ mr: 1, color: 'primary.main' }} /> Network Status
               </Typography>
@@ -306,7 +318,17 @@ const Explore = () => {
 
           {/* Transactions List */}
           <Box sx={{ flex: 1, width: '100%', overflow: 'hidden' }}>
-            <Paper sx={{ p: 0, borderRadius: 4, overflow: 'hidden', bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
+            <Paper sx={{
+              p: 0,
+              borderRadius: 4,
+              overflow: 'hidden',
+              bgcolor: alpha(theme.palette.background.paper, 0.85),
+              backdropFilter: 'blur(20px)',
+              boxShadow: '0 8px 32px -8px rgba(0,0,0,0.08)',
+              border: '1px solid',
+              borderColor: 'divider',
+              backgroundImage: 'none'
+            }}>
               <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="h6" fontWeight={700}>
                   {viewAddress === myAddress ? "My Transactions" : "Address History"}
@@ -385,8 +407,10 @@ const Explore = () => {
                     ))}
                     {transactions.length === 0 && !loading && (
                       <TableRow>
-                        <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                          <Typography color="text.secondary">No transactions found for this address.</Typography>
+                        <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
+                          <Bolt sx={{ fontSize: 64, color: 'text.disabled', mb: 2, opacity: 0.5 }} />
+                          <Typography variant="h6" color="text.secondary" fontWeight={700}>No transactions found</Typography>
+                          <Typography variant="body2" color="text.disabled">This address hasn't made any transactions yet.</Typography>
                         </TableCell>
                       </TableRow>
                     )}
@@ -403,7 +427,13 @@ const Explore = () => {
           maxWidth="md"
           fullWidth
           PaperProps={{
-            sx: { borderRadius: 4 }
+            sx: {
+              borderRadius: 4,
+              bgcolor: alpha(theme.palette.background.paper, 0.85),
+              backdropFilter: 'blur(20px)',
+              backgroundImage: 'none',
+              boxShadow: '0 16px 40px -8px rgba(0,0,0,0.2)'
+            }
           }}
         >
           {/* Fix: set component="div" to avoid h2 > h6 nesting issues */}

@@ -21,7 +21,10 @@ import {
     IconButton,
     InputAdornment,
     Stack,
-    Chip
+    Chip,
+    Select,
+    MenuItem,
+    FormControl
 } from '@mui/material'; // Vanillla MUI, no Joy/Material-next
 import {
     Security,
@@ -30,16 +33,19 @@ import {
     VisibilityOff,
     ContentCopy,
     Warning,
-    ArrowBack
+    ArrowBack,
+    Timer
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router';
 import { WalletContext } from '../AppContext';
+import { useToast } from '../components/ToastProvider';
 
 export default function SettingsSecurity() {
     const navigate = useNavigate();
     const context = useContext(WalletContext);
     const accountManager = context?.accountManager;
     const storageManager = context?.storageManager;
+    const { showToast } = useToast();
 
     const [selectedAccountIndex, setSelectedAccountIndex] = useState<number | null>(null);
     const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -51,6 +57,12 @@ export default function SettingsSecurity() {
 
     const [showPrivateKey, setShowPrivateKey] = useState(false);
     const [showMnemonic, setShowMnemonic] = useState(false);
+
+    // Auto Lock State
+    const [autoLockTimer, setAutoLockTimer] = useState<number>(() => {
+        const saved = storageManager?.getLocal<number>("autoLockTimeout");
+        return typeof saved === 'number' ? saved : 5 * 60 * 1000;
+    });
 
     // 1. Handle Account Selection
     const handleAccountClick = (index: number) => {
@@ -100,7 +112,14 @@ export default function SettingsSecurity() {
 
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text);
-        // Could add snackbar here
+        showToast("Secret copied to clipboard!", "success");
+    };
+
+    const handleAutoLockChange = (val: number) => {
+        setAutoLockTimer(val);
+        storageManager?.setLocal("autoLockTimeout", val);
+        window.dispatchEvent(new Event("autolock_updated"));
+        showToast("Auto-Lock timer updated", "success");
     };
 
     return (
@@ -150,6 +169,38 @@ export default function SettingsSecurity() {
                         ))}
                     </List>
                 </Paper>
+
+                <Typography variant="h6" fontWeight={700} gutterBottom sx={{ px: 1, mt: 5 }}>
+                    Security Preferences
+                </Typography>
+
+                <Paper elevation={0} sx={{ borderRadius: 4, overflow: 'hidden', mb: 3, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', p: 3 }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Box sx={{ p: 1, bgcolor: 'primary.light', borderRadius: 2, display: 'flex' }}>
+                                <Timer sx={{ color: 'primary.main' }} />
+                            </Box>
+                            <Box>
+                                <Typography variant="body1" fontWeight={700}>Auto-Lock Timer</Typography>
+                                <Typography variant="body2" color="text.secondary">Time before wallet locks due to inactivity</Typography>
+                            </Box>
+                        </Box>
+
+                        <FormControl variant="outlined" size="small" sx={{ minWidth: 140 }}>
+                            <Select
+                                value={autoLockTimer}
+                                onChange={(e) => handleAutoLockChange(Number(e.target.value))}
+                                sx={{ borderRadius: 3, fontWeight: 600 }}
+                            >
+                                <MenuItem value={1 * 60 * 1000}>1 Minute</MenuItem>
+                                <MenuItem value={5 * 60 * 1000}>5 Minutes</MenuItem>
+                                <MenuItem value={15 * 60 * 1000}>15 Minutes</MenuItem>
+                                <MenuItem value={0}>Never</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Stack>
+                </Paper>
+
             </Container>
 
 

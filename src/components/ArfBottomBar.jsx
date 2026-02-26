@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   BottomNavigation,
   BottomNavigationAction,
@@ -20,6 +20,17 @@ export default function ArfBottomBar() {
   const location = useLocation();
   const theme = useTheme();
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpen = (e) => {
+      setDrawerOpen(true);
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('arf-menu-set-tab', { detail: e.detail }));
+      }, 100);
+    };
+    window.addEventListener('open-arf-menu', handleOpen);
+    return () => window.removeEventListener('open-arf-menu', handleOpen);
+  }, []);
 
   // Map path to index for highlighting
   const getSubPath = (path) => {

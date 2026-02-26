@@ -18,10 +18,15 @@ import {
   ListItem,
   ListItemText,
   ListItemButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  TextField,
 } from "@mui/material";
 import { Menu } from "@mui/icons-material";
 import { WalletContext } from "../AppContext.js";
 import { useActiveAccount } from "../ActiveAccountProvider.js";
+import { useToast } from "./ToastProvider.js";
 import "./ArfBar.css";
 import Account from "../backend/Account.js";
 
@@ -35,10 +40,51 @@ function AccountDrawer({ open, onClose }: { open: boolean; onClose: () => void }
   const wallet = React.useContext(WalletContext);
   const { activeIndex, activeAccount, setActiveIndex } = useActiveAccount();
   const navigate = useNavigate();
+  const { showToast } = useToast();
+
+  const [isAddModalOpen, setAddModalOpen] = React.useState(false);
+  const [isImporting, setIsImporting] = React.useState(false);
+  const [importKey, setImportKey] = React.useState("");
 
   if (!wallet) return null;
 
   const accounts = wallet.accountManager.GetAll();
+
+  const handleCreateNew = () => {
+    try {
+      const newIndex = wallet.accountManager.DeriveNewAccount();
+      setActiveIndex(newIndex);
+      showToast("New account derived successfully!", "success");
+      setAddModalOpen(false);
+    } catch (e: any) {
+      showToast(e.message, "error");
+    }
+  };
+
+  const handleImport = () => {
+    try {
+      const key = importKey.trim();
+      if (!key) return;
+
+      let index = -1;
+      if (key.includes(" ")) {
+        // Assume mnemonic if it contains spaces
+        index = wallet.accountManager.ImportAccount(key);
+      } else {
+        // Otherwise, assume private key
+        index = wallet.accountManager.ImportPrivateKey(key, "Imported Account");
+      }
+
+      if (index === -1) throw new Error("Failed to import account. Invalid key or already exists.");
+      setActiveIndex(index);
+      showToast("Account imported successfully!", "success");
+      setAddModalOpen(false);
+      setIsImporting(false);
+      setImportKey("");
+    } catch (e: any) {
+      showToast(e.message, "error");
+    }
+  };
 
   return (
     <Drawer anchor="left" open={open} onClose={onClose}>
@@ -65,7 +111,7 @@ function AccountDrawer({ open, onClose }: { open: boolean; onClose: () => void }
                   </Avatar>
                   <ListItemText
                     primary={acc.GetName()}
-                    secondary={acc.GetAddress().substring(0, 6) + "..." + acc.GetAddress().substring(38)}
+                    secondary={acc.GetShortAddress() ?? "0x000..."}
                     primaryTypographyProps={{ fontSize: 14, fontWeight: 600 }}
                     secondaryTypographyProps={{ fontSize: 12 }}
                   />
@@ -76,18 +122,17 @@ function AccountDrawer({ open, onClose }: { open: boolean; onClose: () => void }
         </Box>
 
         <Box sx={{ p: 2, mt: "auto" }}>
-          <Button
-            variant="outlined"
-            fullWidth
-            startIcon={<Add />}
-            onClick={() => {
-              const newIndex = wallet.accountManager.CreateAccount();
-              setActiveIndex(newIndex);
-            }}
-            sx={{ mb: 1, borderRadius: 3, textTransform: 'none' }}
-          >
-            Add Account
-          </Button>
+          {wallet.accountManager.CanDeriveNewAccount() && (
+            <Button
+              variant="outlined"
+              fullWidth
+              startIcon={<Add />}
+              onClick={() => setAddModalOpen(true)}
+              sx={{ mb: 1, borderRadius: 3, textTransform: 'none' }}
+            >
+              Add Account
+            </Button>
+          )}
 
           <Button
             variant="text"
@@ -103,6 +148,41 @@ function AccountDrawer({ open, onClose }: { open: boolean; onClose: () => void }
           </Button>
         </Box>
       </Box>
+
+      <Dialog open={isAddModalOpen} onClose={() => { setAddModalOpen(false); setIsImporting(false); }} PaperProps={{ sx: { borderRadius: 3, p: 1, minWidth: 320 } }}>
+        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
+          {isImporting ? "Import Wallet" : "Add Account"}
+        </DialogTitle>
+        <DialogContent>
+          {!isImporting ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <Button variant="contained" fullWidth size="large" onClick={handleCreateNew} sx={{ borderRadius: 3, textTransform: 'none', py: 1.5 }}>
+                Create New Account
+              </Button>
+              <Button variant="outlined" fullWidth size="large" onClick={() => setIsImporting(true)} sx={{ borderRadius: 3, textTransform: 'none', py: 1.5 }}>
+                Import Wallet
+              </Button>
+            </Box>
+          ) : (
+            <Box sx={{ mt: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Enter your Private Key or 12-word Secret Recovery Phrase to import an external account.
+              </Typography>
+              <TextField
+                fullWidth
+                label="Private Key / Recovery Phrase"
+                variant="outlined"
+                value={importKey}
+                onChange={(e) => setImportKey(e.target.value)}
+                sx={{ mb: 3 }}
+              />
+              <Button variant="contained" fullWidth size="large" onClick={handleImport} sx={{ borderRadius: 3, textTransform: 'none', py: 1.5 }}>
+                Import
+              </Button>
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
     </Drawer>
   );
 }

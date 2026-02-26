@@ -27,6 +27,7 @@ import {
   Fade
 } from "@mui/material";
 import { WalletContext } from "../AppContext.js";
+import { useToast } from "./ToastProvider";
 import {
   Send as SendIcon,
   QrCode,
@@ -40,8 +41,10 @@ import {
   ArrowForward,
   OpenInNew,
   Visibility,
-  VisibilityOff
+  VisibilityOff,
+  Contacts
 } from "@mui/icons-material";
+import { ContactBookModal } from "./ContactBookModal.js";
 import { isAddress, parseUnits, Interface, formatEther, getAddress } from "ethers";
 import { NetworkId } from "../backend/NetworkTypes.js";
 
@@ -408,6 +411,7 @@ function SendPanel() {
   const [sendTokenAddress, setSendTokenAddress] = useState("ETH");
   const [sendAmount, setSendAmount] = useState("");
   const [isConfidential, setIsConfidential] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
 
   const [status, setStatus] = useState<"idle" | "validating" | "signing" | "broadcasting" | "pending" | "success" | "fail">("idle");
   const [feedbackMsg, setFeedbackMsg] = useState("");
@@ -715,7 +719,12 @@ function SendPanel() {
         <Stack spacing={2}>
           {/* Recipient */}
           <Paper elevation={0} sx={inputCardSx}>
-            <Typography variant="caption" color="text.secondary" fontWeight={600}>Recipient</Typography>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="caption" color="text.secondary" fontWeight={600}>Recipient</Typography>
+              <IconButton size="small" sx={{ p: 0, color: 'text.secondary', '&:hover': { color: 'primary.main' } }} onClick={() => setShowContacts(true)}>
+                <Contacts fontSize="small" />
+              </IconButton>
+            </Stack>
             <TextField
               variant="standard"
               placeholder="0x..."
@@ -839,6 +848,13 @@ function SendPanel() {
           </Button>
         </Stack>
       )}
+
+      {/* Contact Book Modal */}
+      <ContactBookModal
+        open={showContacts}
+        onClose={() => setShowContacts(false)}
+        onSelect={(addr) => setSendAddress(addr)}
+      />
     </Box>
   );
 }
@@ -848,10 +864,12 @@ function ReceivePanel() {
   const context = useContext(WalletContext);
   const address = context?.accountManager?.GetActive()?.GetAddress() ?? "0x0000000000000000000000000000000000000000";
   const [copied, setCopied] = useState(false);
+  const { showToast } = useToast();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(address);
     setCopied(true);
+    showToast("Address copied!", "success");
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -921,6 +939,16 @@ function ReceivePanel() {
 export default function ArfBottomMenu() {
   const [value, setValue] = React.useState(0);
   const [scanOpen, setScanOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleSetTab = (e: any) => {
+      if (e.detail?.tab !== undefined) {
+        setValue(e.detail.tab);
+      }
+    };
+    window.addEventListener('arf-menu-set-tab', handleSetTab as EventListener);
+    return () => window.removeEventListener('arf-menu-set-tab', handleSetTab as EventListener);
+  }, []);
 
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);

@@ -9,7 +9,11 @@ import {
   Chip,
   IconButton,
   Menu,
-  MenuItem
+  MenuItem,
+  Tabs,
+  Tab,
+  useTheme,
+  alpha
 } from "@mui/material";
 import {
   TrendingUp,
@@ -81,6 +85,7 @@ const stringToColor = (str: string): string => {
 };
 
 function Home() {
+  const theme = useTheme();
   const wallet_context = React.useContext(WalletContext);
   const active_context = React.useContext(ActiveAccountContext);
   const navigate = useNavigate();
@@ -96,6 +101,7 @@ function Home() {
   const [totalBalanceUsd, setTotalBalanceUsd] = useState(0.00);
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
+  const [tabIndex, setTabIndex] = useState(0);
 
   // Network Switcher State
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -635,68 +641,107 @@ function Home() {
         </Paper>
       </Box>
 
-      {/* 2. Action Buttons (Removed - Moved to Card) */}
-
-      {/* 3. Assets List */}
+      {/* 3. Assets Tab List */}
       <Box sx={{ px: 2 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 1, mb: 2 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em' }}>
-            Assets
-          </Typography>
-          {tokens.length > 0 && (
-            <Chip
-              label={`${tokens.length} token${tokens.length !== 1 ? 's' : ''}`}
-              size="small"
-              sx={{
-                height: 22,
-                fontSize: '0.7rem',
-                fontWeight: 600,
-                bgcolor: 'action.hover',
-                color: 'text.secondary',
-              }}
-            />
-          )}
-        </Stack>
+        <Tabs
+          value={tabIndex}
+          onChange={(e, v) => setTabIndex(v)}
+          sx={{
+            mb: 2,
+            minHeight: 36,
+            '& .MuiTabs-indicator': { backgroundColor: 'primary.main', height: 3, borderRadius: '3px 3px 0 0' },
+            '& .MuiTab-root': { minHeight: 36, textTransform: 'none', fontWeight: 700, fontSize: '0.9rem', color: 'text.secondary', '&.Mui-selected': { color: 'text.primary' } }
+          }}
+        >
+          <Tab
+            label={
+              <Stack direction="row" spacing={1} alignItems="center">
+                <span>Tokens</span>
+                {tokens.length > 0 && (
+                  <Chip
+                    label={tokens.length}
+                    size="small"
+                    sx={{ height: 18, fontSize: '0.65rem', fontWeight: 800, bgcolor: 'action.hover', color: 'text.secondary' }}
+                  />
+                )}
+              </Stack>
+            }
+          />
+          <Tab label="NFTs" />
+        </Tabs>
 
-        <Box>
-          {tokens.map((token: any, idx: number) => {
-            const b = balances[token.contractAddress];
-            const rawBalance = b ? parseFloat(b.tokenBalance) : 0;
-            const balanceStr = rawBalance > 0
-              ? (rawBalance < 0.0001 ? '<0.0001' : rawBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }))
-              : '0';
-            const valUsd = b?.totalValueUsd ?? 0;
-            const valStr = valUsd > 0 ? `$${valUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00';
+        {tabIndex === 0 && (
+          <Box>
+            {tokens.map((token: any, idx: number) => {
+              const b = balances[token.contractAddress];
+              const rawBalance = b ? parseFloat(b.tokenBalance) : 0;
+              const balanceStr = rawBalance > 0
+                ? (rawBalance < 0.0001 ? '<0.0001' : rawBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }))
+                : '0';
+              const valUsd = b?.totalValueUsd ?? 0;
+              const valStr = valUsd > 0 ? `$${valUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00';
 
-            return (
-              <AssetItem
-                key={`${token.contractAddress}-${idx}`}
-                symbol={token.symbol}
-                name={token.name}
-                balance={balanceStr}
-                value={valStr}
-                icon={getTokenLogoUrl(token.contractAddress, token.logoSrc, token.symbol, token.name)}
-                isShielded={token.isShielded ?? false}
-                isLast={idx === tokens.length - 1}
-              />
-            );
-          })}
-          {tokens.length === 0 && !loading && (
+              return (
+                <AssetItem
+                  key={`${token.contractAddress}-${idx}`}
+                  symbol={token.symbol}
+                  name={token.name}
+                  balance={balanceStr}
+                  value={valStr}
+                  icon={getTokenLogoUrl(token.contractAddress, token.logoSrc, token.symbol, token.name)}
+                  isShielded={token.isShielded ?? false}
+                  isLast={idx === tokens.length - 1}
+                />
+              );
+            })}
+            {tokens.length === 0 && !loading && (
+              <Box sx={{
+                textAlign: 'center',
+                py: 6,
+                px: 3,
+                bgcolor: 'background.paper',
+                borderRadius: 3,
+                border: '1px dashed',
+                borderColor: 'divider'
+              }}>
+                <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                  No assets found on this network
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {tabIndex === 1 && (
+          <Box sx={{
+            textAlign: 'center',
+            py: 8,
+            px: 3,
+            bgcolor: 'background.paper',
+            borderRadius: 3,
+            border: '1px dashed',
+            borderColor: 'divider',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 1
+          }}>
             <Box sx={{
-              textAlign: 'center',
-              py: 6,
-              px: 3,
-              bgcolor: 'background.paper',
-              borderRadius: 3,
-              border: '1px dashed',
-              borderColor: 'divider'
+              width: 64, height: 64, borderRadius: 4,
+              background: 'linear-gradient(45deg, #f3f4f6, #e5e7eb)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              mb: 1
             }}>
-              <Typography variant="body2" color="text.secondary" fontWeight={500}>
-                No assets found on this network
-              </Typography>
+              <Hub sx={{ color: 'text.disabled', fontSize: 32 }} />
             </Box>
-          )}
-        </Box>
+            <Typography variant="subtitle1" color="text.primary" fontWeight={700}>
+              No NFTs Found
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Your digital collectibles will appear here.
+            </Typography>
+          </Box>
+        )}
       </Box>
 
     </Box>

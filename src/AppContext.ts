@@ -4,6 +4,7 @@ import AccountManager from "./backend/AccountManager.js";
 import TokenCache from "./backend/TokenCache.js";
 import StorageManager from "./backend/StorageManager.js";
 import DataCacheService from "./backend/DataCacheService.js";
+import { ContactManager } from "./backend/ContactManager.js";
 
 import { WalletConnectService } from "./backend/WalletConnectService";
 
@@ -20,6 +21,8 @@ export class AppContext {
   tokenCache: TokenCache;
   // data cache (balances, prices with TTL)
   dataCacheService: DataCacheService;
+  // contact manager
+  contactManager: ContactManager;
   // wallet connect
   walletConnectService: WalletConnectService;
 
@@ -29,6 +32,7 @@ export class AppContext {
     this.networkProvider = new NetworkProvider();
     this.tokenCache = new TokenCache();
     this.dataCacheService = new DataCacheService();
+    this.contactManager = new ContactManager(this.storageManager);
     this.walletConnectService = new WalletConnectService(this.accountManager);
   }
 }
