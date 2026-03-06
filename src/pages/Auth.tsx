@@ -1,8 +1,8 @@
 import * as React from "react";
-import { Typography, Box, Button, Grid, Alert, Stack, TextField, Paper, Container, IconButton, InputAdornment } from "@mui/material";
+import { Typography, Box, Button, Grid, Alert, Stack, TextField, Paper, Container, IconButton, InputAdornment, CircularProgress } from "@mui/material";
 import { AppContext, WalletContext } from "../AppContext.js";
 import { useNavigate } from "react-router";
-import { Visibility, VisibilityOff, Google } from "@mui/icons-material";
+import { Visibility, VisibilityOff, Google, Lock } from "@mui/icons-material";
 import { Mnemonic } from "ethers";
 
 // --- Web3Auth Imports ---
@@ -16,7 +16,8 @@ enum AuthStep {
   CHOICE,
   CREATE,
   IMPORT,
-  LOGIN
+  LOGIN,
+  SET_PASSWORD
 }
 
 // --- Steps Components ---
@@ -55,7 +56,6 @@ function CreateWallet({ accountManager, onDone }) {
                     display: 'flex',
                     borderRadius: 2,
                     overflow: 'hidden',
-                    // border: '1px solid #e5e7eb',
                     bgcolor: 'white',
                     boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                   }}>
@@ -193,50 +193,164 @@ function ImportWallet({ accountManager, onDone }) {
   );
 }
 
-function LoginIntoWallet({ storageManager }) {
+/**
+ * Set Password screen — shown AFTER wallet creation/import to encrypt account data.
+ */
+function SetPasswordScreen({ storageManager, accountManager, onDone }) {
+  const [password, setPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const handleSubmit = async () => {
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords don't match.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Initialize encryption with the new password (generates salt + hashes password)
+      const ok = await storageManager.initEncryption(password);
+      if (!ok) {
+        setError("Failed to initialize encryption.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Now persist the in-memory accounts to encrypted storage
+      await accountManager.loadFromEncryptedStorage(); // This will detect plaintext and auto-migrate
+      // If no migration happened (fresh create), manually trigger save
+      if (storageManager.hasUnencryptedAccounts()) {
+        await storageManager.migrateToEncrypted();
+      }
+
+      onDone();
+    } catch (e: any) {
+      setError(e.message || "Encryption failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Box>
+      <Box sx={{ textAlign: 'center', mb: 3 }}>
+        <Lock sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
+        <Typography variant="h5" fontWeight={700} color="text.primary">
+          Secure Your Wallet
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Set a password to encrypt your private keys. Your keys will be stored securely using AES-256 encryption.
+        </Typography>
+      </Box>
+
+      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>}
+
+      <Stack spacing={2}>
+        <TextField
+          label="Password"
+          type={showPassword ? "text" : "password"}
+          fullWidth
+          value={password}
+          onChange={(e) => { setPassword(e.target.value); setError(null); }}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                  {showPassword ? <VisibilityOff /> : <Visibility />}
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3, bgcolor: 'white' } }}
+        />
+
+        <TextField
+          label="Confirm Password"
+          type={showPassword ? "text" : "password"}
+          fullWidth
+          value={confirmPassword}
+          onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
+          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3, bgcolor: 'white' } }}
+        />
+      </Stack>
+
+      <Paper elevation={0} sx={{ p: 2, mt: 2, borderRadius: 2, bgcolor: 'rgba(99, 102, 241, 0.04)', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+          Your password encrypts your private keys using <strong>AES-256-GCM</strong> with <strong>PBKDF2</strong> key derivation (100,000 iterations). Keys are never stored in plaintext.
+        </Typography>
+      </Paper>
+
+      <Button
+        variant="contained"
+        fullWidth
+        onClick={handleSubmit}
+        disabled={isLoading}
+        size="large"
+        sx={{ mt: 3, borderRadius: 3, height: 48 }}
+      >
+        {isLoading ? <CircularProgress size={24} color="inherit" /> : "Encrypt & Continue"}
+      </Button>
+    </Box>
+  );
+}
+
+/**
+ * Login / Unlock screen — decrypts accounts using password.
+ */
+function LoginIntoWallet({ storageManager, accountManager }) {
   const navigate = useNavigate();
   const [password, setPassword] = React.useState("");
-  const [error, setError] = React.useState(null);
-  const [isSettingPassword, setIsSettingPassword] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const [showPassword, setShowPassword] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
 
-  React.useEffect(() => {
-    if (!storageManager) return;
-    const stored = storageManager.getLocal("passwd");
-    setIsSettingPassword(!stored);
-  }, [storageManager]);
-
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!storageManager) {
-      // Fallback for demo/dev if storage manager isnt ready properly
       navigate("/home");
       return;
     }
 
-    if (isSettingPassword) {
-      if (password.length < 4) {
-        setError("Password is too short.");
+    if (password.length < 1) {
+      setError("Please enter your password.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Verify password and derive AES key
+      const ok = await storageManager.initEncryption(password);
+      if (!ok) {
+        setError("Incorrect password.");
+        setIsLoading(false);
         return;
       }
-      storageManager.setLocal("passwd", password);
+
+      // Load and decrypt accounts into memory
+      await accountManager?.loadFromEncryptedStorage();
+
       navigate("/home");
-    } else {
-      const stored = storageManager.getLocal("passwd");
-      if (stored === password) {
-        navigate("/home");
-      } else {
-        setError("Incorrect password.");
-      }
+    } catch (e: any) {
+      setError(e.message || "Unlock failed.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <Box>
       <Typography variant="h5" fontWeight={700} gutterBottom align="center" color="text.primary">
-        {isSettingPassword ? "Set Password" : "Welcome Back"}
+        Welcome Back
       </Typography>
       <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 4 }}>
-        {isSettingPassword ? "Protect your wallet with a password" : "Enter your password to unlock"}
+        Enter your password to decrypt and unlock your wallet
       </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>}
@@ -272,10 +386,11 @@ function LoginIntoWallet({ storageManager }) {
         variant="contained"
         fullWidth
         onClick={handleSubmit}
+        disabled={isLoading}
         size="large"
         sx={{ mt: 3, borderRadius: 3, height: 48 }}
       >
-        {isSettingPassword ? "Create Password" : "Unlock"}
+        {isLoading ? <CircularProgress size={24} color="inherit" /> : "Unlock"}
       </Button>
     </Box>
   );
@@ -286,26 +401,42 @@ function LoginIntoWallet({ storageManager }) {
 export default function Auth() {
   const context = React.useContext(WalletContext);
   const accountManager = context?.accountManager;
+  const storageManager = context?.storageManager;
 
   const [step, setStep] = React.useState(AuthStep.CHOICE);
-  const [accountExists, setAccountExists] = React.useState(false);
   const [isSocialLoading, setIsSocialLoading] = React.useState(false);
 
   React.useEffect(() => {
-    if (!accountManager) return;
-    const accounts = accountManager.GetAll();
-    const hasAccounts = accounts.length > 0;
-    setAccountExists(hasAccounts);
+    if (!storageManager) return;
 
-    if (hasAccounts && step !== AuthStep.CREATE && step !== AuthStep.IMPORT) {
+    // Determine initial step based on existing state
+    if (storageManager.hasPassword()) {
+      // Existing encrypted wallet — go to login
       setStep(AuthStep.LOGIN);
+    } else if (storageManager.hasUnencryptedAccounts()) {
+      // Legacy plaintext wallet — need to set password first, then migrate
+      setStep(AuthStep.SET_PASSWORD);
+    } else {
+      // No wallet exists — show choice screen
+      setStep(AuthStep.CHOICE);
     }
-  }, [accountManager]);
+  }, [storageManager]);
 
-  const handleDone = () => {
-    setAccountExists(true);
-    setStep(AuthStep.LOGIN);
+  const handleWalletCreated = () => {
+    // After create/import, go to set password step
+    setStep(AuthStep.SET_PASSWORD);
   };
+
+  const handlePasswordSet = () => {
+    // After password is set and encryption is done, navigate to home
+    const nav = document.querySelector("[data-auth-navigate]");
+    // Use navigate directly
+    window.location.hash = "#/home";
+  };
+
+  const navigate = React.useCallback(() => {
+    window.location.hash = "#/home";
+  }, []);
 
   return (
     <Box sx={{
@@ -313,7 +444,7 @@ export default function Auth() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      bgcolor: '#f3f4f6', // Light gray background
+      bgcolor: '#f3f4f6',
       background: 'radial-gradient(circle at 50% 10%, #fff 0%, #f3f4f6 100%)',
       p: 2
     }}>
@@ -339,132 +470,143 @@ export default function Auth() {
             </Typography>
           </Box>
 
-          {accountExists ? (
-            <LoginIntoWallet storageManager={context?.storageManager} />
-          ) : (
-            <>
-              {step === AuthStep.CHOICE && (
-                <Stack spacing={2}>
-                  <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 2 }}>
-                    Welcome to the next generation of privacy-first crypto wallets.
-                  </Typography>
+          {/* Login Screen (Existing encrypted wallet) */}
+          {step === AuthStep.LOGIN && (
+            <LoginIntoWallet storageManager={storageManager} accountManager={accountManager} />
+          )}
 
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    disabled={isSocialLoading}
-                    onClick={async () => {
-                      setIsSocialLoading(true);
+          {/* Set Password Screen (After create/import or migration) */}
+          {step === AuthStep.SET_PASSWORD && (
+            <SetPasswordScreen
+              storageManager={storageManager}
+              accountManager={accountManager}
+              onDone={() => { window.location.hash = "#/home"; }}
+            />
+          )}
+
+          {/* New Wallet Choice Screen */}
+          {step === AuthStep.CHOICE && (
+            <Stack spacing={2}>
+              <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 2 }}>
+                Welcome to the next generation of privacy-first crypto wallets.
+              </Typography>
+
+              <Button
+                fullWidth
+                variant="contained"
+                disabled={isSocialLoading}
+                onClick={async () => {
+                  setIsSocialLoading(true);
+                  try {
+                    const chainConfig = {
+                      chainNamespace: CHAIN_NAMESPACES.EIP155,
+                      chainId: "0x1",
+                      rpcTarget: (import.meta as any).env.VITE_ALCHEMY_MAINNET_API_KEY || "https://cloudflare-eth.com",
+                      displayName: "Ethereum Mainnet",
+                      blockExplorerUrl: "https://etherscan.io",
+                      ticker: "ETH",
+                      tickerName: "Ethereum",
+                    };
+
+                    const privateKeyProvider = new EthereumPrivateKeyProvider({ config: { chainConfig } });
+
+                    const web3auth = new Web3Auth({
+                      clientId,
+                      web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_MAINNET,
+                      privateKeyProvider,
+                    });
+
+                    await web3auth.initModal();
+                    await web3auth.connect();
+
+                    if (web3auth.provider) {
+                      const privateKey = await web3auth.provider.request({ method: "eth_private_key" }) as string;
+                      let accountName = "Social Account";
                       try {
-                        const chainConfig = {
-                          chainNamespace: CHAIN_NAMESPACES.EIP155,
-                          chainId: "0x1", // Mainnet
-                          rpcTarget: (import.meta as any).env.VITE_ALCHEMY_MAINNET_API_KEY || "https://cloudflare-eth.com", // Alchemy RPC
-                          displayName: "Ethereum Mainnet",
-                          blockExplorerUrl: "https://etherscan.io",
-                          ticker: "ETH",
-                          tickerName: "Ethereum",
-                        };
-
-                        const privateKeyProvider = new EthereumPrivateKeyProvider({ config: { chainConfig } });
-
-                        const web3auth = new Web3Auth({
-                          clientId,
-                          web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_MAINNET,
-                          privateKeyProvider,
-                        });
-
-                        await web3auth.initModal();
-                        await web3auth.connect();
-
-                        if (web3auth.provider) {
-                          const privateKey = await web3auth.provider.request({ method: "eth_private_key" }) as string;
-                          let accountName = "Social Account";
-                          try {
-                            const userInfo = await web3auth.getUserInfo();
-                            if (userInfo.email) {
-                              accountName = userInfo.email;
-                            } else if (userInfo.name) {
-                              accountName = userInfo.name;
-                            }
-                          } catch (e) {
-                            console.warn("Could not fetch user info from Web3Auth", e);
-                          }
-
-                          if (privateKey) {
-                            const importedIndex = accountManager?.ImportPrivateKey(privateKey, accountName);
-
-                            const rpcs = [
-                              chainConfig.rpcTarget,
-                              (import.meta as any).env.VITE_ALCHEMY_SEPOLIA_API_KEY || "https://rpc.sepolia.org",
-                              (import.meta as any).env.VITE_ALCHEMY_ARBSEPOLIA_API_KEY || "https://sepolia-rollup.arbitrum.io/rpc",
-                              (import.meta as any).env.VITE_ALCHEMY_BASESEPOLIA_API_KEY || "https://sepolia.base.org"
-                            ];
-                            await accountManager?.AutoDiscoverAccounts(rpcs, 3, importedIndex);
-
-                            handleDone();
-                          }
+                        const userInfo = await web3auth.getUserInfo();
+                        if (userInfo.email) {
+                          accountName = userInfo.email;
+                        } else if (userInfo.name) {
+                          accountName = userInfo.name;
                         }
-                      } catch (error) {
-                        console.error("Web3Auth Login error:", error);
-                      } finally {
-                        setIsSocialLoading(false);
+                      } catch (e) {
+                        console.warn("Could not fetch user info from Web3Auth", e);
                       }
-                    }}
-                    startIcon={<Google />}
-                    sx={{
-                      borderRadius: 3,
-                      height: 48,
-                      bgcolor: '#0f172a',
-                      color: 'white',
-                      '&:hover': { bgcolor: '#1e293b' }
-                    }}
-                  >
-                    {isSocialLoading ? "Connecting & Scanning..." : "Continue with Social"}
-                  </Button>
 
-                  <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
-                    <Box sx={{ flex: 1, height: '1px', bgcolor: 'grey.300' }} />
-                    <Typography variant="caption" sx={{ px: 2, color: 'text.secondary', fontWeight: 600 }}>OR</Typography>
-                    <Box sx={{ flex: 1, height: '1px', bgcolor: 'grey.300' }} />
-                  </Box>
+                      if (privateKey) {
+                        const importedIndex = accountManager?.ImportPrivateKey(privateKey, accountName);
 
-                  <Button
-                    variant="outlined"
-                    size="large"
-                    onClick={() => setStep(AuthStep.CREATE)}
-                    sx={{ borderRadius: 3, height: 48, borderColor: '#e5e7eb', color: 'text.primary' }}
-                  >
-                    Create New Wallet
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    size="large"
-                    onClick={() => setStep(AuthStep.IMPORT)}
-                    sx={{ borderRadius: 3, height: 48, borderColor: '#e5e7eb', color: 'text.primary' }}
-                  >
-                    I Have A Wallet
-                  </Button>
-                </Stack>
-              )}
+                        const rpcs = [
+                          chainConfig.rpcTarget,
+                          (import.meta as any).env.VITE_ALCHEMY_SEPOLIA_API_KEY || "https://rpc.sepolia.org",
+                          (import.meta as any).env.VITE_ALCHEMY_ARBSEPOLIA_API_KEY || "https://sepolia-rollup.arbitrum.io/rpc",
+                          (import.meta as any).env.VITE_ALCHEMY_BASESEPOLIA_API_KEY || "https://sepolia.base.org"
+                        ];
+                        await accountManager?.AutoDiscoverAccounts(rpcs, 3, importedIndex);
 
-              {step === AuthStep.CREATE && (
-                <CreateWallet accountManager={accountManager} onDone={handleDone} />
-              )}
+                        handleWalletCreated();
+                      }
+                    }
+                  } catch (error) {
+                    console.error("Web3Auth Login error:", error);
+                  } finally {
+                    setIsSocialLoading(false);
+                  }
+                }}
+                startIcon={<Google />}
+                sx={{
+                  borderRadius: 3,
+                  height: 48,
+                  bgcolor: '#0f172a',
+                  color: 'white',
+                  '&:hover': { bgcolor: '#1e293b' }
+                }}
+              >
+                {isSocialLoading ? "Connecting & Scanning..." : "Continue with Social"}
+              </Button>
 
-              {step === AuthStep.IMPORT && (
-                <Box>
-                  <ImportWallet accountManager={accountManager} onDone={handleDone} />
-                  <Button
-                    onClick={() => setStep(AuthStep.CHOICE)}
-                    color="inherit"
-                    sx={{ mt: 2, textTransform: 'none', color: 'text.secondary' }}
-                  >
-                    Cancel
-                  </Button>
-                </Box>
-              )}
-            </>
+              <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
+                <Box sx={{ flex: 1, height: '1px', bgcolor: 'grey.300' }} />
+                <Typography variant="caption" sx={{ px: 2, color: 'text.secondary', fontWeight: 600 }}>OR</Typography>
+                <Box sx={{ flex: 1, height: '1px', bgcolor: 'grey.300' }} />
+              </Box>
+
+              <Button
+                variant="outlined"
+                size="large"
+                onClick={() => setStep(AuthStep.CREATE)}
+                sx={{ borderRadius: 3, height: 48, borderColor: '#e5e7eb', color: 'text.primary' }}
+              >
+                Create New Wallet
+              </Button>
+              <Button
+                variant="outlined"
+                size="large"
+                onClick={() => setStep(AuthStep.IMPORT)}
+                sx={{ borderRadius: 3, height: 48, borderColor: '#e5e7eb', color: 'text.primary' }}
+              >
+                I Have A Wallet
+              </Button>
+            </Stack>
+          )}
+
+          {/* Create Wallet Screen */}
+          {step === AuthStep.CREATE && (
+            <CreateWallet accountManager={accountManager} onDone={handleWalletCreated} />
+          )}
+
+          {/* Import Wallet Screen */}
+          {step === AuthStep.IMPORT && (
+            <Box>
+              <ImportWallet accountManager={accountManager} onDone={handleWalletCreated} />
+              <Button
+                onClick={() => setStep(AuthStep.CHOICE)}
+                color="inherit"
+                sx={{ mt: 2, textTransform: 'none', color: 'text.secondary' }}
+              >
+                Cancel
+              </Button>
+            </Box>
           )}
         </Paper>
       </Container>

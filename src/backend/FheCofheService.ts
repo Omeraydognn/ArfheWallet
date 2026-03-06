@@ -253,6 +253,18 @@ class FheCofheService {
       } catch (err: any) {
         const errorMsg = (err?.message || String(err)).toLowerCase();
 
+        // "Ciphertext not found" from the CoFHE service means the data genuinely doesn't exist
+        // (account has never shielded, or testnet was reset). Stop retrying immediately — no point
+        // waiting 100 seconds for data that will never appear.
+        const isMissing =
+          errorMsg.includes("ciphertext not found") ||
+          errorMsg.includes("failed to fetch full ciphertext");
+
+        if (isMissing) {
+          console.warn(`[FheCofheService] ⚠️ Ciphertext not found on CoFHE network — no shielded balance (never shielded, or testnet reset).`);
+          throw new Error("Ciphertext not found: no shielded balance");
+        }
+
         // CoFHE is still processing (428 or manual unseal 'CT source is not ready')
         const isPending =
           errorMsg.includes("sealed data not found") ||
@@ -276,6 +288,7 @@ class FheCofheService {
 
     throw new Error("Unseal failed after retries");
   }
+
 
   /**
    * Manual unseal: Directly call sealoutput endpoint bypassing cofhejs

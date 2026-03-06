@@ -10,10 +10,16 @@ import Revoke from "./pages/Revoke";
 import GraphExplorer from "./pages/GraphExplorer";
 import Settings from "./pages/Settings";
 import SettingsSecurity from "./pages/SettingsSecurity";
-import { ThemeProvider, CssBaseline } from "@mui/material";
+import Portfolio from "./pages/Portfolio";
+import { ThemeProvider, CssBaseline, Fade } from "@mui/material";
 import { ColorModeProvider, ColorModeContext } from "./ThemeContext";
 import { getTheme } from "./components/ArfTheme";
 import React, { useContext, useMemo } from "react";
+
+// Wrap a route element in a smooth Fade transition
+function FadePage({ children }: { children: React.ReactNode }) {
+  return <Fade in timeout={280}>{<div style={{ display: 'contents' }}>{children}</div>}</Fade>;
+}
 
 
 // import NetworkProvider from "./backend/NetworkProvider";
@@ -29,14 +35,15 @@ function AppRoutes() {
       <Route path="auth" element={<Auth />} />
 
       <Route element={<AppLayout />}>
-        <Route path="home" element={<Home />} />
-        <Route path="explore" element={<Explore />} />
-        <Route path="history" element={<History />} />
-        <Route path="privacy" element={<Privacy />} />
-        <Route path="revoke" element={<Revoke />} />
-        <Route path="graphexplorer" element={<GraphExplorer />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="settings/security" element={<SettingsSecurity />} />
+        <Route path="home" element={<FadePage><Home /></FadePage>} />
+        <Route path="portfolio" element={<FadePage><Portfolio /></FadePage>} />
+        <Route path="explore" element={<FadePage><Explore /></FadePage>} />
+        <Route path="history" element={<FadePage><History /></FadePage>} />
+        <Route path="privacy" element={<FadePage><Privacy /></FadePage>} />
+        <Route path="revoke" element={<FadePage><Revoke /></FadePage>} />
+        <Route path="graphexplorer" element={<FadePage><GraphExplorer /></FadePage>} />
+        <Route path="settings" element={<FadePage><Settings /></FadePage>} />
+        <Route path="settings/security" element={<FadePage><SettingsSecurity /></FadePage>} />
       </Route>
 
     </Routes>

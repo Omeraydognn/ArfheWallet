@@ -142,34 +142,136 @@ class Network {
   }
 
   async getTokenMetadata(tokenCacheObj: TokenCache, contractAddress: string): Promise<TokenCacheItem> {
-    if (this.alchemy) {
-      try {
-        const metadata = await this.alchemy.core.getTokenMetadata(contractAddress);
-        const item: TokenCacheItem = {
-          name: metadata.name ?? "Unknown Token",
-          symbol: metadata.symbol ?? "",
-          decimals: metadata.decimals ?? 18,
-          logoSrc: metadata.logo ?? "",
-          contractAddress: contractAddress,
-        };
-        tokenCacheObj.setToken(this.network_id, item);
-        return item;
-      } catch (e) {
-        console.warn("[Network] Alchemy getTokenMetadata fallback failed", e);
+    try {
+      if (this.alchemy) {
+        try {
+          const metadata = await this.alchemy.core.getTokenMetadata(contractAddress);
+          if (metadata && (metadata.name || metadata.symbol)) {
+            const item: TokenCacheItem = {
+              name: metadata.name ?? "Unknown Token",
+              symbol: metadata.symbol ?? "",
+              decimals: metadata.decimals ?? 18,
+              logoSrc: metadata.logo ?? "",
+              contractAddress: contractAddress,
+            };
+            tokenCacheObj.setToken(this.network_id, item);
+            return item;
+          }
+        } catch (e) {
+          console.warn(`[Network] Alchemy SDK metadata fetch failed for ${contractAddress}`);
+        }
       }
+
+      if (this.isAlchemyConfigured()) {
+        const metadata = await this.call("alchemy_getTokenMetadata", [contractAddress]);
+        if (metadata && (metadata.name || metadata.symbol)) {
+          const item: TokenCacheItem = {
+            name: metadata.name ?? "Unknown Token",
+            symbol: metadata.symbol ?? "",
+            decimals: metadata.decimals ?? 18,
+            logoSrc: metadata.logo ?? "",
+            contractAddress: contractAddress,
+          };
+          tokenCacheObj.setToken(this.network_id, item);
+          return item;
+        }
+      }
+    } catch (e) {
+      console.warn(`[Network] Alchemy metadata fallback failed for ${contractAddress}. Attempting direct RPC...`);
     }
 
-    const metadata = await this.call("alchemy_getTokenMetadata", [contractAddress]);
+    // Direct RPC Fallback for unindexed testnet tokens (Crucial for Custom Imports)
+    const ethers = await import("ethers");
+    const iface = new ethers.Interface([
+      "function name() view returns (string)",
+      "function symbol() view returns (string)",
+      "function decimals() view returns (uint8)"
+    ]);
+
+    let name = "Unknown Token";
+    let symbol = "???";
+    let decimals = 18;
+
+    try {
+      const nameData = await this.call("eth_call", [{ to: contractAddress, data: iface.encodeFunctionData("name") }, "latest"]);
+      if (nameData && nameData !== "0x") name = iface.decodeFunctionResult("name", nameData)[0];
+    } catch (e) { }
+
+    try {
+      const symbolData = await this.call("eth_call", [{ to: contractAddress, data: iface.encodeFunctionData("symbol") }, "latest"]);
+      if (symbolData && symbolData !== "0x") symbol = iface.decodeFunctionResult("symbol", symbolData)[0];
+    } catch (e) { }
+
+    try {
+      const decData = await this.call("eth_call", [{ to: contractAddress, data: iface.encodeFunctionData("decimals") }, "latest"]);
+      if (decData && decData !== "0x") decimals = Number(iface.decodeFunctionResult("decimals", decData)[0]);
+    } catch (e) { }
+
     const item: TokenCacheItem = {
-      name: metadata.name ?? "Unknown Token",
-      symbol: metadata.symbol ?? "",
-      decimals: metadata.decimals ?? 18,
-      logoSrc: metadata.logo ?? "",
-      contractAddress: contractAddress,
+      name,
+      symbol,
+      decimals,
+      logoSrc: "",
+      contractAddress
     };
 
     tokenCacheObj.setToken(this.network_id, item);
     return item;
+  }
+
+  async getNftMetadata(nftCacheObj: any, contractAddress: string): Promise<any> {
+    const ethers = await import("ethers");
+    const iface = new ethers.Interface([
+      "function name() view returns (string)",
+      "function symbol() view returns (string)"
+    ]);
+
+    let name = "Unknown NFT";
+    let symbol = "NFT";
+
+    try {
+      const nameData = await this.call("eth_call", [{ to: contractAddress, data: iface.encodeFunctionData("name") }, "latest"]);
+      if (nameData && nameData !== "0x") name = iface.decodeFunctionResult("name", nameData)[0];
+    } catch (e) { }
+
+    try {
+      const symbolData = await this.call("eth_call", [{ to: contractAddress, data: iface.encodeFunctionData("symbol") }, "latest"]);
+      if (symbolData && symbolData !== "0x") symbol = iface.decodeFunctionResult("symbol", symbolData)[0];
+    } catch (e) { }
+
+    const item = {
+      name,
+      symbol,
+      logoSrc: "",
+      contractAddress
+    };
+
+    if (nftCacheObj) {
+      nftCacheObj.setNFT(this.network_id, item);
+    }
+    return item;
+  }
+
+  async getNftBalance(contractAddress: string, userAddress: string): Promise<string> {
+    try {
+      const ethers = await import("ethers");
+      const iface = new ethers.Interface([
+        "function balanceOf(address owner) view returns (uint256)"
+      ]);
+
+      const data = iface.encodeFunctionData("balanceOf", [userAddress]);
+      const result = await this.call("eth_call", [{
+        to: contractAddress,
+        data: data
+      }, "latest"]);
+
+      if (result && result !== "0x") {
+        return BigInt(result).toString();
+      }
+    } catch (e) {
+      console.warn(`[Network] getNftBalance failed for ${contractAddress}`);
+    }
+    return "0";
   }
 
   private formatTokenAmount(value: bigint, decimals: number): string {
@@ -231,10 +333,46 @@ class Network {
       }
     }
 
-    const activeTokens = tokenBalancesRaw.filter(t => {
+    const activeTokensRaw = [...tokenBalancesRaw];
+
+    // Some custom testnet tokens or user-added tokens might be missed by Alchemy's indexer.
+    // Ensure all known tokens in the local cache are queried directly if not natively returned.
+    const rawSet = new Set(activeTokensRaw.map(t => (t.contractAddress || "").toLowerCase()));
+    const cachedTokens = tokenCacheObj.getAllTokens(this.network_id) || [];
+
+    for (const cached of cachedTokens) {
+      if (cached.contractAddress === "ETH") continue;
+      const lowerAddr = cached.contractAddress.toLowerCase();
+
+      if (!rawSet.has(lowerAddr)) {
+        try {
+          // Explicitly query ERC20 balanceOf(address) signature: 0x70a08231
+          const data = "0x70a08231000000000000000000000000" + address.toLowerCase().replace("0x", "");
+          const result = await this.call("eth_call", [{
+            to: cached.contractAddress,
+            data: data
+          }, "latest"]);
+
+          if (result && result !== "0x") {
+            activeTokensRaw.push({
+              contractAddress: cached.contractAddress,
+              tokenBalance: BigInt(result).toString()
+            });
+          }
+        } catch (e) {
+          // Token query failed or invalid contract
+        }
+      }
+    }
+
+    const activeTokens = activeTokensRaw.filter(t => {
       try {
-        return BigInt(t.tokenBalance ?? 0) > 0n;
-      } catch { return false; }
+        const bal = BigInt(t.tokenBalance ?? 0);
+        // Retain tokens that have positive balances OR are specifically cached by the user
+        return bal > 0n || tokenCacheObj.hasToken(this.network_id, (t.contractAddress || "").toLowerCase());
+      } catch {
+        return false;
+      }
     });
 
     const processedTokens = await Promise.all(
@@ -308,62 +446,104 @@ class Network {
 
   async getTokenPrices(contractAddresses: string[]): Promise<{ [key: string]: number }> {
     try {
-      // Skip price fetching for testnets (CoinGecko only supports mainnet)
-      if (this.network_id !== NetworkId.Ethereum_Mainnet) {
-        console.log("[Network] Skipping price fetch on testnet");
-        return {};
-      }
+      const prices: { [key: string]: number } = {};
 
-      // eToken addresses (don't fetch prices for these)
-      // Including both official and any test/old variants
+      // Known identifiers for mainnet pegging (CoinGecko IDs)
+      const mappedIds = new Set<string>();
+      const addressesToFetchFromCG: string[] = [];
+
+      // eToken addresses (ignore fetching)
       const eTokenAddresses = [
         "0xfff9976742d46cc05630d1f6ebab18b2324d6b14", // eETH (official)
         "0x2035f9228e160243be8e07973715c929845e445e", // eUSDC (official)
         "0xfff9976782d46cc05630d1f6ebab18b2324d6b14", // Old/test eETH variant
       ].map(a => a.toLowerCase());
 
-      // 1. Prepare addresses (filter out ETH/Native markers and eTokens)
-      const tokenAddresses = contractAddresses
-        .filter(a => {
-          const lower = a.toLowerCase();
-          const isEth = a === "ETH" || lower.startsWith("0xeeee");
-          const isEToken = eTokenAddresses.includes(lower);
-          return !isEth && !isEToken;
-        })
-        .map(a => a.toLowerCase());
+      // Define lists of testnet and FHE token variants mapped to real assets
+      const ethRelated = [
+        "eth",
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        ((import.meta as any).env.VITE_SEPOLIA_WETH_ADDRESS || "").toLowerCase(),
+        ((import.meta as any).env.VITE_ARB_SEPOLIA_WETH_ADDRESS || "").toLowerCase(),
+        ((import.meta as any).env.VITE_BASE_SEPOLIA_WETH_ADDRESS || "").toLowerCase(),
+        ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase(), // cETH Sepolia
+        ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase(), // cETH Arb
+        ((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase(), // cETH Base
+      ].filter(Boolean);
 
-      const prices: { [key: string]: number } = {};
+      const usdcRelated = [
+        "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238", // Sepolia USDC
+        ((import.meta as any).env.VITE_ARB_SEPOLIA_USDC_ADDRESS || "").toLowerCase(),
+        ((import.meta as any).env.VITE_BASE_SEPOLIA_USDC_ADDRESS || "").toLowerCase(),
+        ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase(), // cUSDC Sepolia
+        ((import.meta as any).env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase(), // cUSDC Arb
+        ((import.meta as any).env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase(), // cUSDC Base
+      ].filter(Boolean);
 
-      // 2. Fetch ETH Price
-      try {
-        const ethRes = await fetch("/api/coingecko/simple/price?ids=ethereum&vs_currencies=usd");
-        const ethJson = await ethRes.json();
-        if (ethJson.ethereum?.usd) {
-          prices["ETH"] = ethJson.ethereum.usd;
-          prices["0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"] = ethJson.ethereum.usd;
+      const chainlinkRelated = [
+        "0x779877a7b0d9e8603169ddbd7836e478b4624789" // Chainlink Sepolia
+      ].filter(Boolean);
+
+      // Map incoming addresses to CoinGecko IDs
+      for (const rawAddr of contractAddresses) {
+        const addr = rawAddr.toLowerCase();
+
+        if (eTokenAddresses.includes(addr)) continue;
+
+        if (ethRelated.includes(addr)) {
+          mappedIds.add('ethereum');
+        } else if (usdcRelated.includes(addr)) {
+          mappedIds.add('usd-coin');
+        } else if (chainlinkRelated.includes(addr)) {
+          mappedIds.add('chainlink');
+        } else {
+          // If not mapped, only query standard contract addresses on mainnet
+          if (this.network_id === NetworkId.Ethereum_Mainnet) {
+            addressesToFetchFromCG.push(addr);
+          }
         }
-      } catch (e) {
-        console.warn("[Network] Failed to fetch ETH price", e);
       }
 
-      // 3. Fetch Token Prices (if any)
-      if (tokenAddresses.length > 0) {
-        // CoinGecko expects comma-separated addresses for 'contract_addresses'
-        // Note: This endpoint depends on the network (platform). 
-        // For Mainnet uses 'ethereum'. For Sepolia, prices might be same or mock.
-        // We will assert 'ethereum' for now.
-        const platform = "ethereum";
-        const addrStr = tokenAddresses.join(",");
+      // Fetch pegged prices for known assets
+      if (mappedIds.size > 0) {
+        try {
+          const idsParam = Array.from(mappedIds).join(',');
+          const res = await fetch(`/api/coingecko/simple/price?ids=${idsParam}&vs_currencies=usd`);
+          const json = await res.json();
 
-        const url = `/api/coingecko/simple/token_price/${platform}?contract_addresses=${addrStr}&vs_currencies=usd`;
-        const res = await fetch(url);
-        const json = await res.json();
-
-        // json structure: { "0x123...": { "usd": 12.34 } }
-        for (const [addr, priceData] of Object.entries(json)) {
-          if ((priceData as any).usd) {
-            prices[addr.toLowerCase()] = (priceData as any).usd;
+          // Distribute the pegged prices back to all requesting testnet/FHE addresses
+          for (const rawAddr of contractAddresses) {
+            const addr = rawAddr.toLowerCase();
+            if (ethRelated.includes(addr) && json.ethereum?.usd) {
+              prices[addr] = json.ethereum.usd;
+              if (addr === "eth") prices["ETH"] = json.ethereum.usd;
+            } else if (usdcRelated.includes(addr) && json['usd-coin']?.usd) {
+              prices[addr] = json['usd-coin'].usd;
+            } else if (chainlinkRelated.includes(addr) && json.chainlink?.usd) {
+              prices[addr] = json.chainlink.usd;
+            }
           }
+        } catch (e) {
+          console.warn("[Network] Mapped pegged price fetch failed", e);
+        }
+      }
+
+      // Fetch random mainnet tokens using original contract address endpoint
+      if (addressesToFetchFromCG.length > 0) {
+        try {
+          const platform = "ethereum";
+          const addrStr = addressesToFetchFromCG.join(",");
+          const url = `/api/coingecko/simple/token_price/${platform}?contract_addresses=${addrStr}&vs_currencies=usd`;
+          const res = await fetch(url);
+          const json = await res.json();
+
+          for (const [addr, priceData] of Object.entries(json)) {
+            if ((priceData as any).usd) {
+              prices[addr.toLowerCase()] = (priceData as any).usd;
+            }
+          }
+        } catch (e) {
+          console.warn("[Network] Standard token price fetch failed", e);
         }
       }
 
@@ -632,6 +812,7 @@ class Network {
       gasLimit?: bigint;
       gasPrice?: string;
       data?: string;
+      gasMultiplier?: number;
     }
   ): Promise<string> {
     if (!this.rpc_url) throw new Error("RPC URL not set");
@@ -656,6 +837,27 @@ class Network {
 
     if (tx.gasPrice) {
       txRequest.gasPrice = parseUnits(tx.gasPrice, "gwei");
+    }
+
+    // Apply Premium Gas Multiplier if given (for Slow/Standard/Fast user choice)
+    if (tx.gasMultiplier && tx.gasMultiplier !== 1.0) {
+      try {
+        // Let ethers estimate the base gas price first
+        const feeData = await provider.getFeeData();
+        if (feeData.gasPrice) {
+          // Multiply gas price for older networks
+          const estimatedGasPrice = Number(feeData.gasPrice) * tx.gasMultiplier;
+          txRequest.gasPrice = BigInt(Math.floor(estimatedGasPrice));
+        } else if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
+          // Multiply EIP-1559 fees for modern networks
+          const estimatedMaxFee = Number(feeData.maxFeePerGas) * tx.gasMultiplier;
+          const estimatedPriorityFee = Number(feeData.maxPriorityFeePerGas) * tx.gasMultiplier;
+          txRequest.maxFeePerGas = BigInt(Math.floor(estimatedMaxFee));
+          txRequest.maxPriorityFeePerGas = BigInt(Math.floor(estimatedPriorityFee));
+        }
+      } catch (e) {
+        console.warn("[Network] Failed to apply gas multiplier, falling back to default ethers gas estimation", e);
+      }
     }
 
     console.log("[Network] Sending TX via Provider:", {

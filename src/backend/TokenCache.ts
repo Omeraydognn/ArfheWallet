@@ -1,6 +1,7 @@
 // TokenCache.ts
 
 import { NetworkId } from "./NetworkTypes.js";
+import StorageManager from "./StorageManager.js";
 
 export interface TokenCacheItem {
   contractAddress: string;
@@ -13,9 +14,56 @@ export interface TokenCacheItem {
 export default class TokenCache {
   // Outer map: networkId → Inner map (contractAddress → TokenCacheItem)
   private cache: Map<NetworkId, Map<string, TokenCacheItem>>;
+  private storageManager?: StorageManager;
+  private readonly STORAGE_KEY = 'arfhe_token_cache';
 
-  constructor() {
+  constructor(storageManager?: StorageManager) {
     this.cache = new Map();
+    this.storageManager = storageManager;
+    this.loadFromStorage();
+  }
+
+  private loadFromStorage() {
+    if (!this.storageManager) return;
+
+    const savedData = this.storageManager.getLocal<any>(this.STORAGE_KEY);
+    if (savedData && typeof savedData === 'object') {
+      try {
+        // Deserialize JSON object back into Maps
+        Object.keys(savedData).forEach((netStr) => {
+          const netId = parseInt(netStr) as NetworkId;
+          const tokensObj = savedData[netStr];
+
+          const tokenMap = new Map<string, TokenCacheItem>();
+          Object.keys(tokensObj).forEach((contract) => {
+            tokenMap.set(contract, tokensObj[contract]);
+          });
+
+          this.cache.set(netId, tokenMap);
+        });
+      } catch (e) {
+        console.warn("Failed to parse saved token cache", e);
+      }
+    }
+  }
+
+  private saveToStorage() {
+    if (!this.storageManager) return;
+
+    try {
+      // Serialize Maps into JSON object
+      const exportObj: any = {};
+      this.cache.forEach((tokenMap, netId) => {
+        exportObj[netId] = {};
+        tokenMap.forEach((token, contract) => {
+          exportObj[netId][contract] = token;
+        });
+      });
+
+      this.storageManager.setLocal(this.STORAGE_KEY, exportObj);
+    } catch (e) {
+      console.warn("Failed to save token cache", e);
+    }
   }
 
   private getNetworkMap(networkId: NetworkId): Map<string, TokenCacheItem> {
@@ -31,6 +79,7 @@ export default class TokenCache {
   setToken(networkId: NetworkId, item: TokenCacheItem): void {
     const networkMap = this.getNetworkMap(networkId);
     networkMap.set(item.contractAddress.toLowerCase(), item);
+    this.saveToStorage();
   }
 
   /**
@@ -54,7 +103,9 @@ export default class TokenCache {
    */
   removeToken(networkId: NetworkId, contractAddress: string): boolean {
     const networkMap = this.getNetworkMap(networkId);
-    return networkMap.delete(contractAddress.toLowerCase());
+    const result = networkMap.delete(contractAddress.toLowerCase());
+    if (result) this.saveToStorage();
+    return result;
   }
 
   /**
@@ -70,6 +121,7 @@ export default class TokenCache {
    */
   clearNetwork(networkId: NetworkId): void {
     this.cache.delete(networkId);
+    this.saveToStorage();
   }
 
   /**
@@ -77,5 +129,8 @@ export default class TokenCache {
    */
   clearAll(): void {
     this.cache.clear();
+    if (this.storageManager) {
+      this.storageManager.removeLocal(this.STORAGE_KEY);
+    }
   }
 }

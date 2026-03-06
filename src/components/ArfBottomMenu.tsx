@@ -24,7 +24,9 @@ import {
   Chip,
   IconButton,
   Tooltip,
-  Fade
+  Fade,
+  alpha,
+  useTheme
 } from "@mui/material";
 import { WalletContext } from "../AppContext.js";
 import { useToast } from "./ToastProvider";
@@ -42,11 +44,16 @@ import {
   OpenInNew,
   Visibility,
   VisibilityOff,
-  Contacts
+  Contacts,
+  Hub
 } from "@mui/icons-material";
 import { ContactBookModal } from "./ContactBookModal.js";
-import { isAddress, parseUnits, Interface, formatEther, getAddress } from "ethers";
+import { isAddress, parseUnits, Interface, formatEther, getAddress, toUtf8Bytes, hexlify } from "ethers";
+import { isDomainName, resolveDomain } from "../backend/DomainResolver.js";
+import FheEncryptingOverlay from "./FheEncryptingOverlay.js";
+import SuccessAnimation from "./SuccessAnimation.js";
 import { NetworkId } from "../backend/NetworkTypes.js";
+import { TransactionSimulator, SimResult } from "../backend/TransactionSimulator.js";
 
 // --- Tab Panel Wrapper ---
 function CustomTabPanel(props: { children: React.ReactNode; index: number; value: number }) {
@@ -236,7 +243,23 @@ function ShieldPanel() {
   };
 
   return (
-    <Box>
+    <Box sx={{ position: 'relative' }}>
+      {/* FHE Overlay — fullscreen during wrap/unwrap */}
+      <FheEncryptingOverlay
+        visible={loading}
+        message={
+          mode === "shield"
+            ? (status.includes("Confirming")
+              ? `Waiting for on-chain confirmation of your ${token} shield...`
+              : `Wrapping & encrypting ${token} using Fully Homomorphic Encryption.`)
+            : (status.includes("Confirming")
+              ? `Waiting for on-chain confirmation of your ${token} unshield...`
+              : status.includes("decryption")
+                ? `Requesting FHE decryption key from the network...`
+                : `Unwrapping ${token} from the FHE vault`)
+        }
+      />
+
       {/* Header */}
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
         <Shield sx={{ fontSize: 20, color: 'secondary.main' }} />
@@ -406,12 +429,34 @@ function SendPanel() {
   const context = useContext(WalletContext);
   const activeAccount = context?.accountManager?.GetActive();
   const network = context?.networkProvider?.getActiveNetwork();
+  const theme = useTheme();
 
+  // 'sendAddress' always holds what the user *typed* (domain or 0x address).
+  // 'resolvedAddress' holds the actual 0x address after domain resolution.
+  // When it's a plain 0x input, resolvedAddress === sendAddress.
   const [sendAddress, setSendAddress] = useState("");
+  const [resolvedAddress, setResolvedAddress] = useState("");
+
+  // Domain resolution state
+  const [isDomainInput, setIsDomainInput] = useState(false);
+  const [isResolvingDomain, setIsResolvingDomain] = useState(false);
+  const [domainResolutionError, setDomainResolutionError] = useState<string | null>(null);
+  const [resolvedDomainMethod, setResolvedDomainMethod] = useState<"ens" | "ud" | null>(null);
+
   const [sendTokenAddress, setSendTokenAddress] = useState("ETH");
   const [sendAmount, setSendAmount] = useState("");
+  const [sendMemo, setSendMemo] = useState("");
   const [isConfidential, setIsConfidential] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
+
+  // Phishing Protection State
+  const [isNewAddress, setIsNewAddress] = useState(false);
+  const [isCheckingAddress, setIsCheckingAddress] = useState(false);
+
+  // Preview State
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [estimatedGasFee, setEstimatedGasFee] = useState<string | null>(null);
+  const [simResult, setSimResult] = useState<SimResult | null>(null);
 
   const [status, setStatus] = useState<"idle" | "validating" | "signing" | "broadcasting" | "pending" | "success" | "fail">("idle");
   const [feedbackMsg, setFeedbackMsg] = useState("");
@@ -420,6 +465,97 @@ function SendPanel() {
   const [ownedTokens, setOwnedTokens] = useState<{ contractAddress: string; symbol: string; balance: string }[]>([]);
   const [ownedShieldedTokens, setOwnedShieldedTokens] = useState<{ contractAddress: string; symbol: string; balance: string }[]>([]);
   const [tokensLoading, setTokensLoading] = useState(true);
+
+  // ── Domain resolution with 500ms debounce ──────────────────────────
+  React.useEffect(() => {
+    // Reset state on every keystroke immediately
+    setDomainResolutionError(null);
+    setResolvedDomainMethod(null);
+
+    const input = sendAddress.trim();
+
+    // Plain 0x address: pass through directly, no resolution needed
+    if (isAddress(input)) {
+      setIsDomainInput(false);
+      setResolvedAddress(input);
+      setIsResolvingDomain(false);
+      return;
+    }
+
+    // Empty or raw partial hex: clear resolved address
+    if (!isDomainName(input)) {
+      setIsDomainInput(false);
+      setResolvedAddress("");
+      setIsResolvingDomain(false);
+      return;
+    }
+
+    // Domain detected — show resolving state and debounce the RPC call
+    setIsDomainInput(true);
+    setResolvedAddress("");
+    setIsResolvingDomain(true);
+
+    const timeoutId = setTimeout(async () => {
+      const result = await resolveDomain(input);
+      setIsResolvingDomain(false);
+      if (result.address) {
+        setResolvedAddress(result.address);
+        setResolvedDomainMethod(result.method);
+        setDomainResolutionError(null);
+      } else {
+        setResolvedAddress("");
+        setDomainResolutionError(result.error);
+      }
+    }, 500); // 500ms debounce — protects RPC rate limits
+
+    return () => clearTimeout(timeoutId);
+  }, [sendAddress]);
+
+  // Address Interaction Check (runs on resolvedAddress, not raw input)
+  React.useEffect(() => {
+    const checkAddressHistory = async () => {
+      if (!isAddress(resolvedAddress) || !activeAccount || !network) {
+        setIsNewAddress(false);
+        return;
+      }
+
+      setIsCheckingAddress(true);
+      try {
+        const myAddress = activeAccount.GetAddress()?.toLowerCase();
+        const targetAddress = resolvedAddress.toLowerCase();
+
+        // Don't warn if sending to self
+        if (myAddress === targetAddress) {
+          setIsNewAddress(false);
+          setIsCheckingAddress(false);
+          return;
+        }
+
+        // Fetch history using Graph logic (same as GraphExplorer) for more reliable interaction data
+        if (network.explorerService) {
+          const graphData = await network.explorerService.fetchGraphData(myAddress!);
+
+          // Check if the target address exists as a node in the user's interaction graph
+          const hasInteracted = graphData.nodes.some(node => node.id.toLowerCase() === targetAddress);
+
+          console.log(`[PhishingCheck] Address: ${targetAddress}, HasInteracted: ${hasInteracted}, NodesChecked: ${graphData.nodes.length}`);
+          setIsNewAddress(!hasInteracted);
+        } else {
+          // Fallback if explorerService is missing (mostly for local dev without Alchemy)
+          setIsNewAddress(false);
+        }
+      } catch (e) {
+        console.warn("[SendPanel] Address history check failed", e);
+        setIsNewAddress(false); // Default to not showing warning on error
+      } finally {
+        setIsCheckingAddress(false);
+      }
+    };
+
+    // Debounce the check to avoid spamming the RPC while typing
+    const timeoutId = setTimeout(checkAddressHistory, 800);
+    return () => clearTimeout(timeoutId);
+  }, [resolvedAddress, activeAccount, network, context?.tokenCache]);
 
   // Load token balances on mount
   React.useEffect(() => {
@@ -548,6 +684,8 @@ function SendPanel() {
     loadBalances();
   }, [network, activeAccount]);
 
+  const [gasMode, setGasMode] = useState<"slow" | "standard" | "fast">("standard");
+
   const handleSend = async () => {
     if (!activeAccount || !network) return;
 
@@ -556,13 +694,20 @@ function SendPanel() {
     setStatus("validating");
 
     try {
-      if (!isAddress(sendAddress)) throw new Error("Invalid Recipient");
+      if (!isAddress(resolvedAddress)) throw new Error(isDomainInput ? "Domain name could not be resolved to a valid address" : "Invalid Recipient");
       if (!sendAmount || parseFloat(sendAmount) <= 0) throw new Error("Invalid Amount");
 
       setStatus("signing");
       setFeedbackMsg("Please sign the transaction...");
 
       let hash = "";
+
+      // Calculate Gas Multipliers based on Premium Settings
+      // Note: In a real app we'd fetch live gas prices from Alchemy, here we use simple multipliers for demo
+      // Fast = +20%, Slow = -10%. We pass this to the Network class
+      let gasMultiplier = 1.0;
+      if (gasMode === "fast") gasMultiplier = 1.2;
+      if (gasMode === "slow") gasMultiplier = 0.9;
 
       if (isConfidential) {
         const activeContracts = getContractsForNetwork(network.network_id);
@@ -592,25 +737,124 @@ function SendPanel() {
           throw new Error("Token wrapper not deployed yet");
         }
 
-        console.log("[Send] Confidential Transfer - Token:", tokenAddress, "Amount:", sendAmount, "To:", sendAddress);
+        console.log("[Send] Confidential Transfer - Token:", tokenAddress, "Amount:", sendAmount, "To:", resolvedAddress);
         setFeedbackMsg("Encrypting amount with FHE...");
-        hash = await network.transferConfidential(activeAccount, tokenAddress, sendAddress, sendAmount);
+        hash = await network.transferConfidential(activeAccount, tokenAddress, resolvedAddress, sendAmount);
         console.log("[Send] Confidential Transfer TX:", hash);
 
       } else {
+        // --- 1. Transaction Simulation & Preview Phase ---
+        if (!isPreviewMode) {
+          try {
+            const { JsonRpcProvider } = await import("ethers");
+            const provider = new JsonRpcProvider(network.rpc_url);
+            const myAddress = activeAccount.GetAddress();
+
+            const simulator = new TransactionSimulator(provider);
+            let estGas = 0n;
+
+            if (sendTokenAddress === "ETH") {
+              const amountWei = parseUnits(sendAmount, 18);
+              // 1a. Simulate Native Transfer
+              const simOutput = await simulator.simulateTransaction({
+                from: myAddress,
+                to: resolvedAddress,
+                value: amountWei
+              });
+              if (simOutput.error) throw new Error(simOutput.error);
+              setSimResult(simOutput);
+
+              estGas = await provider.estimateGas({
+                from: myAddress,
+                to: resolvedAddress,
+                value: amountWei
+              });
+            } else {
+              const iface = new Interface(["function transfer(address to, uint256 amount)"]);
+              const tokenMeta = context?.tokenCache?.getToken(network.network_id, sendTokenAddress);
+              const decimals = tokenMeta?.decimals ?? 18;
+              const amountWei = parseUnits(sendAmount, decimals);
+              const data = iface.encodeFunctionData("transfer", [resolvedAddress, amountWei]);
+
+              // Simulate ERC20 Transfer
+              let finalData = data;
+              if (sendMemo) {
+                const memoHex = hexlify(toUtf8Bytes(sendMemo));
+                finalData = finalData + memoHex.slice(2);
+              }
+
+              // 1b. Simulate ERC20 Transfer
+              const simOutput = await simulator.simulateTransaction({
+                from: myAddress,
+                to: sendTokenAddress,
+                data: finalData
+              });
+
+              // Resolve token symbol for UI preview
+              if (simOutput.balanceChanges.length > 0 && tokenMeta) {
+                simOutput.balanceChanges[0].symbol = tokenMeta.symbol;
+                simOutput.balanceChanges[0].decimals = tokenMeta.decimals;
+              }
+
+              if (simOutput.error) throw new Error(simOutput.error);
+              setSimResult(simOutput);
+
+              estGas = await provider.estimateGas({
+                from: myAddress,
+                to: sendTokenAddress,
+                data: finalData
+              });
+            }
+
+            // Get live fee data to estimate actual ETH cost for Gas
+            const feeData = await provider.getFeeData();
+            const baseGasPrice = feeData.gasPrice || feeData.maxFeePerGas || parseUnits("1", "gwei");
+
+            // Calculate estimated fee using the selected multiplier
+            const estimatedFeeWei = (estGas * baseGasPrice * BigInt(Math.floor(gasMultiplier * 100))) / 100n;
+
+            setEstimatedGasFee(parseFloat(formatEther(estimatedFeeWei)).toFixed(6) + " ETH");
+            setIsPreviewMode(true);
+            setStatus("idle");
+            return; // Wait for the "Confirm & Send" click
+
+          } catch (simError: any) {
+            console.error("[Send] Simulation failed:", simError);
+            let reason = simError?.info?.error?.message || simError?.reason || simError?.message || "Contract logic reverted or insufficient funds.";
+
+            if (reason.includes("insufficient funds for gas * price + value") || reason.includes("insufficient funds")) {
+              reason = "Yetersiz Bakiye: Ağ ücretlerini (gas fee) karşılamak için cüzdanınızda yeterli ETH bulunmuyor.";
+            } else if (reason.includes("execution reverted")) {
+              reason = "İşlem Reddedildi (Reverted): Akıllı sözleşme veya alıcı bu işlemi kabul etmiyor.";
+            }
+
+            throw new Error(`⚠️ Transaction Simulation Failed: ${reason} - İşlem iptal edildi.`);
+          }
+        }
+
+        // --- 2. Actual Send Phase (Only triggered if isPreviewMode is true or skipped) ---
+        let memoHex = sendMemo ? hexlify(toUtf8Bytes(sendMemo)) : "0x";
+
         if (sendTokenAddress === "ETH") {
-          console.log("[Send] ETH Transfer - Amount:", sendAmount, "to:", sendAddress);
-          hash = await network.sendTransaction(activeAccount, { to: sendAddress, value: sendAmount });
+          console.log(`[Send] ETH Transfer (${gasMode} gas) - Amount:`, sendAmount, "to:", sendAddress, "Memo:", memoHex);
+          // Only send the data field if memo isn't empty (or "0x" logic will pass it as empty data)
+          const txOpts: any = { to: resolvedAddress, value: sendAmount, gasMultiplier: gasMultiplier };
+          if (memoHex !== "0x") txOpts.data = memoHex;
+          hash = await network.sendTransaction(activeAccount, txOpts);
           console.log("[Send] ETH Transfer TX:", hash);
         } else {
-          console.log("[Send] ERC20 Transfer - Token:", sendTokenAddress, "Amount:", sendAmount);
+          console.log(`[Send] ERC20 Transfer (${gasMode} gas) - Token:`, sendTokenAddress, "Amount:", sendAmount, "Memo:", memoHex);
           const iface = new Interface(["function transfer(address to, uint256 amount)"]);
           const tokenMeta = context?.tokenCache?.getToken(network.network_id, sendTokenAddress);
           const decimals = tokenMeta?.decimals ?? 18;
           const amountWei = parseUnits(sendAmount, decimals);
           console.log("[Send] ERC20 Amount in Wei:", amountWei.toString());
-          const data = iface.encodeFunctionData("transfer", [sendAddress, amountWei]);
-          hash = await network.sendTransaction(activeAccount, { to: sendTokenAddress, value: "0", data });
+          let data = iface.encodeFunctionData("transfer", [resolvedAddress, amountWei]);
+
+          if (memoHex !== "0x") {
+            data = data + memoHex.slice(2);
+          }
+          hash = await network.sendTransaction(activeAccount, { to: sendTokenAddress, value: "0", data, gasMultiplier: gasMultiplier } as any);
           console.log("[Send] ERC20 Transfer TX:", hash);
         }
       }
@@ -633,7 +877,18 @@ function SendPanel() {
   const displayTokens = isConfidential ? ownedShieldedTokens : ownedTokens;
 
   return (
-    <Box>
+    <Box sx={{ position: 'relative' }}>
+      {/* FHE Encryption Overlay — shown during signing/encrypting */}
+      <FheEncryptingOverlay
+        visible={isConfidential && ["signing", "broadcasting", "pending"].includes(status)}
+        message={status === "signing"
+          ? "Encrypting your amount with Fully Homomorphic Encryption..."
+          : status === "broadcasting"
+            ? "Broadcasting encrypted transaction to network..."
+            : "Waiting for network confirmation..."
+        }
+      />
+
       {/* Header row with confidential toggle */}
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Stack direction="row" alignItems="center" spacing={1}>
@@ -687,16 +942,8 @@ function SendPanel() {
 
       {/* Success State */}
       {status === 'success' ? (
-        <Stack spacing={2.5} alignItems="center" sx={{ py: 5 }}>
-          <Box sx={{
-            width: 72, height: 72, borderRadius: '50%',
-            bgcolor: 'success.main', display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.3)',
-          }}>
-            <CheckCircle sx={{ fontSize: 40, color: '#fff' }} />
-          </Box>
-          <Typography variant="h6" fontWeight={700}>Transfer Complete</Typography>
+        <Stack spacing={2} alignItems="center" sx={{ py: 4 }}>
+          <SuccessAnimation label="Transfer Complete!" size={80} />
           {txHash && (
             <Link
               href={`${getExplorerBaseForNetwork(network?.network_id)}/tx/${txHash}`}
@@ -715,6 +962,108 @@ function SendPanel() {
             New Transfer
           </Button>
         </Stack>
+      ) : isPreviewMode ? (
+        <Stack spacing={2.5}>
+          <Box sx={{ p: 2, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: 'block', mb: 2 }}>
+              Transaction Preview
+            </Typography>
+
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Recipient</Typography>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{sendAddress}</Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="caption" color="text.secondary">Asset Out</Typography>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Typography variant="h6" fontWeight={700} color="error.main">
+                    - {sendAmount}
+                  </Typography>
+                  <Typography variant="subtitle2" fontWeight={700}>
+                    {sendTokenAddress === "ETH" ? "ETH" : (context?.tokenCache?.getToken(network?.network_id!, sendTokenAddress)?.symbol || "Token")}
+                  </Typography>
+                </Stack>
+              </Box>
+
+              <Box>
+                <Typography variant="caption" color="text.secondary">Estimated Network Fee</Typography>
+                <Typography variant="body2" fontWeight={600}>
+                  {estimatedGasFee || "Calculating..."}
+                </Typography>
+              </Box>
+
+              {sendMemo && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Transaction Note (Will be Hex Encoded)</Typography>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all', bgcolor: 'action.hover', p: 1, borderRadius: 2 }}>
+                    {sendMemo}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                    Hex: {hexlify(toUtf8Bytes(sendMemo))}
+                  </Typography>
+                </Box>
+              )}
+            </Stack>
+          </Box>
+
+          {/* Error */}
+          {status === 'fail' && (
+            <Fade in>
+              <Paper elevation={0} sx={{
+                p: 1.5, borderRadius: 2.5,
+                bgcolor: 'error.main', color: '#fff',
+              }}>
+                <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8rem' }}>
+                  {feedbackMsg}
+                </Typography>
+              </Paper>
+            </Fade>
+          )}
+
+          {/* Loading */}
+          {isLoading && status !== 'fail' && (
+            <Fade in>
+              <Paper elevation={0} sx={{
+                p: 1.5, borderRadius: 2.5,
+                bgcolor: 'primary.main', color: '#fff',
+              }}>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <CircularProgress size={16} color="inherit" />
+                  <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8rem' }}>
+                    {feedbackMsg || "Processing..."}
+                  </Typography>
+                </Stack>
+              </Paper>
+            </Fade>
+          )}
+
+          <Stack direction="row" spacing={2}>
+            <Button
+              variant="outlined"
+              fullWidth
+              size="large"
+              onClick={() => { setIsPreviewMode(false); setStatus('idle'); }}
+              disabled={isLoading}
+              sx={{ borderRadius: 3, fontWeight: 700 }}
+            >
+              Back
+            </Button>
+            <Button
+              variant="contained"
+              size="large"
+              fullWidth
+              onClick={handleSend}
+              disabled={isLoading}
+              color="primary"
+              sx={{ borderRadius: 3, fontWeight: 700 }}
+              endIcon={isLoading ? <CircularProgress size={18} color="inherit" /> : <ArrowForward />}
+            >
+              {isLoading ? "Sending..." : "Confirm & Send"}
+            </Button>
+          </Stack>
+        </Stack>
       ) : (
         <Stack spacing={2}>
           {/* Recipient */}
@@ -727,7 +1076,7 @@ function SendPanel() {
             </Stack>
             <TextField
               variant="standard"
-              placeholder="0x..."
+              placeholder="0x... or name.eth / name.crypto"
               fullWidth
               value={sendAddress}
               onChange={(e) => setSendAddress(e.target.value)}
@@ -738,6 +1087,74 @@ function SendPanel() {
               }}
             />
           </Paper>
+
+          {/* Domain Resolution Feedback */}
+          {isDomainInput && isResolvingDomain && (
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1 }}>
+              <CircularProgress size={12} sx={{ color: 'primary.main' }} />
+              <Typography variant="caption" color="text.secondary">Resolving domain...</Typography>
+            </Stack>
+          )}
+
+          {isDomainInput && !isResolvingDomain && resolvedAddress && (
+            <Fade in>
+              <Alert
+                severity="success"
+                sx={{
+                  borderRadius: 3, border: '1px solid', borderColor: 'success.main',
+                  bgcolor: alpha(theme.palette.success.main, 0.05),
+                  '& .MuiAlert-message': { p: 0.5 }
+                }}
+              >
+                <Typography variant="caption" fontWeight={700} display="block" color="success.dark">
+                  ✓ Resolved via {resolvedDomainMethod === 'ens' ? 'ENS' : 'Unstoppable Domains'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                  {resolvedAddress}
+                </Typography>
+              </Alert>
+            </Fade>
+          )}
+
+          {isDomainInput && !isResolvingDomain && domainResolutionError && (
+            <Fade in>
+              <Alert severity="error" sx={{ borderRadius: 3, '& .MuiAlert-message': { p: 0.5 } }}>
+                <Typography variant="caption" fontWeight={700} display="block">Could not resolve domain</Typography>
+                <Typography variant="caption" color="text.secondary">{domainResolutionError}</Typography>
+              </Alert>
+            </Fade>
+          )}
+
+          {/* Phishing Protection Warning */}
+          {isAddress(resolvedAddress) && isCheckingAddress && (
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1 }}>
+              <CircularProgress size={12} sx={{ color: 'text.secondary' }} />
+              <Typography variant="caption" color="text.secondary">Verifying address history...</Typography>
+            </Stack>
+          )}
+
+          {isAddress(resolvedAddress) && !isCheckingAddress && isNewAddress && (
+            <Fade in>
+              <Alert
+                severity="warning"
+                icon={<Shield fontSize="inherit" />}
+                sx={{
+                  borderRadius: 3,
+                  border: '1px solid',
+                  borderColor: 'warning.main',
+                  bgcolor: alpha(theme.palette.warning.main, 0.05),
+                  '& .MuiAlert-message': { p: 0.5 }
+                }}
+              >
+                <Typography variant="caption" fontWeight={700} display="block" color="warning.dark">
+                  First Time Interaction
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  You have never sent or received funds from this address. Double-check before sending.
+                </Typography>
+              </Alert>
+            </Fade>
+          )}
 
           {/* Asset + Amount row */}
           <Stack direction="row" spacing={1.5}>
@@ -794,6 +1211,107 @@ function SendPanel() {
             </Paper>
           </Stack>
 
+          {/* Transaction Note (Optional) */}
+          <Paper elevation={0} sx={inputCardSx}>
+            <Typography variant="caption" color="text.secondary" fontWeight={600}>Note / Memo (Optional)</Typography>
+            <TextField
+              variant="standard"
+              placeholder="e.g. For dinner..."
+              fullWidth
+              value={sendMemo}
+              onChange={(e) => setSendMemo(e.target.value)}
+              disabled={isLoading}
+              InputProps={{
+                disableUnderline: true,
+                style: { fontSize: '0.95rem', fontWeight: 500, marginTop: 4 }
+              }}
+            />
+          </Paper>
+
+          {/* Premium Gas Management UI */}
+          {!isConfidential && (
+            <Box sx={{ mt: 2, mb: 1 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 1, mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  Network Fee
+                </Typography>
+                <Typography variant="caption" color={gasMode === 'fast' ? "error.main" : "text.secondary"} fontWeight={600}>
+                  {gasMode === 'fast' ? "Aggressive" : gasMode === 'slow' ? "Slow" : "Market"}
+                </Typography>
+              </Stack>
+              <Paper elevation={0} sx={{
+                display: 'flex',
+                borderRadius: 4,
+                p: 0.5,
+                bgcolor: alpha(theme.palette.background.default, 0.4),
+                border: '1px solid',
+                borderColor: 'divider',
+                gap: 0.5
+              }}>
+                <Button
+                  fullWidth
+                  size="small"
+                  onClick={() => setGasMode("slow")}
+                  variant={gasMode === "slow" ? "contained" : "text"}
+                  color="inherit"
+                  sx={{
+                    borderRadius: 3,
+                    py: 0.5,
+                    fontWeight: gasMode === "slow" ? 700 : 500,
+                    fontSize: '0.7rem',
+                    textTransform: 'none',
+                    bgcolor: gasMode === "slow" ? 'background.paper' : 'transparent',
+                    color: gasMode === "slow" ? 'text.primary' : 'text.secondary',
+                    boxShadow: gasMode === "slow" ? '0 2px 8px rgba(0,0,0,0.05)' : 'none',
+                    '&:hover': { bgcolor: gasMode === "slow" ? 'background.paper' : 'action.hover' }
+                  }}
+                >
+                  Slow
+                </Button>
+                <Button
+                  fullWidth
+                  size="small"
+                  onClick={() => setGasMode("standard")}
+                  variant={gasMode === "standard" ? "contained" : "text"}
+                  color="inherit"
+                  sx={{
+                    borderRadius: 3,
+                    py: 0.5,
+                    fontWeight: gasMode === "standard" ? 700 : 500,
+                    fontSize: '0.7rem',
+                    textTransform: 'none',
+                    bgcolor: gasMode === "standard" ? 'background.paper' : 'transparent',
+                    color: gasMode === "standard" ? 'text.primary' : 'text.secondary',
+                    boxShadow: gasMode === "standard" ? '0 2px 8px rgba(0,0,0,0.05)' : 'none',
+                    '&:hover': { bgcolor: gasMode === "standard" ? 'background.paper' : 'action.hover' }
+                  }}
+                >
+                  Market
+                </Button>
+                <Button
+                  fullWidth
+                  size="small"
+                  onClick={() => setGasMode("fast")}
+                  variant={gasMode === "fast" ? "contained" : "text"}
+                  color="inherit"
+                  sx={{
+                    borderRadius: 3,
+                    py: 0.5,
+                    fontWeight: gasMode === "fast" ? 700 : 500,
+                    fontSize: '0.7rem',
+                    textTransform: 'none',
+                    bgcolor: gasMode === "fast" ? alpha(theme.palette.error.main, 0.1) : 'transparent',
+                    color: gasMode === "fast" ? 'error.main' : 'text.secondary',
+                    boxShadow: gasMode === "fast" ? '0 2px 8px rgba(2ef,68,68,0.05)' : 'none',
+                    '&:hover': { bgcolor: gasMode === "fast" ? alpha(theme.palette.error.main, 0.15) : 'action.hover' }
+                  }}
+                >
+                  Aggressive
+                </Button>
+              </Paper>
+            </Box>
+          )}
+
           {/* Error */}
           {status === 'fail' && (
             <Fade in>
@@ -831,7 +1349,7 @@ function SendPanel() {
             size="large"
             fullWidth
             onClick={handleSend}
-            disabled={isLoading || !sendAddress || !sendAmount}
+            disabled={isLoading || !resolvedAddress || !sendAmount || isResolvingDomain}
             color={isConfidential ? "secondary" : "primary"}
             sx={{
               ...ctaButtonSx,

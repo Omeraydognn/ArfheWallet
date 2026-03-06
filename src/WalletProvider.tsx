@@ -48,8 +48,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       // Only lock if we are NOT already on the auth or splash screens
       if (location.pathname !== '/auth' && location.pathname !== '/') {
         timeoutId = setTimeout(() => {
-          // Lock the wallet by removing the session password and redirecting
-          appContext.storageManager.removeLocal('passwd');
+          // Lock the wallet: clear AES key from memory and redirect to auth
+          appContext.storageManager.lock();
           navigate('/auth', { replace: true });
         }, currentTimeout);
       }

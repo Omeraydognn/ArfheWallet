@@ -69,7 +69,7 @@ export function ContactBookModal({
     return (
         <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
             <DialogTitle sx={{ borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h6" fontWeight={700}>Contact Book</Typography>
+                <Box component="span" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>Contact Book</Box>
                 <IconButton onClick={onClose}><Close /></IconButton>
             </DialogTitle>
 

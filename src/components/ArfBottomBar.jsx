@@ -7,7 +7,7 @@ import {
   Box,
   Paper,
 } from "@mui/material";
-import { History, Home, Send, Lock, Search, GridViewRounded } from "@mui/icons-material";
+import { History, Home, Send, Hub, Search, GridViewRounded } from "@mui/icons-material";
 import ArfBottomMenu from "./ArfBottomMenu";
 import { useNavigate, useLocation } from "react-router";
 import { useTheme } from "@mui/material";
@@ -38,7 +38,7 @@ export default function ArfBottomBar() {
       case '/home': return 0;
       case '/explore': return 1;
       case '/history': return 3;
-      case '/privacy': return 4;
+      case '/GraphExplorer': return 4;
       default: return 0;
     }
   };
@@ -115,9 +115,9 @@ export default function ArfBottomBar() {
             onClick={() => navigate('history')}
           />
           <BottomNavigationAction
-            label="Security"
-            icon={<Lock sx={{ fontSize: 28 }} />}
-            onClick={() => navigate('privacy')}
+            label="Graph"
+            icon={<Hub sx={{ fontSize: 28 }} />}
+            onClick={() => navigate('GraphExplorer')}
           />
         </BottomNavigation>
       </Paper>

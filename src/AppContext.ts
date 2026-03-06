@@ -2,6 +2,7 @@ import { createContext } from "react";
 import NetworkProvider from "./backend/NetworkProvider.js";
 import AccountManager from "./backend/AccountManager.js";
 import TokenCache from "./backend/TokenCache.js";
+import NFTCache from "./backend/NFTCache.js";
 import StorageManager from "./backend/StorageManager.js";
 import DataCacheService from "./backend/DataCacheService.js";
 import { ContactManager } from "./backend/ContactManager.js";
@@ -19,6 +20,7 @@ export class AppContext {
   networkProvider: NetworkProvider;
   // token cache
   tokenCache: TokenCache;
+  nftCache: NFTCache;
   // data cache (balances, prices with TTL)
   dataCacheService: DataCacheService;
   // contact manager
@@ -30,7 +32,8 @@ export class AppContext {
     this.storageManager = new StorageManager();
     this.accountManager = new AccountManager(this.storageManager);
     this.networkProvider = new NetworkProvider();
-    this.tokenCache = new TokenCache();
+    this.tokenCache = new TokenCache(this.storageManager);
+    this.nftCache = new NFTCache(this.storageManager);
     this.dataCacheService = new DataCacheService();
     this.contactManager = new ContactManager(this.storageManager);
     this.walletConnectService = new WalletConnectService(this.accountManager);

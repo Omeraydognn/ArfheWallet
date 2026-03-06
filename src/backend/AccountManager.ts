@@ -9,22 +9,65 @@ export default class AccountManager {
   linkedStorageManager: StorageManager;
 
   constructor(storageManager: StorageManager) {
-    this.active = this.loadActiveIndex(storageManager);
-    this.accounts = this.loadAccounts(storageManager) || [];
     this.listeners = [];
     this.linkedStorageManager = storageManager;
-  }
 
-  private loadActiveIndex(storageManager: StorageManager): number {
-    const storedActive = storageManager.getLocal<number>("active");
-    if (storedActive !== null && storedActive >= 0) {
-      return storedActive;
+    // Synchronously load from plaintext localStorage for backward compatibility.
+    // This ensures the app works immediately even before password unlock.
+    // After unlock, loadFromEncryptedStorage() will replace with decrypted data.
+    const plainAccounts = storageManager.getLocal<any[]>("accounts") || [];
+    const plainActive = storageManager.getLocal<number>("active") ?? -1;
+
+    if (plainAccounts.length > 0) {
+      this.accounts = this.hydrateAccounts(plainAccounts);
+      this.active = plainActive >= 0 ? plainActive : 0;
+    } else {
+      this.accounts = [];
+      this.active = -1;
     }
-    return -1;
   }
 
-  private loadAccounts(storageManager: StorageManager): Account[] {
-    const storedAccounts = storageManager.getLocal<any[]>("accounts") || [];
+  /**
+   * Initialize accounts from encrypted storage.
+   * Must be called AFTER storageManager.initEncryption() succeeds.
+   * This replaces any accounts loaded from plaintext in the constructor.
+   */
+  async loadFromEncryptedStorage(): Promise<void> {
+    try {
+      // Try encrypted storage first
+      const storedAccounts = await this.linkedStorageManager.decryptAndRetrieve<any[]>("accounts");
+      const storedActive = await this.linkedStorageManager.decryptAndRetrieve<number>("active");
+
+      if (storedAccounts && storedAccounts.length > 0) {
+        this.accounts = this.hydrateAccounts(storedAccounts);
+        this.active = (storedActive !== null && storedActive >= 0) ? storedActive : 0;
+        console.log(`[AccountManager] 🔓 Loaded ${this.accounts.length} accounts from encrypted storage`);
+      } else {
+        // Fallback: check for unencrypted accounts (pre-migration)
+        const plainAccounts = this.linkedStorageManager.getLocal<any[]>("accounts") || [];
+        const plainActive = this.linkedStorageManager.getLocal<number>("active") ?? -1;
+
+        if (plainAccounts.length > 0) {
+          this.accounts = this.hydrateAccounts(plainAccounts);
+          this.active = plainActive >= 0 ? plainActive : 0;
+          console.log(`[AccountManager] ⚠️ Loaded ${this.accounts.length} accounts from PLAINTEXT — will migrate`);
+          // Auto-migrate to encrypted
+          await this.linkedStorageManager.migrateToEncrypted();
+        }
+        // If still no accounts, keep whatever was loaded in constructor
+      }
+
+      this.notifyListeners();
+    } catch (error) {
+      console.error("[AccountManager] Failed to load accounts:", error);
+      // Keep whatever was loaded in constructor
+    }
+  }
+
+  /**
+   * Hydrate raw stored objects back into Account instances with wallet objects.
+   */
+  private hydrateAccounts(storedAccounts: any[]): Account[] {
     return storedAccounts.map((stored) => {
       const account = new Account();
       account.name = stored.name;
@@ -73,12 +116,24 @@ export default class AccountManager {
     this.listeners.forEach(fn => fn());
   }
 
-  private updateActive() {
-    this.linkedStorageManager.setLocal("active", this.active);
+  /**
+   * Persist active index to storage.
+   * Uses encrypted storage if unlocked, otherwise falls back to plaintext.
+   */
+  private async updateActive(): Promise<void> {
+    if (this.linkedStorageManager.isUnlocked()) {
+      await this.linkedStorageManager.encryptAndStore("active", this.active);
+    } else {
+      // Fallback to plaintext until encryption is set up
+      this.linkedStorageManager.setLocal("active", this.active);
+    }
   }
 
-  private updateStorage() {
-    // Serialize accounts to plain objects for storage
+  /**
+   * Persist all accounts to storage.
+   * Uses encrypted storage if unlocked, otherwise falls back to plaintext.
+   */
+  private async updateStorage(): Promise<void> {
     const serializableAccounts = this.accounts.map(account => ({
       name: account.name,
       mnemonic: account.mnemonic,
@@ -89,8 +144,14 @@ export default class AccountManager {
       owned_tokens: Object.fromEntries(account.owned_tokens)
     }));
 
-    this.linkedStorageManager.setLocal("active", this.active);
-    this.linkedStorageManager.setLocal("accounts", serializableAccounts);
+    if (this.linkedStorageManager.isUnlocked()) {
+      await this.linkedStorageManager.encryptAndStore("active", this.active);
+      await this.linkedStorageManager.encryptAndStore("accounts", serializableAccounts);
+    } else {
+      // Fallback to plaintext until encryption is set up
+      this.linkedStorageManager.setLocal("active", this.active);
+      this.linkedStorageManager.setLocal("accounts", serializableAccounts);
+    }
   }
 
   CreateAccount(): number {
@@ -99,9 +160,10 @@ export default class AccountManager {
 
     if (this.active == -1 || this.active != index) {
       this.active = index;
-      this.notifyListeners();  // <-- make sure listeners are notified
+      this.notifyListeners();
     }
 
+    // Fire-and-forget async persistence
     this.updateStorage();
     return index;
   }
@@ -112,7 +174,7 @@ export default class AccountManager {
       return -1;
     }
     const index = this.accounts.push(account) - 1;
-    this.notifyListeners(); // update UI,
+    this.notifyListeners();
     this.updateStorage();
     return index;
   }
@@ -123,7 +185,7 @@ export default class AccountManager {
 
     if (this.active == -1 || this.active != index) {
       this.active = index;
-      this.notifyListeners();  // <-- make sure listeners are notified
+      this.notifyListeners();
     }
 
     this.updateStorage();
@@ -131,7 +193,6 @@ export default class AccountManager {
   }
 
   ImportPrivateKey(privateKey: string, name: string = "Social Account"): number {
-    // Check if we already have this account imported by pure address comparison (optional)
     try {
       let account = Account.FromPrivateKey(privateKey, name);
       let index = this.AddAccount(account);
@@ -168,7 +229,6 @@ export default class AccountManager {
       }
     }
 
-    // Find the current highest index we have generated (from derivation path ending)
     let maxIndex = -1;
     for (const acc of this.accounts) {
       if (acc.derivationPath) {
@@ -226,7 +286,6 @@ export default class AccountManager {
       let unusedIndices: number[] = [];
 
       while (gap < gapLimit) {
-        // Derive the next account
         const derivedIndex = this.DeriveNewAccount(parentIndex);
         const account = this.accounts[derivedIndex];
 
@@ -237,10 +296,9 @@ export default class AccountManager {
 
         console.log(`[Auto-Discovery] Scanning Account ${derivedIndex} (${account.address}) on ${providers.length} networks...`);
 
-        // Check activity across all networks
         let isUsed = false;
         await Promise.all(providers.map(async (provider, idx) => {
-          if (isUsed) return; // fast exit if already found
+          if (isUsed) return;
           try {
             const [txCount, balance] = await Promise.all([
               provider.getTransactionCount(account.address!),
@@ -252,28 +310,19 @@ export default class AccountManager {
             }
           } catch (e) {
             console.error(`[Auto-Discovery] RPC Error on Network ${idx}:`, e);
-            // Ignore individual RPC failures
           }
         }));
 
         if (isUsed) {
-          // Account was used, reset gap counter
           gap = 0;
-          unusedIndices = []; // Keep all previous empty accounts to maintain derivation sequence
+          unusedIndices = [];
           console.log(`[Auto-Discovery] ✔ DISCOVERED USED ACCOUNT at index ${derivedIndex}: ${account.address}`);
         } else {
-          // Account unused, increment gap
           gap++;
           unusedIndices.push(derivedIndex);
           console.log(`[Auto-Discovery] ✖ Account unused. Gap is now ${gap}/${gapLimit}`);
         }
       }
-
-      // Remove only the trailing unused accounts
-      // Kullanıcı talebi üzerine bakiye kontrolüne bakılmaksızın cüzdanlar silinmeden bırakılıyor
-      // for (let i = unusedIndices.length - 1; i >= 0; i--) {
-      //   this.RemoveAccount(unusedIndices[i]);
-      // }
 
       this.SetActive(originalActive < this.accounts.length ? originalActive : 0);
     } catch (e) {

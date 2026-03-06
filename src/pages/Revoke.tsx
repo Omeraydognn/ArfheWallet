@@ -619,35 +619,81 @@ const RevokeAlchemyPage = () => {
         {/* Approvals */}
         {approvals.length > 0 && (
           <Box>
-            <Typography variant="h6" gutterBottom> Token Permissions ({approvals.length})</Typography>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+              <Typography variant="h6" fontWeight={700}>
+                Token Permissions ({approvals.length})
+              </Typography>
+              <Chip
+                label={`${approvals.filter(a => a.isUnlimited).length} High Risk`}
+                color="error"
+                size="small"
+                sx={{ fontWeight: 700, borderRadius: 2 }}
+              />
+            </Stack>
             {approvals.map((a, i) => (
-              <Paper key={i} sx={{
-                p: 2.5,
+              <Paper key={i} elevation={0} sx={{
+                p: 3,
                 mb: 2,
                 borderRadius: 4,
                 bgcolor: alpha(theme.palette.background.paper, 0.85),
                 backdropFilter: 'blur(20px)',
                 boxShadow: '0 8px 32px -8px rgba(0,0,0,0.08)',
                 border: '1px solid',
-                borderColor: 'divider',
-                borderLeft: a.isUnlimited ? '4px solid #ef4444' : '4px solid #6366f1'
+                borderColor: a.isUnlimited ? alpha(theme.palette.error.main, 0.3) : 'divider',
+                borderLeft: a.isUnlimited ? '4px solid #ef4444' : '4px solid #6366f1',
+                transition: 'transform 0.2s ease-in-out',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 12px 48px -12px rgba(0,0,0,0.12)',
+                }
               }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, alignItems: 'center' }}>
-                  <Typography fontWeight={600}>{a.tokenSymbol} - {a.tokenName}</Typography>
-                  <Chip label={a.isUnlimited ? ' UNLIMITED' : '✓ Limited'} color={a.isUnlimited ? 'error' : 'warning'} size="small" />
-                </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                  <strong>Spender:</strong> {a.spenderName}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block', fontFamily: 'monospace' }}>
-                  {a.spenderAddress}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  <strong>Allowance:</strong> {a.allowance}
-                </Typography>
-                <Button fullWidth variant="contained" color="error" onClick={() => handleRevoke(a)} sx={{ mt: 1 }}>
-                  Revoke Permission
-                </Button>
+                <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2}>
+                  <Box sx={{ flex: 1 }}>
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                      <Typography variant="h6" fontWeight={800}>{a.tokenSymbol}</Typography>
+                      <Typography variant="body2" color="text.secondary" fontWeight={500}>({a.tokenName})</Typography>
+                      {a.isUnlimited && (
+                        <Tooltip title="Unlimited allowance gives the dApp full access to all your tokens of this type. Highly risky!" arrow>
+                          <Chip label="UNLIMITED RISK" color="error" size="small" sx={{ ml: 1, height: 20, fontSize: '0.65rem', fontWeight: 800 }} />
+                        </Tooltip>
+                      )}
+                    </Stack>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                      <Typography variant="body2" sx={{ width: 80, fontWeight: 600, color: 'text.secondary' }}>Spender:</Typography>
+                      <Typography variant="body2" fontWeight={700}>{a.spenderName}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                      <Typography variant="body2" sx={{ width: 80, fontWeight: 600, color: 'text.secondary' }}>Location:</Typography>
+                      <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.1), px: 1, py: 0.2, borderRadius: 1 }}>
+                        {a.spenderAddress}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Typography variant="body2" sx={{ width: 80, fontWeight: 600, color: 'text.secondary' }}>Limit:</Typography>
+                      <Typography variant="body2" fontWeight={600} color={a.isUnlimited ? 'error.main' : 'text.primary'}>
+                        {a.allowance}
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: { xs: '100%', sm: '140px' } }}>
+                    <Button
+                      variant="contained"
+                      color={a.isUnlimited ? "error" : "primary"}
+                      onClick={() => handleRevoke(a)}
+                      startIcon={<LinkOffRounded />}
+                      sx={{
+                        borderRadius: 3,
+                        fontWeight: 700,
+                        py: 1,
+                        boxShadow: a.isUnlimited ? '0 4px 14px rgba(239, 68, 68, 0.3)' : 'none'
+                      }}
+                    >
+                      Revoke
+                    </Button>
+                  </Box>
+                </Stack>
               </Paper>
             ))}
           </Box>

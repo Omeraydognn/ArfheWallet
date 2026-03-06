@@ -72,20 +72,18 @@ export default function SettingsSecurity() {
         setPasswordDialogOpen(true);
     };
 
-    // 2. Verify Password
-    const handleVerifyPassword = () => {
+    // 2. Verify Password (async — uses PBKDF2 hash verification)
+    const handleVerifyPassword = async () => {
         if (!storageManager) return;
-        const storedPass = storageManager.getLocal("passwd");
 
-        if (!storedPass) {
-            // If no password set, maybe allow? Or force set? 
-            // User request implies password exists. let's assume it matches if empty for dev, 
-            // but strictly:
+        if (!storageManager.hasPassword()) {
             setPasswordError("No password set for this wallet.");
             return;
         }
 
-        if (password === storedPass) {
+        // initEncryption verifies password against stored PBKDF2 hash
+        const ok = await storageManager.initEncryption(password);
+        if (ok) {
             setPasswordDialogOpen(false);
             revealSecrets(selectedAccountIndex!);
         } else {

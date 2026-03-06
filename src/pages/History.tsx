@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState, useCallback } from "react";
 import {
   Box,
   Container,
@@ -37,6 +37,35 @@ import {
 import { WalletContext } from "../AppContext";
 import { TransactionHistory } from "../backend/NetworkTypes";
 import { useToast } from "../components/ToastProvider";
+import { toUtf8String } from "ethers";
+
+/** Try to decode a UTF-8 memo from raw tx input hex.
+ *  - Pure data (ETH transfer): entire input is the memo.
+ *  - ERC20 transfer(address,uint256): first 68 bytes (4 selector + 32 addr + 32 amount) are ABI, rest is memo.
+ */
+function decodeMemo(inputHex: string | undefined): string | null {
+  if (!inputHex || inputHex === "0x" || inputHex.length <= 2) return null;
+  try {
+    const raw = inputHex.startsWith("0x") ? inputHex.slice(2) : inputHex;
+    // transfer(address,uint256) selector = a9059cbb, ABI data = 4+32+32 = 68 bytes = 136 hex chars
+    const TRANSFER_SELECTOR = "a9059cbb";
+    let memoHex: string;
+    if (raw.startsWith(TRANSFER_SELECTOR) && raw.length > 136) {
+      memoHex = raw.slice(136); // bytes after ABI
+    } else if (!raw.startsWith(TRANSFER_SELECTOR)) {
+      memoHex = raw; // pure data, e.g. ETH send with memo
+    } else {
+      return null; // transfer() with no extra data
+    }
+    if (!memoHex || memoHex.length === 0) return null;
+    const decoded = toUtf8String("0x" + memoHex);
+    // Only return if it contains printable chars (filter binary garbage)
+    if (/[\x20-\x7E]/.test(decoded) && decoded.trim().length > 0) return decoded.trim();
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 type FilterType = "all" | "confidential" | "public";
 
@@ -52,9 +81,35 @@ export default function History() {
   const [nextBlock, setNextBlock] = useState<string | undefined>(undefined);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedTx, setSelectedTx] = useState<TransactionHistory | null>(null);
+  const [txMemo, setTxMemo] = useState<string | null>(null);
+  const [memoLoading, setMemoLoading] = useState(false);
   const { showToast } = useToast();
 
   const theme = useTheme();
+
+  // Lazy-fetch input data when detail modal opens
+  useEffect(() => {
+    if (!selectedTx || !network) {
+      setTxMemo(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setMemoLoading(true);
+      setTxMemo(null);
+      try {
+        const txData: any = await network.call("eth_getTransactionByHash", [selectedTx.hash]);
+        if (!cancelled && txData?.input) {
+          setTxMemo(decodeMemo(txData.input));
+        }
+      } catch (e) {
+        console.warn("[History] Failed to fetch tx input:", e);
+      } finally {
+        if (!cancelled) setMemoLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedTx, network]);
 
   useEffect(() => {
     if (!walletContext || !network || !activeAccount) {
@@ -263,7 +318,7 @@ export default function History() {
           <List sx={{ p: 0 }}>
             {filteredTransactions.map((tx, index) => {
               const isSent = tx.from.toLowerCase() === userAddress;
-              const token = tokenCache?.getToken(network.network_id, tx.contractAddress);
+              const token = network ? tokenCache?.getToken(network.network_id, tx.contractAddress) : undefined;
 
               // Resolve symbol: check token cache, then check if it's a known FHE contract
               let symbol = token?.symbol || (tx.isNative ? "ETH" : "");
@@ -561,6 +616,22 @@ export default function History() {
                 </Paper>
               </Stack>
             </Stack>
+
+            {/* Decoded Memo/Note */}
+            {memoLoading ? (
+              <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 3, mt: 1 }}>
+                <Typography variant="caption" color="text.secondary">Loading note...</Typography>
+              </Box>
+            ) : txMemo ? (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>Transaction Note</Typography>
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mt: 0.5, bgcolor: alpha(theme.palette.info.main, 0.04), borderColor: alpha(theme.palette.info.main, 0.2) }}>
+                  <Typography variant="body2" sx={{ fontStyle: 'italic', wordBreak: 'break-word' }}>
+                    {txMemo}
+                  </Typography>
+                </Paper>
+              </Box>
+            ) : null}
           </DialogContent>
 
           <Box sx={{ p: 3, pt: 0, display: "flex", justifyContent: "center" }}>

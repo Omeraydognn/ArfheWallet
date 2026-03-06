@@ -12,6 +12,7 @@ import {
   MenuItem,
   Tabs,
   Tab,
+  Tooltip,
   useTheme,
   alpha
 } from "@mui/material";
@@ -21,23 +22,19 @@ import {
   Shield,
   Hub,
   ExpandMore,
-  Refresh
+  Refresh,
+  Add,
+  Visibility,
+  VisibilityOff
 } from "@mui/icons-material";
+import { useMatrixText } from "../hooks/useMatrixText.js";
+import ImportTokenModal from "../components/ImportTokenModal.js";
+import ImportNftModal from "../components/ImportNftModal.js";
+import NftGalleryCard from "../components/NftGalleryCard.js";
 import { AppContext, WalletContext } from "../AppContext.js";
 import { ActiveAccountContext } from "../ActiveAccountProvider.js";
-import ArfGraph from "../components/ArfGraph.js";
 import { useNavigate } from "react-router";
 import { NetworkId } from "../backend/NetworkTypes.js";
-
-// Mock data for graph
-const demoData = [
-  { x: 0, y: 2 },
-  { x: 1, y: 5.5 },
-  { x: 2, y: 2 },
-  { x: 3, y: 8.5 },
-  { x: 4, y: 1.5 },
-  { x: 5, y: 5 },
-];
 
 import { getAddress } from "ethers";
 
@@ -84,6 +81,33 @@ const stringToColor = (str: string): string => {
   return `hsl(${hue}, 55%, 50%)`;
 };
 
+/** Renders a balance value with Matrix-style scramble animation on privacy toggle */
+function MatrixBalance({ value, isHidden, variant = "h3" }: {
+  value: string;
+  isHidden: boolean;
+  variant?: any;
+}) {
+  const displayed = useMatrixText(value, isHidden);
+  return (
+    <Typography
+      variant={variant}
+      fontWeight="800"
+      sx={{
+        letterSpacing: -1,
+        // Always use the same gradient — no green on hidden
+        background: 'linear-gradient(45deg, #fff 50%, #6366f1 90%)',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        fontFamily: isHidden ? 'monospace' : 'inherit',
+        transition: 'all 0.3s ease',
+        userSelect: 'none',
+      }}
+    >
+      {displayed}
+    </Typography>
+  );
+}
+
 function Home() {
   const theme = useTheme();
   const wallet_context = React.useContext(WalletContext);
@@ -98,10 +122,19 @@ function Home() {
       return wallet_context?.tokenCache?.getAllTokens(initialNetId) ?? [];
     } catch { return []; }
   });
+  const [nfts, setNfts] = useState<any[]>(() => {
+    try {
+      const initialNetId = wallet_context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Mainnet;
+      return wallet_context?.nftCache?.getAllNFTs(initialNetId) ?? [];
+    } catch { return []; }
+  });
   const [totalBalanceUsd, setTotalBalanceUsd] = useState(0.00);
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [tabIndex, setTabIndex] = useState(0);
+  const [isBalanceHidden, setIsBalanceHidden] = useState(false);
+  const [importTokenModalOpen, setImportTokenModalOpen] = useState(false);
+  const [importNftModalOpen, setImportNftModalOpen] = useState(false);
 
   // Network Switcher State
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -319,40 +352,47 @@ function Home() {
         currentPrices = await net.getTokenPrices(contractAddresses);
       } catch (e) { console.warn("Price fetch skipped"); }
 
-      // Testnet price fallback: fetch mainnet ETH price and map known tokens
-      if (activeNetworkId !== NetworkId.Ethereum_Mainnet && Object.keys(currentPrices).length === 0) {
+      // Testnet price fallback: fetch mainnet ETH/USDC prices and map known testnet tokens by symbol if they lack a price
+      if (activeNetworkId !== NetworkId.Ethereum_Mainnet) {
         try {
-          const ethRes = await fetch("/api/coingecko/simple/price?ids=ethereum,chainlink,usd-coin&vs_currencies=usd");
-          const ethJson = await ethRes.json();
-          const ethPrice = ethJson.ethereum?.usd ?? 0;
-          const linkPrice = ethJson.chainlink?.usd ?? 0;
-          const usdcPrice = ethJson["usd-coin"]?.usd ?? 1;
-
-          // Map native ETH
-          currentPrices["ETH"] = ethPrice;
-
-          // Map all known testnet tokens to mainnet prices by symbol
-          const symbolPriceMap: Record<string, number> = {
-            "ETH": ethPrice,
-            "WETH": ethPrice,
-            "cETH": ethPrice,
-            "USDC": usdcPrice,
-            "cUSDC": usdcPrice,
-            "EURC": usdcPrice,
-            "wUSDC": usdcPrice,
-            "LINK": linkPrice,
-          };
-
-          // Apply prices by matching token symbol from cache
-          allBalances.forEach((tb: any) => {
-            const meta = wallet_context.tokenCache.getToken(activeNetworkId, tb.contractAddress);
-            const symbol = meta?.symbol ?? (tb.isNative ? "ETH" : "");
-            if (symbol && symbolPriceMap[symbol] !== undefined) {
-              currentPrices[tb.contractAddress.toLowerCase()] = symbolPriceMap[symbol];
-            }
+          // Check if there are any balances missing prices
+          const unpriced = allBalances.some((tb: any) => {
+            const key = tb.isNative ? "ETH" : tb.contractAddress.toLowerCase();
+            return typeof currentPrices[key] !== 'number';
           });
 
-          console.log("[Home] Testnet prices mapped:", currentPrices);
+          if (unpriced) {
+            const ethRes = await fetch("/api/coingecko/simple/price?ids=ethereum,chainlink,usd-coin&vs_currencies=usd");
+            const ethJson = await ethRes.json();
+            const ethPrice = ethJson.ethereum?.usd ?? 0;
+            const linkPrice = ethJson.chainlink?.usd ?? 0;
+            const usdcPrice = ethJson["usd-coin"]?.usd ?? 1;
+
+            if (currentPrices["ETH"] === undefined) currentPrices["ETH"] = ethPrice;
+
+            const symbolPriceMap: Record<string, number> = {
+              "ETH": ethPrice,
+              "WETH": ethPrice,
+              "cETH": ethPrice,
+              "USDC": usdcPrice,
+              "cUSDC": usdcPrice,
+              "EURC": usdcPrice,
+              "wUSDC": usdcPrice,
+              "LINK": linkPrice,
+            };
+
+            // Apply prices by matching token symbol from cache ONLY if not already priced
+            allBalances.forEach((tb: any) => {
+              const meta = wallet_context.tokenCache.getToken(activeNetworkId, tb.contractAddress);
+              const symbol = meta?.symbol ?? (tb.isNative ? "ETH" : "");
+              const key = tb.contractAddress.toLowerCase();
+
+              if (currentPrices[key] === undefined && symbol && symbolPriceMap[symbol] !== undefined) {
+                currentPrices[key] = symbolPriceMap[symbol];
+              }
+            });
+            console.log("[Home] Testnet symbol price mapping applied:", currentPrices);
+          }
         } catch (e) {
           console.warn("[Home] Testnet price fallback failed:", e);
         }
@@ -399,58 +439,43 @@ function Home() {
       setTotalBalanceUsd(totalUsd);
 
       // ── Store final display data in cache ──
-      // (tokens will be set below, so we store after final token list is determined)
+      const displayTokens: any[] = [];
 
-      const cached = wallet_context.tokenCache.getAllTokens(activeNetworkId) ?? [];
+      Object.values(balanceMap).forEach((b: any) => {
+        const lowerAddr = b.contractAddress.toLowerCase();
+        if (IGNORED_CONTRACTS.includes(lowerAddr)) return;
 
-      // FIX: Use 'balanceMap' (local var) instead of 'balances' (stale state)
-      // We must ensure that any token with a positive balance in balanceMap is displayed,
-      // even if it wasn't in the initial 'cached' list (which often misses wrapped tokens if they have 0 public balance)
+        // Tokens in balanceMap have already been filtered by Network.ts (either balance > 0 or explicitly cached)
+        const meta = wallet_context.tokenCache.getToken(activeNetworkId, lowerAddr) ||
+          wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress);
 
-      const tokensToDisplay: any[] = [];
-      const seenContracts = new Set<string>();
-
-      // 1. Add all tokens from cache that have > 0 balance or are ETH
-      cached.forEach(t => {
-        if (IGNORED_CONTRACTS.includes(t.contractAddress.toLowerCase())) return;
-        const entry = balanceMap[t.contractAddress];
-        if (t.symbol === "ETH" || (entry && parseFloat(entry.tokenBalance) > 0)) {
-          tokensToDisplay.push(t);
-          seenContracts.add(t.contractAddress);
-        }
-      });
-
-      // 2. Add any wrapped tokens (like cUSDC) that we explicitly fetched and have > 0 balance,
-      // but were NOT in the cached public list
-      wrappedBalances.forEach(wb => {
-        if (!seenContracts.has(wb.contractAddress) && parseFloat(wb.tokenBalance) > 0) {
-          const meta = wallet_context.tokenCache.getToken(activeNetworkId, wb.contractAddress);
-          if (meta) {
-            tokensToDisplay.push(meta);
-            seenContracts.add(wb.contractAddress);
-          }
-        }
-      });
-
-      const displayTokens = tokensToDisplay;
-
-      // Update the list or fallback to showing what we found in balances if cache is desync
-      if (displayTokens.length > 0) {
-        setTokens(displayTokens.map(t => ({
-          ...t,
-          isShielded: balanceMap[t.contractAddress]?.isShielded ?? false
-        })));
-      } else {
-        // Fallback layout if cache didn't match
-        const fallback = Object.values(balanceMap).map((b: any) => ({
-          name: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.name ?? (b.isNative ? "Ethereum" : "Token"),
-          symbol: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.symbol ?? (b.isNative ? "ETH" : "???"),
-          logoSrc: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.logoSrc ?? "",
+        displayTokens.push({
+          name: meta?.name ?? (b.isNative ? "Ethereum" : "Token"),
+          symbol: meta?.symbol ?? (b.isNative ? "ETH" : "???"),
+          logoSrc: meta?.logoSrc ?? "",
           contractAddress: b.contractAddress,
-          decimals: 18,
+          decimals: meta?.decimals ?? 18,
           isShielded: b.isShielded ?? false
-        }));
-        setTokens(fallback);
+        });
+      });
+
+      setTokens(displayTokens);
+
+      // Fetch NFTs balances manually from the cache list
+      try {
+        const cachedNfts = wallet_context.nftCache.getAllNFTs(activeNetworkId) || [];
+        const nftWithBalances = await Promise.all(
+          cachedNfts.map(async (nft) => {
+            const balStr = await net.getNftBalance(nft.contractAddress, address);
+            return {
+              ...nft,
+              balance: parseInt(balStr) || 0
+            };
+          })
+        );
+        setNfts(nftWithBalances);
+      } catch (err) {
+        console.warn("Failed to fetch custom NFT balances", err);
       }
 
       // ── Persist to cache for next mount ──
@@ -567,9 +592,6 @@ function Home() {
 
       {/* 1. Main Balance Card */}
       <Box sx={{ p: 3, pt: 2 }}>
-
-
-
         <Paper elevation={0} sx={{
           p: 3,
           borderRadius: 4,
@@ -580,21 +602,47 @@ function Home() {
           flexDirection: 'column',
           alignItems: 'center',
           position: 'relative',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          mb: 2
         }}>
           <Typography variant="body2" sx={{ opacity: 0.8 }} gutterBottom>
             Total Balance
           </Typography>
-          <Typography variant="h3" fontWeight="800" sx={{ letterSpacing: -1, background: 'linear-gradient(45deg, #fff 50%, #6366f1 90%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            ${totalBalanceUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </Typography>
 
-          {/* Action Buttons (Graph, Revoke) - Moved Inside */}
-          <Box sx={{ display: 'flex', alignItems: 'center', mt: 3, gap: 2, zIndex: 10 }}>
+          {/* Balance with Matrix privacy toggle */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <MatrixBalance
+              value={`$${totalBalanceUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              isHidden={isBalanceHidden}
+              variant="h3"
+            />
+            <Tooltip title={isBalanceHidden ? 'Show Balance' : 'Hide Balance'}>
+              <IconButton
+                size="small"
+                onClick={() => setIsBalanceHidden(!isBalanceHidden)}
+                sx={{
+                  color: 'rgba(255,255,255,0.7)',
+                  transition: 'all 0.2s',
+                  '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.1)' }
+                }}
+              >
+                {isBalanceHidden ? <Visibility fontSize="small" /> : <VisibilityOff fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, zIndex: 10 }}>
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)', fontWeight: 600, bgcolor: 'rgba(0,0,0,0.1)', px: 1.5, py: 0.5, borderRadius: 2 }}>
+              +2.45% (1D)
+            </Typography>
+          </Box>
+
+          {/* Action Buttons (Portfolio, Revoke) */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', mt: 3, gap: 1.5, zIndex: 10 }}>
             <Button
               variant="contained"
-              onClick={() => navigate('/GraphExplorer')}
-              startIcon={<Hub />}
+              onClick={() => navigate('/portfolio')}
+              startIcon={<TrendingUp />}
               sx={{
                 bgcolor: 'rgba(255,255,255,0.2)',
                 color: 'white',
@@ -602,10 +650,11 @@ function Home() {
                 boxShadow: 'none',
                 borderRadius: 3,
                 textTransform: 'none',
+                fontWeight: 600,
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
               }}
             >
-              Graph
+              Portfolio
             </Button>
             <Button
               variant="contained"
@@ -618,25 +667,12 @@ function Home() {
                 boxShadow: 'none',
                 borderRadius: 3,
                 textTransform: 'none',
+                fontWeight: 600,
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
               }}
             >
               Revoke
             </Button>
-          </Box>
-
-          {/* Decorative Graph BG */}
-          <Box sx={{
-            position: 'absolute',
-            bottom: -20,
-            left: 0,
-            right: 0,
-            opacity: 0.4,
-            zIndex: 0,
-            pointerEvents: 'none',
-            mixBlendMode: 'overlay'
-          }}>
-            <ArfGraph data={demoData} height={100} />
           </Box>
         </Paper>
       </Box>
@@ -686,8 +722,8 @@ function Home() {
                   key={`${token.contractAddress}-${idx}`}
                   symbol={token.symbol}
                   name={token.name}
-                  balance={balanceStr}
-                  value={valStr}
+                  balance={isBalanceHidden ? '•••••' : balanceStr}
+                  value={isBalanceHidden ? '$•••••' : valStr}
                   icon={getTokenLogoUrl(token.contractAddress, token.logoSrc, token.symbol, token.name)}
                   isShielded={token.isShielded ?? false}
                   isLast={idx === tokens.length - 1}
@@ -709,41 +745,101 @@ function Home() {
                 </Typography>
               </Box>
             )}
+
+            {/* Tokens Tab Footer */}
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+              <Button
+                variant="text"
+                color="primary"
+                startIcon={<Add />}
+                onClick={() => setImportTokenModalOpen(true)}
+                sx={{ fontWeight: 600, px: 3, py: 1 }}
+              >
+                Import Custom Token
+              </Button>
+            </Box>
           </Box>
         )}
 
         {tabIndex === 1 && (
-          <Box sx={{
-            textAlign: 'center',
-            py: 8,
-            px: 3,
-            bgcolor: 'background.paper',
-            borderRadius: 3,
-            border: '1px dashed',
-            borderColor: 'divider',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 1
-          }}>
-            <Box sx={{
-              width: 64, height: 64, borderRadius: 4,
-              background: 'linear-gradient(45deg, #f3f4f6, #e5e7eb)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              mb: 1
-            }}>
-              <Hub sx={{ color: 'text.disabled', fontSize: 32 }} />
+          <Box>
+            {nfts.length > 0 ? (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 1.5,
+                  pb: 2,
+                }}
+              >
+                {nfts.map((nft: any, idx: number) => (
+                  <NftGalleryCard
+                    key={`${nft.contractAddress}-${idx}`}
+                    contractAddress={nft.contractAddress}
+                    symbol={nft.symbol}
+                    name={nft.name}
+                    balance={nft.balance ?? 1}
+                    isShielded={false}
+                    rpcUrl={wallet_context?.networkProvider?.getActiveNetwork()?.rpc_url}
+                  />
+                ))}
+              </Box>
+            ) : !loading ? (
+              <Box sx={{
+                textAlign: 'center',
+                py: 8,
+                px: 3,
+                bgcolor: 'background.paper',
+                borderRadius: 3,
+                border: '1px dashed',
+                borderColor: 'divider',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 1
+              }}>
+                <Box sx={{
+                  width: 64, height: 64, borderRadius: 4,
+                  background: 'linear-gradient(45deg, #f3f4f6, #e5e7eb)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  mb: 1
+                }}>
+                  <Hub sx={{ color: 'text.disabled', fontSize: 32 }} />
+                </Box>
+                <Typography variant="subtitle1" color="text.primary" fontWeight={700}>
+                  No NFTs Found
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Your digital collectibles will appear here.
+                </Typography>
+              </Box>
+            ) : null}
+
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+              <Button
+                variant="outlined"
+                color="secondary"
+                startIcon={<Add />}
+                onClick={() => setImportNftModalOpen(true)}
+                sx={{ fontWeight: 600, px: 3, py: 1, borderRadius: 2 }}
+              >
+                Import Custom NFT
+              </Button>
             </Box>
-            <Typography variant="subtitle1" color="text.primary" fontWeight={700}>
-              No NFTs Found
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Your digital collectibles will appear here.
-            </Typography>
           </Box>
         )}
       </Box>
 
+      <ImportTokenModal
+        open={importTokenModalOpen}
+        onClose={() => setImportTokenModalOpen(false)}
+        onImportSuccess={fetchData}
+      />
+      <ImportNftModal
+        open={importNftModalOpen}
+        onClose={() => setImportNftModalOpen(false)}
+        onImportSuccess={fetchData}
+      />
     </Box>
   );
 }
