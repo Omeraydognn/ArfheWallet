@@ -218,7 +218,7 @@ export default function Settings() {
                 >
                     <List disablePadding>
                         <ListItemButton
-                            onClick={() => window.open('https://github.com/arfdaodev/ArfheWallet/blob/main/PRIVACY_POLICY.md', '_blank', 'noopener,noreferrer')}
+                            onClick={() => window.open('https://github.com/arfdaodev/ArfheWallet/blob/rewrite-omer/PRIVACY_POLICY.md', '_blank', 'noopener,noreferrer')}
                         >
                             <ListItemIcon><PrivacyTip /></ListItemIcon>
                             <ListItemText
@@ -229,7 +229,7 @@ export default function Settings() {
                         </ListItemButton>
                         <Divider variant="inset" component="li" />
                         <ListItemButton
-                            onClick={() => window.open('https://github.com/arfdaodev/ArfheWallet/blob/main/TERMS_OF_SERVICE.md', '_blank', 'noopener,noreferrer')}
+                            onClick={() => window.open('https://github.com/arfdaodev/ArfheWallet/blob/rewrite-omer/TERMS_OF_SERVICE.md', '_blank', 'noopener,noreferrer')}
                         >
                             <ListItemIcon><Gavel /></ListItemIcon>
                             <ListItemText
