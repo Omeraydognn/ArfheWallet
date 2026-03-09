@@ -1,10 +1,14 @@
 import { formatEther, parseUnits, TransactionRequest } from "ethers";
-import { Alchemy, Network as AlchemyNetwork, SortingOrder } from "alchemy-sdk";
+import { Alchemy, Network as AlchemyNetwork, SortingOrder, AssetTransfersCategory } from "alchemy-sdk";
 import Account from "./Account.js";
 import TokenCache, { TokenCacheItem } from "./TokenCache.js";
+import type NFTCache from "./NFTCache.js";
+import type { NFTCacheItem } from "./NFTCache.js";
 
-import { NetworkId, TokenBalance, TransactionHistory } from "./NetworkTypes.js";
+import { NetworkId, TokenBalance, TransactionHistory, PendingTransaction, CustomNetworkConfig } from "./NetworkTypes.js";
 import { ExplorerService } from "./ExplorerService.js";
+import { withRetry, fetchWithTimeout, classifyError, NetworkErrorType } from "./NetworkErrorHandler.js";
+import type { RetryOptions } from "./NetworkErrorHandler.js";
 
 class Network {
   network_id: NetworkId;
@@ -12,8 +16,14 @@ class Network {
 
   api_key?: string;
   rpc_url?: string;
+  explorer_url?: string;
+  currency_symbol: string = "ETH";
   alchemy?: Alchemy;
   explorerService?: ExplorerService;
+  isCustom: boolean = false;
+
+  /** In-memory store of pending (unconfirmed) transactions */
+  pendingTransactions: Map<string, PendingTransaction> = new Map();
 
   FETCH_HEADERS = {
     Accept: "application/json",
@@ -24,7 +34,7 @@ class Network {
     this.network_id = network_id;
     this.network_name = network_name;
 
-    let rawKey = explicitApiKey || (import.meta as any).env.VITE_ALCHEMY_API_KEY || "";
+    let rawKey = explicitApiKey || import.meta.env.VITE_ALCHEMY_API_KEY || "";
 
     if (rawKey.startsWith("http")) {
       const parts = rawKey.split("/");
@@ -106,11 +116,32 @@ class Network {
     }
   }
 
+  /** Create a Network instance from a user-defined custom network config */
+  static fromCustomConfig(config: CustomNetworkConfig): Network {
+    // Pass NO api key / base URL → prevents Alchemy SDK from being created
+    const net = new Network(
+      config.chainId as NetworkId,
+      config.networkName,
+      undefined,
+      undefined
+    );
+    // Override: set custom RPC directly, mark as non-Alchemy
+    net.rpc_url = config.rpcUrl;
+    net.api_key = "CUSTOM_URL";
+    net.alchemy = undefined;
+    net.explorerService = undefined;
+    net.explorer_url = config.explorerUrl.replace(/\/+$/, ""); // strip trailing slash
+    net.currency_symbol = config.currencySymbol;
+    net.isCustom = true;
+    return net;
+  }
+
   isAlchemyConfigured(): boolean {
     return !!this.api_key && this.api_key !== "CUSTOM_URL";
   }
 
-  async call(method: string, params: any[]): Promise<any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async call(method: string, params: unknown[]): Promise<any> {
     if (!this.rpc_url) {
       throw new Error("RPC URL not set");
     }
@@ -122,18 +153,36 @@ class Network {
       params,
     });
 
-    const response = await fetch(this.rpc_url, {
-      method: "POST",
-      headers: this.FETCH_HEADERS,
-      body,
-    });
+    const rpcUrl = this.rpc_url;
+    const headers = this.FETCH_HEADERS;
 
-    const json = await response.json();
-    if (json.error) {
-      throw new Error(json.error.message);
-    }
+    return withRetry(
+      async () => {
+        const response = await fetchWithTimeout(rpcUrl, {
+          method: "POST",
+          headers,
+          body,
+        }, 15_000);
 
-    return json.result;
+        const json = await response.json();
+        if (json.error) {
+          throw new Error(json.error.message);
+        }
+
+        return json.result;
+      },
+      {
+        maxRetries: 2,
+        initialDelayMs: 800,
+        onRetry: (attempt, max, err) => {
+        },
+        shouldRetry: (err) => {
+          // Don't retry RPC-level errors (revert, invalid method)
+          if (err.type === NetworkErrorType.RpcError || err.type === NetworkErrorType.UserError) return false;
+          return err.retryable;
+        },
+      }
+    );
   }
 
   async getBlockNumber(): Promise<number> {
@@ -158,7 +207,6 @@ class Network {
             return item;
           }
         } catch (e) {
-          console.warn(`[Network] Alchemy SDK metadata fetch failed for ${contractAddress}`);
         }
       }
 
@@ -177,7 +225,6 @@ class Network {
         }
       }
     } catch (e) {
-      console.warn(`[Network] Alchemy metadata fallback failed for ${contractAddress}. Attempting direct RPC...`);
     }
 
     // Direct RPC Fallback for unindexed testnet tokens (Crucial for Custom Imports)
@@ -219,7 +266,7 @@ class Network {
     return item;
   }
 
-  async getNftMetadata(nftCacheObj: any, contractAddress: string): Promise<any> {
+  async getNftMetadata(nftCacheObj: NFTCache | null | undefined, contractAddress: string): Promise<NFTCacheItem> {
     const ethers = await import("ethers");
     const iface = new ethers.Interface([
       "function name() view returns (string)",
@@ -269,7 +316,6 @@ class Network {
         return BigInt(result).toString();
       }
     } catch (e) {
-      console.warn(`[Network] getNftBalance failed for ${contractAddress}`);
     }
     return "0";
   }
@@ -294,10 +340,13 @@ class Network {
   async getBalance(address: string): Promise<string> {
     if (this.alchemy) {
       try {
-        const big = await this.alchemy.core.getBalance(address);
+        const big = await withRetry(
+          () => this.alchemy!.core.getBalance(address),
+          { maxRetries: 2, initialDelayMs: 500 }
+        );
         return big.toString();
       } catch (e) {
-        // Fallback
+        // Fallback to RPC
       }
     }
     const result = await this.call("eth_getBalance", [address, "latest"]);
@@ -311,25 +360,75 @@ class Network {
     try {
       nativeBalance = await this.getBalance(address);
     } catch (e) {
-      console.error("[Network] Failed to fetch native balance", e);
     }
 
-    let tokenBalancesRaw: any[] = [];
+    let tokenBalancesRaw: Array<{ contractAddress: string; tokenBalance: string | null }> = [];
 
     if (this.alchemy) {
       try {
-        const response = await this.alchemy.core.getTokenBalances(address);
+        const response = await withRetry(
+          () => this.alchemy!.core.getTokenBalances(address),
+          { maxRetries: 2, initialDelayMs: 800 }
+        );
         tokenBalancesRaw = response.tokenBalances;
       } catch (e) {
-        console.error("[Network] SDK fetch failed", e);
-        throw new Error("Failed to fetch tokens via Alchemy SDK");
+        // Don't throw — fall through to manual/cache-based approach
       }
     } else if (this.isAlchemyConfigured()) {
       try {
         const result = await this.call("alchemy_getTokenBalances", [address, "erc20"]);
         tokenBalancesRaw = result.tokenBalances;
       } catch (e) {
-        console.error("[Network] Manual fetch failed", e);
+      }
+    }
+
+    // Custom networks: discover ERC20 tokens via Transfer event logs
+    // Scan recent blocks for incoming ERC20 Transfer(from, to, value) events
+    if (!this.alchemy && !this.isAlchemyConfigured()) {
+      try {
+        const currentBlock = await this.getBlockNumber();
+        // Scan last ~5000 blocks (adjust based on block time)
+        const fromBlock = Math.max(0, currentBlock - 5000);
+        // ERC20 Transfer topic: keccak256("Transfer(address,address,uint256)")
+        const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+        // Pad address to 32 bytes for topic filter (to = recipient)
+        const paddedAddress = "0x000000000000000000000000" + address.toLowerCase().replace("0x", "");
+
+        const logs = await this.call("eth_getLogs", [{
+          fromBlock: "0x" + fromBlock.toString(16),
+          toBlock: "latest",
+          topics: [TRANSFER_TOPIC, null, paddedAddress]  // Transfer(*, toAddress, *)
+        }]);
+
+        if (Array.isArray(logs)) {
+          const discoveredContracts = new Set<string>();
+          for (const log of logs) {
+            if (log.address) {
+              discoveredContracts.add(log.address.toLowerCase());
+            }
+          }
+
+          // Query balanceOf for each discovered contract
+          const balanceOfSig = "0x70a08231000000000000000000000000" + address.toLowerCase().replace("0x", "");
+          for (const contractAddr of discoveredContracts) {
+            try {
+              const result = await this.call("eth_call", [{
+                to: contractAddr,
+                data: balanceOfSig
+              }, "latest"]);
+
+              if (result && result !== "0x" && BigInt(result) > 0n) {
+                tokenBalancesRaw.push({
+                  contractAddress: contractAddr,
+                  tokenBalance: BigInt(result).toString()
+                });
+              }
+            } catch (e) {
+              // Not a valid ERC20 or call failed — skip
+            }
+          }
+        }
+      } catch (e) {
       }
     }
 
@@ -375,19 +474,57 @@ class Network {
       }
     });
 
+    // ── Alchemy Spam Classification ──
+    // Only run on mainnet networks (testnet contracts are not in Alchemy's spam DB)
+    // Uses Alchemy's isSpamContract API — checks their curated spam/scam database
+    const MAINNET_IDS = [NetworkId.Ethereum_Mainnet, NetworkId.Arbitrum_One, NetworkId.Base_Mainnet];
+    const isMainnet = MAINNET_IDS.includes(this.network_id);
+    const alchemySpamResults = new Map<string, boolean>();
+
+    if (this.alchemy && isMainnet && activeTokens.length > 0) {
+      try {
+        // Skip tokens that are already in the user's cache (trusted / manually imported)
+        const tokensToCheck = activeTokens.filter((t) => {
+          const addr = (t.contractAddress || "").toLowerCase();
+          return !tokenCacheObj.hasToken(this.network_id, addr);
+        });
+
+        if (tokensToCheck.length > 0) {
+          const spamChecks = await Promise.all(
+            tokensToCheck.map(async (t) => {
+              try {
+                const result = await this.alchemy!.nft.isSpamContract(t.contractAddress);
+                return { address: t.contractAddress, isSpam: result };
+              } catch {
+                return { address: t.contractAddress, isSpam: false };
+              }
+            })
+          );
+          const alchemySpamMap = new Map(spamChecks.map(s => [s.address.toLowerCase(), s.isSpam]));
+          for (const [addr, isSpam] of alchemySpamMap) {
+            alchemySpamResults.set(addr, !!isSpam);
+          }
+          const flagged = spamChecks.filter(s => s.isSpam);
+          if (flagged.length > 0) {
+          }
+        }
+      } catch (e) {
+      }
+    }
+
     const processedTokens = await Promise.all(
-      activeTokens.map(async (t: any): Promise<TokenBalance> => {
+      activeTokens.map(async (t): Promise<TokenBalance> => {
         const contract = t.contractAddress.toLowerCase();
         let decimals = 18;
 
         if (tokenCacheObj.hasToken(this.network_id, contract)) {
-          decimals = tokenCacheObj.getToken(this.network_id, contract)?.decimals ?? 18;
+          const cached = tokenCacheObj.getToken(this.network_id, contract)!;
+          decimals = cached.decimals ?? 18;
         } else {
           try {
             const metadata = await this.getTokenMetadata(tokenCacheObj, contract);
             decimals = metadata.decimals;
           } catch (err) {
-            console.warn(`[Network] Metadata fetch failed for ${contract}:`, err);
           }
         }
 
@@ -395,20 +532,21 @@ class Network {
           contractAddress: contract,
           tokenBalance: this.formatTokenAmount(BigInt(t.tokenBalance ?? 0), decimals),
           isNative: false,
+          isAlchemySpam: alchemySpamResults.get(contract) ?? false,
         };
       })
     );
 
+    const nativeSymbol = this.currency_symbol || "ETH";
     const nativeItem: TokenCacheItem = {
-      name: "Ethereum",
-      symbol: "ETH",
+      name: nativeSymbol === "ETH" ? "Ethereum" : nativeSymbol,
+      symbol: nativeSymbol,
       decimals: 18,
-      logoSrc: "/logos/eth.png",
+      logoSrc: "",  // Logo resolved dynamically by getTokenLogoUrl via symbol lookup
       contractAddress: "ETH",
     };
-    if (!tokenCacheObj.hasToken(this.network_id, "ETH")) {
-      tokenCacheObj.setToken(this.network_id, nativeItem);
-    }
+    // Always update native token cache to reflect current network's currency
+    tokenCacheObj.setToken(this.network_id, nativeItem);
 
     const nativeBalanceData: TokenBalance = {
       contractAddress: "ETH",
@@ -439,7 +577,6 @@ class Network {
 
       return this.formatTokenAmount(balance, decimals);
     } catch (error) {
-      console.error(`[Network] Failed to fetch balance for ${tokenAddress}:`, error);
       return "0";
     }
   }
@@ -463,21 +600,21 @@ class Network {
       const ethRelated = [
         "eth",
         "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        ((import.meta as any).env.VITE_SEPOLIA_WETH_ADDRESS || "").toLowerCase(),
-        ((import.meta as any).env.VITE_ARB_SEPOLIA_WETH_ADDRESS || "").toLowerCase(),
-        ((import.meta as any).env.VITE_BASE_SEPOLIA_WETH_ADDRESS || "").toLowerCase(),
-        ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase(), // cETH Sepolia
-        ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase(), // cETH Arb
-        ((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase(), // cETH Base
+        (import.meta.env.VITE_SEPOLIA_WETH_ADDRESS || "").toLowerCase(),
+        (import.meta.env.VITE_ARB_SEPOLIA_WETH_ADDRESS || "").toLowerCase(),
+        (import.meta.env.VITE_BASE_SEPOLIA_WETH_ADDRESS || "").toLowerCase(),
+        (import.meta.env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase(), // cETH Sepolia
+        (import.meta.env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase(), // cETH Arb
+        (import.meta.env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase(), // cETH Base
       ].filter(Boolean);
 
       const usdcRelated = [
         "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238", // Sepolia USDC
-        ((import.meta as any).env.VITE_ARB_SEPOLIA_USDC_ADDRESS || "").toLowerCase(),
-        ((import.meta as any).env.VITE_BASE_SEPOLIA_USDC_ADDRESS || "").toLowerCase(),
-        ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase(), // cUSDC Sepolia
-        ((import.meta as any).env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase(), // cUSDC Arb
-        ((import.meta as any).env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase(), // cUSDC Base
+        (import.meta.env.VITE_ARB_SEPOLIA_USDC_ADDRESS || "").toLowerCase(),
+        (import.meta.env.VITE_BASE_SEPOLIA_USDC_ADDRESS || "").toLowerCase(),
+        (import.meta.env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase(), // cUSDC Sepolia
+        (import.meta.env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase(), // cUSDC Arb
+        (import.meta.env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase(), // cUSDC Base
       ].filter(Boolean);
 
       const chainlinkRelated = [
@@ -508,7 +645,7 @@ class Network {
       if (mappedIds.size > 0) {
         try {
           const idsParam = Array.from(mappedIds).join(',');
-          const res = await fetch(`/api/coingecko/simple/price?ids=${idsParam}&vs_currencies=usd`);
+          const res = await fetchWithTimeout(`/api/coingecko/simple/price?ids=${idsParam}&vs_currencies=usd`, {}, 10_000);
           const json = await res.json();
 
           // Distribute the pegged prices back to all requesting testnet/FHE addresses
@@ -524,7 +661,6 @@ class Network {
             }
           }
         } catch (e) {
-          console.warn("[Network] Mapped pegged price fetch failed", e);
         }
       }
 
@@ -534,23 +670,22 @@ class Network {
           const platform = "ethereum";
           const addrStr = addressesToFetchFromCG.join(",");
           const url = `/api/coingecko/simple/token_price/${platform}?contract_addresses=${addrStr}&vs_currencies=usd`;
-          const res = await fetch(url);
+          const res = await fetchWithTimeout(url, {}, 10_000);
           const json = await res.json();
 
           for (const [addr, priceData] of Object.entries(json)) {
-            if ((priceData as any).usd) {
-              prices[addr.toLowerCase()] = (priceData as any).usd;
+            const pd = priceData as { usd?: number };
+            if (pd.usd) {
+              prices[addr.toLowerCase()] = pd.usd;
             }
           }
         } catch (e) {
-          console.warn("[Network] Standard token price fetch failed", e);
         }
       }
 
       return prices;
 
     } catch (err) {
-      console.error("[Network] unexpected error fetching prices", err);
       // Return empty object so flow continues without crashing
       return {};
     }
@@ -559,15 +694,14 @@ class Network {
   async getHistory(address: string, tokenCacheObj: TokenCache | undefined, toBlock: string = "latest"): Promise<{ history: TransactionHistory[], nextBlock?: string }> {
     if (!tokenCacheObj) return { history: [] };
     if (!this.alchemy && !this.isAlchemyConfigured()) {
-      console.warn("Alchemy SDK not configured for this network");
       return { history: [] };
     }
 
     try {
-      const category = ["external", "erc20"] as any[];
+      const category: AssetTransfersCategory[] = [AssetTransfersCategory.EXTERNAL, AssetTransfersCategory.ERC20];
       // Most L2s (Arbitrum, Base) do not support the "internal" category for getAssetTransfers on standard Alchemy tiers
       if (this.network_id === NetworkId.Ethereum_Mainnet || this.network_id === NetworkId.Ethereum_Sepolia) {
-        category.push("internal");
+        category.push(AssetTransfersCategory.INTERNAL);
       }
 
       const optionsBase = {
@@ -580,23 +714,23 @@ class Network {
         order: SortingOrder.DESCENDING
       };
 
-      const CETH_SEP = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
-      const CUSDC_SEP = ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
-      const CETH_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
-      const CUSDC_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase();
-      const CETH_BASE = ((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
-      const CUSDC_BASE = ((import.meta as any).env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+      const CETH_SEP = (import.meta.env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+      const CUSDC_SEP = (import.meta.env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+      const CETH_ARB = (import.meta.env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+      const CUSDC_ARB = (import.meta.env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+      const CETH_BASE = (import.meta.env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+      const CUSDC_BASE = (import.meta.env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
 
-      const promises: Promise<any>[] = [];
+      const promises: Promise<unknown>[] = [];
 
       // 1. Alchemy Fetches (Sent & Received normal transfers)
       if (this.alchemy) {
-        promises.push(this.alchemy.core.getAssetTransfers({ ...optionsBase, fromAddress: address }).catch(e => { console.warn("[getHistory] Alchemy sent transfers failed:", e); return { transfers: [] }; }));
-        promises.push(this.alchemy.core.getAssetTransfers({ ...optionsBase, toAddress: address }).catch(e => { console.warn("[getHistory] Alchemy recv transfers failed:", e); return { transfers: [] }; }));
+        promises.push(this.alchemy.core.getAssetTransfers({ ...optionsBase, fromAddress: address }).catch(e => { return { transfers: [] }; }));
+        promises.push(this.alchemy.core.getAssetTransfers({ ...optionsBase, toAddress: address }).catch(e => { return { transfers: [] }; }));
       } else {
         // Fallback to raw call if SDK isn't happy but URL works
-        promises.push(this.call("alchemy_getAssetTransfers", [{ ...optionsBase, fromAddress: address }]).catch(e => { console.warn("[getHistory] RPC sent transfers failed:", e); return { transfers: [] }; }));
-        promises.push(this.call("alchemy_getAssetTransfers", [{ ...optionsBase, toAddress: address }]).catch(e => { console.warn("[getHistory] RPC recv transfers failed:", e); return { transfers: [] }; }));
+        promises.push(this.call("alchemy_getAssetTransfers", [{ ...optionsBase, fromAddress: address }]).catch(e => { return { transfers: [] }; }));
+        promises.push(this.call("alchemy_getAssetTransfers", [{ ...optionsBase, toAddress: address }]).catch(e => { return { transfers: [] }; }));
       }
 
       // 2. Direct eth_getLogs for incoming FHE ConfidentialTransfers
@@ -617,7 +751,7 @@ class Network {
               let currentBlock = parseInt(latestBlockHex, 16);
               // Fetch at most the last 100 blocks, in 10-block chunks
               const targetOldestBlock = Math.max(0, currentBlock - 100);
-              let allIncomingLogs: any[] = [];
+              let allIncomingLogs: Array<{ blockNumber: string; transactionHash: string; address: string; topics: string[] }> = [];
 
               while (currentBlock > targetOldestBlock && allIncomingLogs.length < 100) {
                 const chunkStart = Math.max(targetOldestBlock, currentBlock - 9);
@@ -636,7 +770,6 @@ class Network {
                     allIncomingLogs = [...allIncomingLogs, ...chunkLogs];
                   }
                 } catch (chunkErr) {
-                  console.warn(`[Network] getLogs chunk failed ${fromHex} to ${toHex}`, chunkErr);
                   // If a chunk fails, we just stop fetching older logs to prevent spam and return what we have
                   break;
                 }
@@ -646,7 +779,6 @@ class Network {
 
               return { incomingFheLogs: allIncomingLogs.slice(-100) };
             } catch (e) {
-              console.warn("eth_getLogs failed for FHE:", e);
               return { incomingFheLogs: [] };
             }
           })());
@@ -655,9 +787,12 @@ class Network {
 
       // Wait for all data
       const results = await Promise.all(promises);
-      const sentRes = results[0];
-      const receivedRes = results[1];
-      const fheLogsRes = results.length > 2 ? results[2] : { incomingFheLogs: [] };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Alchemy SDK response shapes vary
+      const sentRes = results[0] as { transfers?: any[] };
+      const receivedRes = results[1] as { transfers?: any[] };
+      const fheLogsRes = results.length > 2
+        ? (results[2] as { incomingFheLogs?: any[] })
+        : { incomingFheLogs: [] as any[] };
 
       let allTransfers = [
         ...(sentRes.transfers || []),
@@ -666,12 +801,30 @@ class Network {
 
       // Format Alchemy Transfers
       const history: TransactionHistory[] = [];
-      let explorerBase = "https://etherscan.io";
-      if (this.network_id === NetworkId.Ethereum_Sepolia) explorerBase = "https://sepolia.etherscan.io";
-      else if (this.network_id === NetworkId.Arbitrum_One) explorerBase = "https://arbiscan.io";
-      else if (this.network_id === NetworkId.Arbitrum_Sepolia) explorerBase = "https://sepolia.arbiscan.io";
-      else if (this.network_id === NetworkId.Base_Mainnet) explorerBase = "https://basescan.org";
-      else if (this.network_id === NetworkId.Base_Sepolia) explorerBase = "https://sepolia.basescan.org";
+      let explorerBase = this.explorer_url || "https://etherscan.io";
+      if (!this.explorer_url) {
+        if (this.network_id === NetworkId.Ethereum_Sepolia) explorerBase = "https://sepolia.etherscan.io";
+        else if (this.network_id === NetworkId.Arbitrum_One) explorerBase = "https://arbiscan.io";
+        else if (this.network_id === NetworkId.Arbitrum_Sepolia) explorerBase = "https://sepolia.arbiscan.io";
+        else if (this.network_id === NetworkId.Base_Mainnet) explorerBase = "https://basescan.org";
+        else if (this.network_id === NetworkId.Base_Sepolia) explorerBase = "https://sepolia.basescan.org";
+      }
+
+      // Known Uniswap V3 SwapRouter addresses (for swap detection in history)
+      const SWAP_ROUTERS = new Set([
+        "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45", // Uniswap V3 SwapRouter02 Ethereum Mainnet & Arbitrum
+        "0x2626664c2603336e57b271c5c0b26f421741e481", // Uniswap V3 SwapRouter02 Base
+        "0x3bfa4769fb09eefc5a80d6e87c3b9c650f7ae48e", // Uniswap V3 SwapRouter02 Sepolia
+        "0x101f443b4d1b059569d643917553c771e1b9663e", // Uniswap V3 SwapRouter02 Arb Sepolia
+      ]);
+      // Known WETH addresses (for wrap/unwrap detection)
+      const WETH_ADDRESSES = new Set([
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // WETH Mainnet
+        "0x82af49447d8a07e3bd95bd0d56f35241523fbab1", // WETH Arbitrum
+        "0x4200000000000000000000000000000000000006", // WETH Base
+        "0xfff9976782d46cc05630d1f6ebab18b2324d6b14", // WETH Sepolia
+        "0x980b62da83eff3d4576c647993b0c1d7faf17c73", // WETH Arb Sepolia
+      ]);
 
       for (const tx of allTransfers) {
         const isNative = (tx.category === "external" || tx.category === "internal");
@@ -704,6 +857,12 @@ class Network {
           if (tx.category === "external" && tx.value > 0) methodLabel = "Wrap";
           else if (tx.category === "internal" && tx.value > 0) methodLabel = "Unwrap";
           else methodLabel = "Shield Transfer";
+        } else if (tx.to && SWAP_ROUTERS.has(tx.to.toLowerCase())) {
+          methodLabel = "Swap";
+        } else if (tx.to && WETH_ADDRESSES.has(tx.to.toLowerCase()) && tx.category === "external") {
+          methodLabel = "Wrap";
+        } else if (tx.from && WETH_ADDRESSES.has(tx.from.toLowerCase()) && tx.category === "internal") {
+          methodLabel = "Unwrap";
         } else if (!isNative && tx.category !== "erc20") {
           methodLabel = "Contract Call";
         }
@@ -715,7 +874,7 @@ class Network {
           contractAddress: contractAddress,
           value: finalValue,
           timestamp: tx.metadata?.blockTimestamp || new Date().toISOString(),
-          blockNum: (tx as any).blockNum || "0x0",
+          blockNum: (tx as Record<string, unknown>).blockNum as string || "0x0",
           isNative: isNative,
           status: "Success",
           explorerUrl: `${explorerBase}/tx/${tx.hash}`,
@@ -769,7 +928,7 @@ class Network {
       });
 
       // Squeeze unique hashes and limit
-      const uniqueObj: any = {};
+      const uniqueObj: Record<string, boolean> = {};
       const uniqueHistory: TransactionHistory[] = [];
       let minBlockNum = Infinity;
 
@@ -799,7 +958,6 @@ class Network {
       return { history: paginated, nextBlock };
 
     } catch (err) {
-      console.error("Error fetching history:", err);
       return { history: [] };
     }
   }
@@ -825,7 +983,7 @@ class Network {
 
     const valueWei = tx.value ? parseUnits(tx.value, "ether") : 0n;
 
-    const txRequest: any = {
+    const txRequest: TransactionRequest = {
       to: tx.to,
       value: valueWei,
       data: tx.data ?? "0x",
@@ -856,33 +1014,42 @@ class Network {
           txRequest.maxPriorityFeePerGas = BigInt(Math.floor(estimatedPriorityFee));
         }
       } catch (e) {
-        console.warn("[Network] Failed to apply gas multiplier, falling back to default ethers gas estimation", e);
       }
     }
 
-    console.log("[Network] Sending TX via Provider:", {
-      to: txRequest.to,
-      dataLen: txRequest.data ? txRequest.data.toString().length : 0,
-      value: (txRequest.value ?? "0").toString()
-    });
 
     try {
       const sentTx = await connectedWallet.sendTransaction(txRequest);
-      console.log(`[Network] Waiting for TX ${sentTx.hash}...`);
+
+      // Track as pending until confirmed
+      this.pendingTransactions.set(sentTx.hash, {
+        hash: sentTx.hash,
+        nonce: sentTx.nonce,
+        from: await connectedWallet.getAddress(),
+        to: tx.to,
+        value: (txRequest.value ?? 0n).toString(),
+        data: tx.data ?? "0x",
+        gasPrice: txRequest.gasPrice ? txRequest.gasPrice.toString() : undefined,
+        maxFeePerGas: txRequest.maxFeePerGas ? txRequest.maxFeePerGas.toString() : undefined,
+        maxPriorityFeePerGas: txRequest.maxPriorityFeePerGas ? txRequest.maxPriorityFeePerGas.toString() : undefined,
+        timestamp: Date.now(),
+        networkId: this.network_id,
+      });
 
       const receipt = await sentTx.wait();
 
+      // Remove from pending once confirmed
+      this.pendingTransactions.delete(sentTx.hash);
+
       if (receipt && receipt.status === 0) {
-        console.error(`[Network] ❌ TX REVERTED: ${sentTx.hash}`);
         throw new Error(`Transaction reverted on-chain. TX: ${sentTx.hash}`);
       }
 
-      console.log(`[Network] ✅ TX Confirmed: ${sentTx.hash}`);
       return sentTx.hash;
-    } catch (err: any) {
-      console.error("[Network] SendTransaction Error:", err);
+    } catch (err) {
 
-      const errorMsg = err.info?.error?.message || err.reason || err.message || String(err);
+      const e = err as { info?: { error?: { message?: string } }; reason?: string; message?: string };
+      const errorMsg = e.info?.error?.message || e.reason || e.message || String(err);
 
       if (errorMsg.includes("insufficient funds for gas * price + value") || errorMsg.includes("insufficient funds")) {
         throw new Error("Yetersiz Bakiye: Bu işlemi gerçekleştirmek ve ağ ücretlerini (gas fee) karşılamak için yeterli ETH'niz bulunmuyor.");
@@ -892,7 +1059,7 @@ class Network {
     }
   }
 
-  async waitForTransaction(txHash: string): Promise<any> {
+  async waitForTransaction(txHash: string): Promise<unknown> {
     if (this.alchemy) {
       return this.alchemy.core.waitForTransaction(txHash);
     }
@@ -906,6 +1073,194 @@ class Network {
       attempts++;
     }
     throw new Error("Transaction confirmation timed out");
+  }
+
+  // --- PENDING TRANSACTION MANAGEMENT ---
+
+  /** Get all pending transactions for the current network */
+  getPendingTransactions(): PendingTransaction[] {
+    return Array.from(this.pendingTransactions.values())
+      .filter(ptx => ptx.networkId === this.network_id)
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  /** Remove a pending transaction (after confirm/replace/drop) */
+  removePendingTransaction(txHash: string): void {
+    this.pendingTransactions.delete(txHash);
+  }
+
+  /** Check which pending txs have been confirmed and prune them.
+   *  Also returns still-pending list. */
+  async refreshPendingTransactions(): Promise<PendingTransaction[]> {
+    const pending = this.getPendingTransactions();
+    for (const ptx of pending) {
+      try {
+        const receipt = await this.call("eth_getTransactionReceipt", [ptx.hash]);
+        if (receipt && receipt.blockNumber) {
+          // Confirmed — remove from pending
+          this.pendingTransactions.delete(ptx.hash);
+        }
+      } catch {
+        // RPC error — keep in pending
+      }
+    }
+    // Also prune any pending tx whose nonce has been superseded
+    // (a replacement tx with the same nonce got confirmed)
+    try {
+      const remaining = this.getPendingTransactions();
+      if (remaining.length > 0) {
+        const fromAddr = remaining[0].from;
+        const currentNonceHex = await this.call("eth_getTransactionCount", [fromAddr, "latest"]);
+        const currentNonce = parseInt(currentNonceHex, 16);
+        for (const ptx of remaining) {
+          if (ptx.nonce < currentNonce) {
+            // This nonce is already used on-chain — tx was replaced or confirmed
+            this.pendingTransactions.delete(ptx.hash);
+          }
+        }
+      }
+    } catch {
+      // Ignore nonce check errors
+    }
+    return this.getPendingTransactions();
+  }
+
+  /**
+   * Speed up a pending transaction by re-sending with the same nonce
+   * but with higher gas fees (multiplied by gasMultiplier, default 1.3x).
+   */
+  async speedUpTransaction(
+    account: Account,
+    originalTxHash: string,
+    gasMultiplier: number = 1.3
+  ): Promise<string> {
+    const pendingTx = this.pendingTransactions.get(originalTxHash);
+    if (!pendingTx) throw new Error("Pending transaction not found");
+    if (!this.rpc_url) throw new Error("RPC URL not set");
+    if (!account.ethers_wallet) throw new Error("Account is missing ethers_wallet");
+
+    const wallet = account.ethers_wallet;
+    const { JsonRpcProvider } = await import("ethers");
+    const provider = new JsonRpcProvider(this.rpc_url);
+    const connectedWallet = wallet.connect(provider);
+
+    // Build replacement tx with same nonce but higher gas
+    const txRequest: TransactionRequest = {
+      to: pendingTx.to,
+      value: BigInt(pendingTx.value),
+      data: pendingTx.data,
+      nonce: pendingTx.nonce, // SAME nonce — this is what replaces the tx
+    };
+
+    // Bump gas fees by multiplier
+    const feeData = await provider.getFeeData();
+    if (pendingTx.maxFeePerGas) {
+      // EIP-1559: bump both maxFeePerGas and maxPriorityFeePerGas
+      const origMaxFee = BigInt(pendingTx.maxFeePerGas);
+      const origPriorityFee = BigInt(pendingTx.maxPriorityFeePerGas || "0");
+      const networkMaxFee = feeData.maxFeePerGas || origMaxFee;
+      const networkPriorityFee = feeData.maxPriorityFeePerGas || origPriorityFee;
+
+      // Use the higher of (original * multiplier) or (current network fee * multiplier)
+      const bumpedMaxFee = BigInt(Math.floor(Number(origMaxFee > networkMaxFee ? origMaxFee : networkMaxFee) * gasMultiplier));
+      const bumpedPriorityFee = BigInt(Math.floor(Number(origPriorityFee > networkPriorityFee ? origPriorityFee : networkPriorityFee) * gasMultiplier));
+      txRequest.maxFeePerGas = bumpedMaxFee;
+      txRequest.maxPriorityFeePerGas = bumpedPriorityFee;
+    } else {
+      // Legacy: bump gasPrice
+      const origGasPrice = BigInt(pendingTx.gasPrice || "0");
+      const networkGasPrice = feeData.gasPrice || origGasPrice;
+      const bumpedGasPrice = BigInt(Math.floor(Number(origGasPrice > networkGasPrice ? origGasPrice : networkGasPrice) * gasMultiplier));
+      txRequest.gasPrice = bumpedGasPrice;
+    }
+
+
+    try {
+      const sentTx = await connectedWallet.sendTransaction(txRequest);
+
+      // Remove old pending, add new one
+      this.pendingTransactions.delete(originalTxHash);
+      this.pendingTransactions.set(sentTx.hash, {
+        ...pendingTx,
+        hash: sentTx.hash,
+        gasPrice: txRequest.gasPrice?.toString(),
+        maxFeePerGas: txRequest.maxFeePerGas?.toString(),
+        maxPriorityFeePerGas: txRequest.maxPriorityFeePerGas?.toString(),
+        timestamp: Date.now(),
+      });
+
+      return sentTx.hash;
+    } catch (err) {
+      const e = err as { info?: { error?: { message?: string } }; reason?: string; message?: string };
+      const errorMsg = e.info?.error?.message || e.reason || e.message || String(err);
+      throw new Error(`Speed-up failed: ${errorMsg}`);
+    }
+  }
+
+  /**
+   * Cancel a pending transaction by sending a 0-value self-transfer
+   * with the same nonce but higher gas fees.
+   */
+  async cancelTransaction(
+    account: Account,
+    originalTxHash: string,
+    gasMultiplier: number = 1.5
+  ): Promise<string> {
+    const pendingTx = this.pendingTransactions.get(originalTxHash);
+    if (!pendingTx) throw new Error("Pending transaction not found");
+    if (!this.rpc_url) throw new Error("RPC URL not set");
+    if (!account.ethers_wallet) throw new Error("Account is missing ethers_wallet");
+
+    const wallet = account.ethers_wallet;
+    const { JsonRpcProvider } = await import("ethers");
+    const provider = new JsonRpcProvider(this.rpc_url);
+    const connectedWallet = wallet.connect(provider);
+
+    const selfAddress = await connectedWallet.getAddress();
+
+    // Cancel = 0 ETH self-transfer with same nonce + higher gas
+    const txRequest: TransactionRequest = {
+      to: selfAddress,          // Send to self
+      value: 0n,                // Zero value
+      data: "0x",               // No data
+      nonce: pendingTx.nonce,   // SAME nonce — replaces the original tx
+    };
+
+    // Bump gas aggressively (1.5x default) so miners prefer this over original
+    const feeData = await provider.getFeeData();
+    if (pendingTx.maxFeePerGas) {
+      const origMaxFee = BigInt(pendingTx.maxFeePerGas);
+      const origPriorityFee = BigInt(pendingTx.maxPriorityFeePerGas || "0");
+      const networkMaxFee = feeData.maxFeePerGas || origMaxFee;
+      const networkPriorityFee = feeData.maxPriorityFeePerGas || origPriorityFee;
+
+      txRequest.maxFeePerGas = BigInt(Math.floor(Number(origMaxFee > networkMaxFee ? origMaxFee : networkMaxFee) * gasMultiplier));
+      txRequest.maxPriorityFeePerGas = BigInt(Math.floor(Number(origPriorityFee > networkPriorityFee ? origPriorityFee : networkPriorityFee) * gasMultiplier));
+    } else {
+      const origGasPrice = BigInt(pendingTx.gasPrice || "0");
+      const networkGasPrice = feeData.gasPrice || origGasPrice;
+      txRequest.gasPrice = BigInt(Math.floor(Number(origGasPrice > networkGasPrice ? origGasPrice : networkGasPrice) * gasMultiplier));
+    }
+
+
+    try {
+      const sentTx = await connectedWallet.sendTransaction(txRequest);
+
+      // Remove original pending tx
+      this.pendingTransactions.delete(originalTxHash);
+
+      // Don't add cancellation as pending — it's a throwaway self-transfer
+      // Wait in background for confirmation and log it
+      sentTx.wait().then(() => {
+      }).catch((e) => {
+      });
+
+      return sentTx.hash;
+    } catch (err) {
+      const e = err as { info?: { error?: { message?: string } }; reason?: string; message?: string };
+      const errorMsg = e.info?.error?.message || e.reason || e.message || String(err);
+      throw new Error(`Cancel failed: ${errorMsg}`);
+    }
   }
 
   // --- FHE / SHIELDING METHODS ---
@@ -922,12 +1277,11 @@ class Network {
       // Ensure cofhejs is initialized for the correct account
       if (!instance.isReadyForAccount(userAddress, this.network_id)) {
         if (account && account.ethers_wallet) {
-          console.log(`[getShieldedBalance] Initializing cofhejs for account: ${userAddress}`);
           const provider = new ethers.JsonRpcProvider(this.rpc_url);
           const connectedWallet = account.ethers_wallet.connect(provider);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cofhejs expects its own signer interface
           await instance.init(provider, connectedWallet as any);
         } else if (!instance.isReady()) {
-          console.warn("[Network] cofhejs FHE not ready and no account provided, cannot fetch shielded balance");
           return "0.0";
         }
       }
@@ -952,11 +1306,9 @@ class Network {
       // Handle is euint64 (encrypted uint64)
       const handle = BigInt(resultHex);
 
-      console.log(`[getShieldedBalance] Unsealing handle: ${handle}`);
 
       // Handle 0 means no encrypted balance exists for this user - skip unseal
       if (handle === BigInt(0)) {
-        console.log("[getShieldedBalance] Handle is 0 (no encrypted balance), returning 0.0");
         return "0.0";
       }
 
@@ -966,20 +1318,17 @@ class Network {
       if (decrypted !== null && decrypted !== undefined) {
         // Determine decimals based on contract address
         // cETH: 18 decimals, cUSDC: 6 decimals
-        const WRAPPED_ETH_SEP = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
-        const WRAPPED_ETH_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
-        const WRAPPED_ETH_BASE = ((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+        const WRAPPED_ETH_SEP = (import.meta.env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+        const WRAPPED_ETH_ARB = (import.meta.env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+        const WRAPPED_ETH_BASE = (import.meta.env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
         const isEth = contractAddress.toLowerCase() === WRAPPED_ETH_SEP || contractAddress.toLowerCase() === WRAPPED_ETH_ARB || contractAddress.toLowerCase() === WRAPPED_ETH_BASE;
         const decimals = isEth ? 18 : 6;
         const formatted = this.formatTokenAmount(decrypted, decimals);
-        console.log(`[getShieldedBalance] ✅ Unsealed: ${formatted}`);
         return formatted;
       }
 
-      console.warn("[getShieldedBalance] ⚠️ Unseal returned null");
       return "0.0";
     } catch (e) {
-      console.error("[getShieldedBalance] ❌ Error:", e);
       return "0.0";
     }
   }
@@ -1007,23 +1356,20 @@ class Network {
     const amountValue = ethers.parseUnits(amount, decimals);
 
     // Special handling for WETH: Check if user has enough WETH, if not deposit native ETH first
-    const WETH_ADDRESS_SEP = ((import.meta as any).env.VITE_SEPOLIA_WETH_ADDRESS || "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9").toLowerCase();
-    const WETH_ADDRESS_ARB = ((import.meta as any).env.VITE_ARB_SEPOLIA_WETH_ADDRESS || "").toLowerCase();
+    const WETH_ADDRESS_SEP = (import.meta.env.VITE_SEPOLIA_WETH_ADDRESS || "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9").toLowerCase();
+    const WETH_ADDRESS_ARB = (import.meta.env.VITE_ARB_SEPOLIA_WETH_ADDRESS || "").toLowerCase();
 
     if (publicTokenAddress.toLowerCase() === WETH_ADDRESS_SEP || (WETH_ADDRESS_ARB && publicTokenAddress.toLowerCase() === WETH_ADDRESS_ARB)) {
-      console.log("[Wrap] WETH detected - checking balance...");
 
       // Check WETH balance
       const balanceData = ifaceErc20.encodeFunctionData("balanceOf", [account.GetAddress()]);
       const balanceHex = await this.call("eth_call", [{ to: publicTokenAddress, data: balanceData }, "latest"]);
       const wethBalance = balanceHex && balanceHex !== "0x" ? BigInt(balanceHex) : 0n;
 
-      console.log(`[Wrap] Current WETH balance: ${wethBalance}, needed: ${amountValue}`);
 
       // If insufficient WETH, deposit native ETH to WETH first
       if (wethBalance < amountValue) {
         const depositAmount = amountValue - wethBalance;
-        console.log(`[Wrap] Insufficient WETH. Depositing ${ethers.formatEther(depositAmount)} ETH to WETH...`);
 
         // WETH.deposit() - payable function
         const wethIface = new ethers.Interface(["function deposit() payable"]);
@@ -1035,7 +1381,6 @@ class Network {
           data: depositData
         });
 
-        console.log("[Wrap] ETH → WETH deposit successful ✓ TX:", depositTx);
         await this.waitForTransaction(depositTx);
       }
     }
@@ -1048,22 +1393,18 @@ class Network {
     try {
       currentAllowance = allowHex && allowHex !== "0x" ? BigInt(allowHex) : 0n;
     } catch (e) {
-      console.warn("[Wrap] Failed to parse allowance, assuming 0:", allowHex);
       currentAllowance = 0n;
     }
 
     if (currentAllowance < amountValue) {
-      console.log(`[Wrap] Approving ${decimals === 6 ? 'USDC' : 'WETH'} tokens...`);
       const approveData = ifaceErc20.encodeFunctionData("approve", [wrappedTokenAddress, amountValue]);
       const approveTx = await this.sendTransaction(account, {
         to: publicTokenAddress,
         data: approveData,
         value: "0"
       });
-      console.log("[Wrap] Token approved ✓ TX:", approveTx);
     }
 
-    console.log(`[Wrap] Wrapping ${amount} tokens (${amountValue} units, ${decimals} decimals)...`);
 
     // 2. Call wrap(uint256 amount)
     const iface = new ethers.Interface([
@@ -1086,7 +1427,6 @@ class Network {
   async wrapETH(account: Account, wrappedTokenAddress: string, amount: string): Promise<string> {
     const ethers = await import("ethers");
 
-    console.log(`[WrapETH] Wrapping ${amount} ETH directly to cETH...`);
 
     // Call wrapETH() with ETH value (WrappedETH_V3 has payable wrapETH())
     const iface = new ethers.Interface([
@@ -1120,7 +1460,6 @@ class Network {
 
     const amountValue = ethers.parseUnits(amount, decimals);
 
-    console.log(`[Unwrap] Unwrapping ${amount} tokens (${amountValue} units, ${decimals} decimals)`);
 
     const iface = new ethers.Interface([
       "function unwrap(uint256 amount) external"
@@ -1157,26 +1496,23 @@ class Network {
       if (!account.ethers_wallet) throw new Error("Wallet not accessible");
       const provider = new ethers.JsonRpcProvider(this.rpc_url);
       const connectedWallet = account.ethers_wallet.connect(provider);
-      console.log(`[TransferConfidential] Initializing cofhejs for account: ${txSenderAddress}`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cofhejs expects its own signer interface
       await FheCofheService.getInstance().init(provider, connectedWallet as any);
     }
 
     // Determine decimals based on contract address
     // cETH: 18 decimals, cUSDC: 6 decimals
-    const WRAPPED_ETH_SEP = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
-    const WRAPPED_ETH_ARB = ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
-    const WRAPPED_ETH_BASE = ((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+    const WRAPPED_ETH_SEP = (import.meta.env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+    const WRAPPED_ETH_ARB = (import.meta.env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+    const WRAPPED_ETH_BASE = (import.meta.env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
     const isEth = shieldedTokenAddress.toLowerCase() === WRAPPED_ETH_SEP || shieldedTokenAddress.toLowerCase() === WRAPPED_ETH_ARB || shieldedTokenAddress.toLowerCase() === WRAPPED_ETH_BASE;
     const decimals = isEth ? 18 : 6;
     const amountValue = ethers.parseUnits(amount, decimals);
 
-    console.log(`[TransferConfidential] Sending ${amount} (${amountValue} units) to ${to}`);
-    console.log(`[TransferConfidential] Encrypting amount with cofhejs...`);
 
     // Encrypt amount using cofhejs (TRUE FHE)
     const encrypted = await FheCofheService.getInstance().encrypt(BigInt(amountValue.toString()));
 
-    console.log(`[TransferConfidential] ✅ Encrypted ctHash: ${encrypted.ctHash}`);
 
     // V4 contract: transferEncrypted(address to, InEuint64 encryptedAmount) - NO plaintext amount
     // struct InEuint64 { uint256 ctHash; uint8 securityZone; uint8 utype; bytes signature; }
@@ -1193,11 +1529,6 @@ class Network {
 
     const data = iface.encodeFunctionData("transferEncrypted", [to, inEuint64]);
 
-    console.log(`[TransferConfidential] Contract: ${shieldedTokenAddress}`);
-    console.log(`[TransferConfidential] To (recipient): ${to}`);
-    console.log(`[TransferConfidential] inEuint64:`, JSON.stringify(inEuint64, (_, v) => typeof v === 'bigint' ? v.toString() : v));
-    console.log(`[TransferConfidential] Encoded data length: ${data.length}`);
-    console.log(`[TransferConfidential] Sending transaction...`);
 
     const txHash = await this.sendTransaction(account, {
       to: shieldedTokenAddress,
@@ -1210,16 +1541,11 @@ class Network {
     try {
       const receipt = await this.call("eth_getTransactionReceipt", [txHash]);
       const status = typeof receipt?.status === "string" ? parseInt(receipt.status, 16) : receipt?.status;
-      console.log(`[TransferConfidential] TX Receipt Status: ${status === 1 ? '✅ SUCCESS' : '❌ REVERTED'}`);
-      console.log(`[TransferConfidential] Gas Used: ${receipt?.gasUsed}`);
-      console.log(`[TransferConfidential] Logs count: ${receipt?.logs?.length || 0}`);
       if (receipt?.logs) {
-        receipt.logs.forEach((log: any, i: number) => {
-          console.log(`[TransferConfidential] Log[${i}]: topic0=${log.topics?.[0]?.slice(0, 10)}... topics=${log.topics?.length} data=${log.data?.length}chars`);
+        receipt.logs.forEach((log: { topics?: string[]; data?: string }, i: number) => {
         });
       }
     } catch (e) {
-      console.warn("[TransferConfidential] Could not fetch receipt for debug:", e);
     }
 
     return txHash;

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useCallback } from "react";
+import React, { useContext, useEffect, useState, useCallback, useRef } from "react";
 import {
   Box,
   Container,
@@ -19,7 +19,8 @@ import {
   CircularProgress,
   Dialog,
   DialogContent,
-  IconButton
+  IconButton,
+  Tooltip,
 } from "@mui/material";
 import {
   Lock,
@@ -33,11 +34,17 @@ import {
   Close,
   ContentCopy,
   ReceiptLong,
+  Speed,
+  Cancel,
+  HourglassTop,
+  FileDownload,
 } from "@mui/icons-material";
 import { WalletContext } from "../AppContext";
-import { TransactionHistory } from "../backend/NetworkTypes";
+import { TransactionHistory, PendingTransaction, isFheNetwork } from "../backend/NetworkTypes";
 import { useToast } from "../components/ToastProvider";
-import { toUtf8String } from "ethers";
+import { downloadCsv } from "../backend/TransactionExportService";
+import { useTranslation } from "react-i18next";
+import { toUtf8String, formatEther } from "ethers";
 
 /** Try to decode a UTF-8 memo from raw tx input hex.
  *  - Pure data (ETH transfer): entire input is the memo.
@@ -70,19 +77,35 @@ function decodeMemo(inputHex: string | undefined): string | null {
 type FilterType = "all" | "confidential" | "public";
 
 export default function History() {
+  const { t } = useTranslation();
   const walletContext = useContext(WalletContext);
   const tokenCache = walletContext?.tokenCache;
   const activeAccount = walletContext?.accountManager?.GetActive();
   const network = walletContext?.networkProvider?.getActiveNetwork();
+  const activeNetworkId = network?.network_id;
+  const showFhe = activeNetworkId ? isFheNetwork(activeNetworkId) : false;
 
   const [transactions, setTransactions] = useState<TransactionHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+
+  // Reset filter when switching to a non-FHE network
+  useEffect(() => {
+    if (!showFhe && activeFilter !== "all") setActiveFilter("all");
+  }, [showFhe]);
+
   const [nextBlock, setNextBlock] = useState<string | undefined>(undefined);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedTx, setSelectedTx] = useState<TransactionHistory | null>(null);
   const [txMemo, setTxMemo] = useState<string | null>(null);
   const [memoLoading, setMemoLoading] = useState(false);
+
+  // Pending transaction state
+  const [pendingTxs, setPendingTxs] = useState<PendingTransaction[]>([]);
+  const [speedingUp, setSpeedingUp] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  const pendingRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const { showToast } = useToast();
 
   const theme = useTheme();
@@ -98,18 +121,71 @@ export default function History() {
       setMemoLoading(true);
       setTxMemo(null);
       try {
-        const txData: any = await network.call("eth_getTransactionByHash", [selectedTx.hash]);
+        const txData = await network.call("eth_getTransactionByHash", [selectedTx.hash]) as { input?: string } | null;
         if (!cancelled && txData?.input) {
           setTxMemo(decodeMemo(txData.input));
         }
       } catch (e) {
-        console.warn("[History] Failed to fetch tx input:", e);
       } finally {
         if (!cancelled) setMemoLoading(false);
       }
     })();
     return () => { cancelled = true; };
   }, [selectedTx, network]);
+
+  // --- Pending transaction auto-refresh (every 5s) ---
+  useEffect(() => {
+    if (!network) return;
+
+    const refreshPending = async () => {
+      try {
+        const remaining = await network.refreshPendingTransactions();
+        setPendingTxs(remaining);
+      } catch {
+        // Silent fail
+      }
+    };
+
+    // Initial load
+    setPendingTxs(network.getPendingTransactions());
+
+    // Auto-refresh every 5 seconds
+    pendingRefreshRef.current = setInterval(refreshPending, 5000);
+
+    return () => {
+      if (pendingRefreshRef.current) clearInterval(pendingRefreshRef.current);
+    };
+  }, [network]);
+
+  // Speed-up handler
+  const handleSpeedUp = async (ptx: PendingTransaction) => {
+    if (!network || !activeAccount) return;
+    setSpeedingUp(ptx.hash);
+    try {
+      const newHash = await network.speedUpTransaction(activeAccount, ptx.hash, 1.3);
+      showToast(t("history.speedUpSuccess", { hash: newHash.slice(0, 10) }), "success");
+      setPendingTxs(network.getPendingTransactions());
+    } catch (err) {
+      showToast((err instanceof Error ? err.message : String(err)) || t("history.speedUpFailed"), "error");
+    } finally {
+      setSpeedingUp(null);
+    }
+  };
+
+  // Cancel handler
+  const handleCancel = async (ptx: PendingTransaction) => {
+    if (!network || !activeAccount) return;
+    setCancelling(ptx.hash);
+    try {
+      await network.cancelTransaction(activeAccount, ptx.hash, 1.5);
+      showToast(t("history.cancelSuccess"), "success");
+      setPendingTxs(network.getPendingTransactions());
+    } catch (err) {
+      showToast((err instanceof Error ? err.message : String(err)) || t("history.cancelFailed"), "error");
+    } finally {
+      setCancelling(null);
+    }
+  };
 
   useEffect(() => {
     if (!walletContext || !network || !activeAccount) {
@@ -126,7 +202,6 @@ export default function History() {
         setTransactions(res.history);
         setNextBlock(res.nextBlock);
       } catch (err) {
-        console.error("Failed to fetch transaction history:", err);
       } finally {
         setLoading(false);
       }
@@ -148,7 +223,6 @@ export default function History() {
       });
       setNextBlock(res.nextBlock);
     } catch (err) {
-      console.error("Failed to load more transactions:", err);
     } finally {
       setLoadingMore(false);
     }
@@ -166,6 +240,7 @@ export default function History() {
   // Method label → color mapping
   const getMethodChipColor = (label: string): "default" | "primary" | "secondary" | "success" | "warning" | "info" | "error" => {
     switch (label) {
+      case "Swap": return "info";
       case "Wrap": return "info";
       case "Unwrap": return "warning";
       case "Shield Transfer": return "secondary";
@@ -177,6 +252,7 @@ export default function History() {
   // Method label → icon
   const getMethodIcon = (label: string) => {
     switch (label) {
+      case "Swap": return <SwapVert sx={{ fontSize: 14 }} />;
       case "Wrap": return <Lock sx={{ fontSize: 14 }} />;
       case "Unwrap": return <LockOpen sx={{ fontSize: 14 }} />;
       case "Shield Transfer": return <Shield sx={{ fontSize: 14 }} />;
@@ -214,26 +290,52 @@ export default function History() {
     return num.toLocaleString("en-US", { maximumFractionDigits: 2 });
   };
 
-  const filters: { key: FilterType; label: string; icon: React.ReactElement }[] = [
-    { key: "all", label: "All", icon: <FilterList sx={{ fontSize: 16 }} /> },
-    { key: "confidential", label: "Confidential", icon: <Lock sx={{ fontSize: 16 }} /> },
-    { key: "public", label: "Public", icon: <LockOpen sx={{ fontSize: 16 }} /> },
-  ];
+  const filters: { key: FilterType; label: string; icon: React.ReactElement }[] = showFhe
+    ? [
+        { key: "all", label: "All", icon: <FilterList sx={{ fontSize: 16 }} /> },
+        { key: "confidential", label: "Confidential", icon: <Lock sx={{ fontSize: 16 }} /> },
+        { key: "public", label: "Public", icon: <LockOpen sx={{ fontSize: 16 }} /> },
+      ]
+    : [
+        { key: "all", label: "All", icon: <FilterList sx={{ fontSize: 16 }} /> },
+      ];
 
   return (
     <Box sx={{ pb: 12 }}>
       <Container maxWidth="md" sx={{ py: 3 }}>
         {/* Header */}
-        <Typography
-          variant="h5"
-          fontWeight={800}
-          textAlign="center"
-          gutterBottom
-          color="text.primary"
-          sx={{ mb: 3 }}
-        >
-          Transaction History
-        </Typography>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
+          <Typography
+            variant="h5"
+            fontWeight={800}
+            color="text.primary"
+          >
+            {t("history.title")}
+          </Typography>
+
+          {/* CSV Export Button */}
+          {transactions.length > 0 && (
+            <Tooltip title={t("history.exportCsv")}>
+              <IconButton
+                size="small"
+                aria-label={t("history.exportCsv")}
+                onClick={() => {
+                  const addr = activeAccount?.GetAddress() || "";
+                  downloadCsv(filteredTransactions, addr, {
+                    filename: `arfhe_tx_${activeFilter}_${new Date().toISOString().split("T")[0]}`
+                  });
+                  showToast(t("history.exportSuccess"), "success");
+                }}
+                sx={{
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                  "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.2) },
+                }}
+              >
+                <FileDownload sx={{ fontSize: 20 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Stack>
 
         {/* Filter Chips */}
         <Stack direction="row" spacing={1} sx={{ mb: 3, justifyContent: "center" }}>
@@ -265,6 +367,166 @@ export default function History() {
             );
           })}
         </Stack>
+
+        {/* Pending Transactions Section */}
+        {pendingTxs.length > 0 && (
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 4,
+              bgcolor: alpha(theme.palette.warning.main, 0.04),
+              backdropFilter: "blur(20px)",
+              border: "1px solid",
+              borderColor: alpha(theme.palette.warning.main, 0.2),
+              boxShadow: `0 4px 20px ${alpha(theme.palette.warning.main, 0.08)}`,
+              overflow: "hidden",
+              mb: 3,
+              animation: "pendingPulse 2s ease-in-out infinite",
+              "@keyframes pendingPulse": {
+                "0%": { borderColor: alpha(theme.palette.warning.main, 0.2) },
+                "50%": { borderColor: alpha(theme.palette.warning.main, 0.5) },
+                "100%": { borderColor: alpha(theme.palette.warning.main, 0.2) },
+              },
+            }}
+          >
+            {/* Pending Header */}
+            <Box
+              sx={{
+                px: 2,
+                py: 1.5,
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                borderBottom: `1px solid ${alpha(theme.palette.warning.main, 0.15)}`,
+                bgcolor: alpha(theme.palette.warning.main, 0.06),
+              }}
+            >
+              <HourglassTop sx={{ fontSize: 18, color: "warning.main", animation: "spin 2s linear infinite", "@keyframes spin": { "100%": { transform: "rotate(360deg)" } } }} />
+              <Typography variant="subtitle2" fontWeight={700} color="warning.dark">
+                Pending Transactions ({pendingTxs.length})
+              </Typography>
+            </Box>
+
+            {/* Pending Items */}
+            <List sx={{ p: 0 }}>
+              {pendingTxs.map((ptx, index) => {
+                const isSpeedingThis = speedingUp === ptx.hash;
+                const isCancellingThis = cancelling === ptx.hash;
+                const elapsedSec = Math.floor((Date.now() - ptx.timestamp) / 1000);
+                const elapsedStr = elapsedSec < 60
+                  ? `${elapsedSec}s ago`
+                  : elapsedSec < 3600
+                    ? `${Math.floor(elapsedSec / 60)}m ago`
+                    : `${Math.floor(elapsedSec / 3600)}h ago`;
+
+                const shortTo = ptx.to ? `${ptx.to.slice(0, 6)}...${ptx.to.slice(-4)}` : "";
+                const valueEth = (() => {
+                  try {
+                    const v = BigInt(ptx.value);
+                    if (v === 0n) return "0";
+                    return formatEther(v);
+                  } catch { return "0"; }
+                })();
+
+                return (
+                  <ListItem
+                    key={ptx.hash}
+                    sx={{
+                      borderBottom: index < pendingTxs.length - 1 ? "1px solid" : "none",
+                      borderColor: alpha(theme.palette.warning.main, 0.1),
+                      px: 2,
+                      py: 1.5,
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 44 }}>
+                      <Avatar
+                        sx={{
+                          width: 36,
+                          height: 36,
+                          bgcolor: alpha(theme.palette.warning.main, 0.12),
+                          color: "warning.main",
+                        }}
+                      >
+                        <CircularProgress size={18} color="warning" thickness={5} />
+                      </Avatar>
+                    </ListItemIcon>
+
+                    <ListItemText
+                      primary={
+                        <Typography fontWeight={600} fontSize="0.9rem" color="warning.dark">
+                          Pending {parseFloat(valueEth) > 0 ? `${parseFloat(valueEth).toFixed(4)} ETH` : "Transaction"}
+                        </Typography>
+                      }
+                      secondaryTypographyProps={{ component: "div" }}
+                      secondary={
+                        <Stack direction="row" spacing={0.5} alignItems="center" mt={0.3} flexWrap="wrap">
+                          <Chip
+                            label="Pending"
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                            sx={{ height: 18, fontSize: 10, fontWeight: 700 }}
+                          />
+                          <Typography variant="caption" fontFamily="monospace" color="text.secondary" sx={{ fontSize: 11 }}>
+                            → {shortTo}
+                          </Typography>
+                          <Typography variant="caption" color="text.disabled" sx={{ fontSize: 11 }}>
+                            • {elapsedStr}
+                          </Typography>
+                          <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10 }}>
+                            (nonce: {ptx.nonce})
+                          </Typography>
+                        </Stack>
+                      }
+                    />
+
+                    {/* Speed Up & Cancel Buttons */}
+                    <Stack direction="row" spacing={0.5} sx={{ ml: 1 }}>
+                      <Tooltip title="Daha yüksek gas ile hızlandır" arrow>
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label="Speed up transaction"
+                            onClick={() => handleSpeedUp(ptx)}
+                            disabled={isSpeedingThis || isCancellingThis}
+                            sx={{
+                              bgcolor: alpha(theme.palette.info.main, 0.1),
+                              color: "info.main",
+                              "&:hover": { bgcolor: alpha(theme.palette.info.main, 0.2) },
+                              width: 32,
+                              height: 32,
+                            }}
+                          >
+                            {isSpeedingThis ? <CircularProgress size={14} color="info" /> : <Speed sx={{ fontSize: 16 }} />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="İşlemi iptal et (self-transfer)" arrow>
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label="Cancel transaction"
+                            onClick={() => handleCancel(ptx)}
+                            disabled={isSpeedingThis || isCancellingThis}
+                            sx={{
+                              bgcolor: alpha(theme.palette.error.main, 0.1),
+                              color: "error.main",
+                              "&:hover": { bgcolor: alpha(theme.palette.error.main, 0.2) },
+                              width: 32,
+                              height: 32,
+                            }}
+                          >
+                            {isCancellingThis ? <CircularProgress size={14} color="error" /> : <Cancel sx={{ fontSize: 16 }} />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
+                  </ListItem>
+                );
+              })}
+            </List>
+          </Paper>
+        )}
 
         {/* Transaction List */}
         <Paper
@@ -323,8 +585,8 @@ export default function History() {
               // Resolve symbol: check token cache, then check if it's a known FHE contract
               let symbol = token?.symbol || (tx.isNative ? "ETH" : "");
               if (!symbol && tx.isShielded) {
-                const wrappedEth = ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
-                const wrappedUsdc = ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+                const wrappedEth = (import.meta.env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+                const wrappedUsdc = (import.meta.env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
                 if (tx.contractAddress.toLowerCase() === wrappedEth) symbol = "cETH";
                 else if (tx.contractAddress.toLowerCase() === wrappedUsdc) symbol = "cUSDC";
                 else symbol = "Shielded";
@@ -362,18 +624,32 @@ export default function History() {
                           height: 38,
                           bgcolor: tx.isShielded
                             ? alpha(theme.palette.secondary.main, 0.12)
-                            : isSent
-                              ? alpha(theme.palette.text.primary, 0.06)
-                              : alpha(theme.palette.success.main, 0.1),
+                            : tx.methodLabel === "Swap"
+                              ? alpha(theme.palette.info.main, 0.12)
+                              : tx.methodLabel === "Wrap" || tx.methodLabel === "Unwrap"
+                                ? alpha(theme.palette.info.main, 0.1)
+                                : isSent
+                                  ? alpha(theme.palette.text.primary, 0.06)
+                                  : alpha(theme.palette.success.main, 0.1),
                           color: tx.isShielded
                             ? "secondary.main"
-                            : isSent
-                              ? "text.secondary"
-                              : "success.main",
+                            : tx.methodLabel === "Swap"
+                              ? "info.main"
+                              : tx.methodLabel === "Wrap" || tx.methodLabel === "Unwrap"
+                                ? "info.main"
+                                : isSent
+                                  ? "text.secondary"
+                                  : "success.main",
                         }}
                       >
                         {tx.isShielded ? (
                           <Shield sx={{ fontSize: 20 }} />
+                        ) : tx.methodLabel === "Swap" ? (
+                          <SwapVert sx={{ fontSize: 20 }} />
+                        ) : tx.methodLabel === "Wrap" ? (
+                          <Lock sx={{ fontSize: 20 }} />
+                        ) : tx.methodLabel === "Unwrap" ? (
+                          <LockOpen sx={{ fontSize: 20 }} />
                         ) : isSent ? (
                           <ArrowOutward sx={{ fontSize: 20 }} />
                         ) : (
@@ -392,12 +668,22 @@ export default function History() {
                             color={
                               tx.isShielded
                                 ? "secondary.main"
-                                : isSent
-                                  ? "text.primary"
-                                  : "success.main"
+                                : tx.methodLabel === "Swap"
+                                  ? "info.main"
+                                  : tx.methodLabel === "Wrap" || tx.methodLabel === "Unwrap"
+                                    ? "info.main"
+                                    : isSent
+                                      ? "text.primary"
+                                      : "success.main"
                             }
                           >
-                            {isSent ? "Sent" : "Received"}{" "}
+                            {tx.methodLabel === "Swap"
+                              ? "Swapped"
+                              : tx.methodLabel === "Wrap"
+                                ? "Wrapped"
+                                : tx.methodLabel === "Unwrap"
+                                  ? "Unwrapped"
+                                  : isSent ? "Sent" : "Received"}{" "}
                             {isEncrypted ? (
                               <em style={{ fontWeight: 400, fontSize: "0.85rem" }}>Encrypted Amount </em>
                             ) : (
@@ -429,7 +715,7 @@ export default function History() {
                           <Chip
                             label={tx.status}
                             size="small"
-                            color={tx.status === "Success" ? "success" : "error"}
+                            color={tx.status === "Success" ? "success" : tx.status === "Pending" ? "warning" : "error"}
                             variant="outlined"
                             sx={{ height: 20, fontSize: 10, fontWeight: 700 }}
                           />
@@ -511,6 +797,7 @@ export default function History() {
           onClose={() => setSelectedTx(null)}
           fullWidth
           maxWidth="sm"
+          aria-labelledby="tx-detail-title"
           PaperProps={{
             sx: {
               borderRadius: 4,
@@ -533,10 +820,10 @@ export default function History() {
               color: "white",
             }}
           >
-            <Typography variant="h6" fontWeight={700}>
+            <Typography id="tx-detail-title" variant="h6" fontWeight={700}>
               Transaction Details
             </Typography>
-            <IconButton size="small" onClick={() => setSelectedTx(null)} sx={{ color: "white" }}>
+            <IconButton size="small" onClick={() => setSelectedTx(null)} sx={{ color: "white" }} aria-label="Close transaction details">
               <Close />
             </IconButton>
           </Box>
@@ -550,7 +837,7 @@ export default function History() {
                 <Box mt={0.5}>
                   <Chip
                     label={selectedTx.status}
-                    color={selectedTx.status === "Success" ? "success" : "error"}
+                    color={selectedTx.status === "Success" ? "success" : selectedTx.status === "Pending" ? "warning" : "error"}
                     sx={{ fontWeight: 700, borderRadius: 2 }}
                   />
                 </Box>
@@ -570,9 +857,9 @@ export default function History() {
                   <Typography variant="body2" sx={{ fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", mr: 2 }}>
                     {selectedTx.hash}
                   </Typography>
-                  <IconButton size="small" onClick={() => {
+                  <IconButton size="small" aria-label="Copy transaction hash" onClick={() => {
                     navigator.clipboard.writeText(selectedTx.hash);
-                    showToast("Hash copied!", "success");
+                    showToast(t("history.hashCopied"), "success");
                   }}>
                     <ContentCopy fontSize="small" />
                   </IconButton>
@@ -588,9 +875,9 @@ export default function History() {
                         <Typography variant="body2" sx={{ fontFamily: "monospace", mr: 1, ...((selectedTx.from.toLowerCase() === userAddress) && { fontWeight: 700, color: 'primary.main' }) }}>
                           {selectedTx.from.slice(0, 10)}...{selectedTx.from.slice(-8)}
                         </Typography>
-                        <IconButton size="small" onClick={() => {
+                        <IconButton size="small" aria-label="Copy sender address" onClick={() => {
                           navigator.clipboard.writeText(selectedTx.from);
-                          showToast("Address copied!", "success");
+                          showToast(t("history.addressCopied"), "success");
                         }}>
                           <ContentCopy sx={{ fontSize: 14 }} />
                         </IconButton>
@@ -603,9 +890,9 @@ export default function History() {
                           {selectedTx.to ? `${selectedTx.to.slice(0, 10)}...${selectedTx.to.slice(-8)}` : "Contract Creation"}
                         </Typography>
                         {selectedTx.to && (
-                          <IconButton size="small" onClick={() => {
+                          <IconButton size="small" aria-label="Copy recipient address" onClick={() => {
                             navigator.clipboard.writeText(selectedTx.to);
-                            showToast("Address copied!", "success");
+                            showToast(t("history.addressCopied"), "success");
                           }}>
                             <ContentCopy sx={{ fontSize: 14 }} />
                           </IconButton>

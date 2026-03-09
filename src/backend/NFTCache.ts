@@ -22,7 +22,7 @@ export default class NFTCache {
     private loadFromStorage() {
         if (!this.storageManager) return;
 
-        const savedData = this.storageManager.getLocal<any>(this.STORAGE_KEY);
+        const savedData = this.storageManager.getLocal<Record<string, Record<string, NFTCacheItem>>>(this.STORAGE_KEY);
         if (savedData && typeof savedData === 'object') {
             try {
                 Object.keys(savedData).forEach((netStr) => {
@@ -37,7 +37,6 @@ export default class NFTCache {
                     this.cache.set(netId, nftMap);
                 });
             } catch (e) {
-                console.warn("Failed to parse saved NFT cache", e);
             }
         }
     }
@@ -46,7 +45,7 @@ export default class NFTCache {
         if (!this.storageManager) return;
 
         try {
-            const exportObj: any = {};
+            const exportObj: Record<string, Record<string, NFTCacheItem>> = {};
             this.cache.forEach((nftMap, netId) => {
                 exportObj[netId] = {};
                 nftMap.forEach((nft, contract) => {
@@ -56,7 +55,6 @@ export default class NFTCache {
 
             this.storageManager.setLocal(this.STORAGE_KEY, exportObj);
         } catch (e) {
-            console.warn("Failed to save NFT cache", e);
         }
     }
 

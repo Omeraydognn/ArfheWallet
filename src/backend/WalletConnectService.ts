@@ -1,7 +1,9 @@
 import { SignClient } from "@walletconnect/sign-client";
-import { SessionTypes } from "@walletconnect/types";
+import { SessionTypes, ProposalTypes } from "@walletconnect/types";
 import { getSdkError, buildApprovedNamespaces } from "@walletconnect/utils";
 import Account from "./Account";
+import type AccountManager from "./AccountManager";
+import { PhishingDetector, PhishingCheckResult } from "./PhishingDetector";
 
 // --- CONFIGURATION ---
 const PROJECT_ID = "eb563a65765dfb07525fc699292aad02";
@@ -30,7 +32,8 @@ const SUPPORTED_EVENTS = ["chainChanged", "accountsChanged"];
 export interface WalletConnectRequest {
     id: number;
     topic: string;
-    params: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WC SDK dynamic params
+    params: Record<string, any>;
     dApp: {
         name: string;
         url: string;
@@ -40,7 +43,7 @@ export interface WalletConnectRequest {
 
 export interface WalletConnectProposal {
     id: number;
-    params: any;
+    params: ProposalTypes.Struct;
     dApp: {
         name: string;
         url: string;
@@ -52,9 +55,12 @@ export interface WalletConnectProposal {
     requiredMethods: string[];
     unsupportedChains: string[];
     isValid: boolean;
+    /** Phishing detection result — populated asynchronously */
+    phishingResult?: PhishingCheckResult;
 }
 
 export class WalletConnectService {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WC SignClient instance type
     public client: any;
     public session: SessionTypes.Struct | undefined;
 
@@ -63,35 +69,19 @@ export class WalletConnectService {
     private onProposalCallback: ((proposal: WalletConnectProposal) => void) | null = null;
     private onSessionUpdateCallback: (() => void) | null = null;
 
-    private accountManager: any;
+    private accountManager: AccountManager;
     private isInitializing = false;
 
     // Deduplicate proposal events
     private processedProposalIds = new Set<number>();
 
-    constructor(accountManager: any) {
+    constructor(accountManager: AccountManager) {
         this.accountManager = accountManager;
     }
 
     async init() {
         if (this.client || this.isInitializing) return;
         this.isInitializing = true;
-
-        // Suppress WalletConnect verify-api spam on localhost
-        const originalError = console.error;
-        const originalWarn = console.warn;
-
-        console.error = (...args: any[]) => {
-            const str = args.map(a => String(a)).join(" ");
-            if (str.includes("verify-api") || str.includes("verify.walletconnect.org") || str.includes("404")) return;
-            originalError.apply(console, args);
-        };
-
-        console.warn = (...args: any[]) => {
-            const str = args.map(a => String(a)).join(" ");
-            if (str.includes("verify-api") || str.includes("verify.walletconnect.org")) return;
-            originalWarn.apply(console, args);
-        };
 
         try {
             const metadata = { ...METADATA, url: window.location.origin };
@@ -107,10 +97,8 @@ export class WalletConnectService {
             // Restore active session if any
             if (this.client.session.length) {
                 this.session = this.client.session.values[this.client.session.length - 1];
-                console.log("[WC] Restored Session:", this.session?.peer.metadata.name);
             }
         } catch (e) {
-            console.log("[WC] Init Error:", e);
         } finally {
             this.isInitializing = false;
         }
@@ -120,17 +108,16 @@ export class WalletConnectService {
         if (!this.client) return;
 
         // Session Proposal (Connection Request) — deduplicated
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WC SDK event
         this.client.on("session_proposal", async (proposal: any) => {
             const { id, params } = proposal;
 
             // Dedup: skip already-processed proposals
             if (this.processedProposalIds.has(id)) {
-                console.log("[WC] Ignoring duplicate proposal:", id);
                 return;
             }
             this.processedProposalIds.add(id);
 
-            console.log("[WC] Session Proposal:", id);
             const { proposer, requiredNamespaces, optionalNamespaces } = params;
 
             // Extract chain requirements
@@ -143,6 +130,20 @@ export class WalletConnectService {
             const isValid = unsupportedChains.length === 0;
 
             if (this.onProposalCallback) {
+                // ── Phishing Detection ──
+                // Run async check on dApp domain — don't block proposal display
+                const dAppUrl = proposer.metadata.url || "";
+                let phishingResult: PhishingCheckResult | undefined;
+
+                try {
+                    phishingResult = await PhishingDetector.checkDomain(dAppUrl);
+                    if (phishingResult.isPhishing) {
+                    } else if (phishingResult.riskLevel === "SUSPICIOUS") {
+                    }
+                } catch (e) {
+                    // Continue without phishing result — don't block the proposal
+                }
+
                 this.onProposalCallback({
                     id,
                     params,
@@ -157,9 +158,9 @@ export class WalletConnectService {
                     requiredMethods,
                     unsupportedChains,
                     isValid,
+                    phishingResult,
                 });
             } else {
-                console.warn("[WC] No UI listener for proposal. Auto-rejecting.");
                 await this.client.reject({
                     id,
                     reason: getSdkError("USER_REJECTED"),
@@ -168,11 +169,11 @@ export class WalletConnectService {
         });
 
         // Session Request (Sign / Tx)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WC SDK event
         this.client.on("session_request", (event: any) => {
             const { topic, params, id } = event;
             const session = this.client?.session.get(topic);
 
-            console.log("[WC] Session Request:", event.id);
 
             if (this.onRequestCallback && session) {
                 this.onRequestCallback({
@@ -190,7 +191,6 @@ export class WalletConnectService {
 
         // Session Delete
         this.client.on("session_delete", () => {
-            console.log("[WC] Session Deleted");
             this.session = undefined;
             if (this.onSessionDeleteCallback) this.onSessionDeleteCallback();
             if (this.onSessionUpdateCallback) this.onSessionUpdateCallback();
@@ -226,11 +226,10 @@ export class WalletConnectService {
         // Check for existing pairing with same topic
         try {
             const allPairings = this.client.pairing.getAll();
-            const existing = allPairings.find((p: any) => p.topic === topic);
+            const existing = allPairings.find((p: { topic: string }) => p.topic === topic);
             if (existing) {
                 if (!existing.active) {
                     // Inactive/expired pairing → clean up and allow fresh pair
-                    console.log("[WC] Removing inactive pairing:", topic.slice(0, 8));
                     try {
                         await this.client.pairing.delete(topic, getSdkError("USER_DISCONNECTED"));
                     } catch { /* ignore deletion errors */ }
@@ -239,17 +238,16 @@ export class WalletConnectService {
                     throw new Error("ALREADY_PAIRED");
                 }
             }
-        } catch (e: any) {
-            if (e.message === "ALREADY_PAIRED") throw e;
+        } catch (e) {
+            if (e instanceof Error && e.message === "ALREADY_PAIRED") throw e;
             // Other errors during pairing check → continue with pair attempt
         }
 
-        console.log("[WC] Pairing with URI:", uri.slice(0, 20) + "...");
 
         try {
             await this.client.pair({ uri });
-        } catch (e: any) {
-            const msg = e?.message || String(e);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
             if (msg.includes("Pairing already exists")) {
                 throw new Error("ALREADY_PAIRED");
             }
@@ -271,7 +269,6 @@ export class WalletConnectService {
                 reason: getSdkError("USER_DISCONNECTED"),
             });
         } catch (e) {
-            console.warn("[WC] Disconnect error:", e);
         }
 
         if (this.session?.topic === sessionTopic) {
@@ -287,7 +284,7 @@ export class WalletConnectService {
 
         // Disconnect all sessions in parallel, silently
         await Promise.all(
-            sessions.map((session: any) =>
+            sessions.map((session: SessionTypes.Struct) =>
                 this.client.disconnect({
                     topic: session.topic,
                     reason: getSdkError("USER_DISCONNECTED"),
@@ -306,7 +303,6 @@ export class WalletConnectService {
         if (!this.client) return;
 
         try {
-            console.log("[WC] Approving Session Proposal:", proposal.id);
             const { id, params } = proposal;
 
             const activeAccount = this.accountManager.GetActive();
@@ -340,8 +336,7 @@ export class WalletConnectService {
                         setTimeout(() => reject(new Error("ACK_TIMEOUT")), 10000)
                     )
                 ]);
-            } catch (ackErr: any) {
-                console.warn("[WC] Acknowledgment issue:", ackErr.message, "- proceeding anyway");
+            } catch (ackErr) {
             }
 
             // Verify session is registered in the store
@@ -351,14 +346,12 @@ export class WalletConnectService {
             }
             this.session = latestSession;
 
-            console.log("[WC] Session Approved:", latestSession.peer.metadata.name);
 
             // Clear processed proposal ID
             this.processedProposalIds.delete(proposal.id);
 
             if (this.onSessionUpdateCallback) this.onSessionUpdateCallback();
         } catch (e) {
-            console.error("[WC] Session Approval Failed:", e);
             this.processedProposalIds.delete(proposal.id);
             throw e;
         }
@@ -366,7 +359,6 @@ export class WalletConnectService {
 
     async rejectSession(proposal: WalletConnectProposal) {
         if (!this.client) return;
-        console.log("[WC] Rejecting Session Proposal:", proposal.id);
 
         await this.client.reject({
             id: proposal.id,
@@ -389,10 +381,9 @@ export class WalletConnectService {
 
     // --- Request Response ---
 
-    async approveRequest(account: Account, req: WalletConnectRequest, result: any) {
+    async approveRequest(account: Account, req: WalletConnectRequest, result: unknown) {
         if (!this.client) return;
 
-        console.log("[WC] Approving Request:", req.id);
 
         await this.client.respond({
             topic: req.topic,
@@ -407,7 +398,6 @@ export class WalletConnectService {
     async rejectRequest(req: WalletConnectRequest) {
         if (!this.client) return;
 
-        console.log("[WC] Rejecting Request:", req.id);
 
         await this.client.respond({
             topic: req.topic,

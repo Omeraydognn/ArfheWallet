@@ -1,32 +1,52 @@
 {
     "manifest_version": 3,
-    "name": "Arfhe",
+    "name": "Arfhe Wallet",
     "version": "1.0.0",
-    
-    "background":{
+    "description": "Privacy-first FHE-powered crypto wallet with encrypted on-chain transactions",
+
+    "background": {
         "service_worker": "service-worker.js",
         "type": "module"
     },
 
     "content_security_policy": {
-      "extension_pages": "script-src 'self' 'unsafe-eval'; object-src 'self'"
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
     },
 
-    "action": { 
-        "default_popup": "index.html"
+    "action": {
+        "default_popup": "index.html",
+        "default_title": "Arfhe Wallet",
+        "default_icon": {
+            "32": "icon32.png",
+            "48": "icon48.png",
+            "128": "icon128.png"
+        }
     },
+
     "permissions": [
-        "scripting",
-        "storage"
+        "storage",
+        "notifications",
+        "alarms"
     ],
-    "host_permissions":[
-        "http://*/*",
-        "https://*/*"
+
+    "host_permissions": [
+        "https://*.alchemy.com/*",
+        "https://*.alchemyapi.io/*",
+        "https://*.walletconnect.com/*",
+        "https://*.walletconnect.org/*",
+        "https://cloudflare-eth.com/*",
+        "https://rpc.sepolia.org/*",
+        "https://*.arbitrum.io/*",
+        "https://*.base.org/*",
+        "https://*.fhenix.zone/*",
+        "https://api.coingecko.com/*",
+        "https://min-api.cryptocompare.com/*",
+        "https://*.publicnode.com/*"
     ],
- 
-    "description": "A basic example extension with only required keys",
+
     "icons": {
-      "48": "images/icon32.png",
-      "128": "images/icon48.png"
+        "32": "icon32.png",
+        "48": "icon48.png",
+        "128": "icon128.png"
     }
-  }
+}

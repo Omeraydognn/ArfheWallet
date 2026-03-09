@@ -50,8 +50,8 @@ export default function SuccessAnimation({
                             cx="36"
                             cy="36"
                             r="34"
-                            fill="rgba(99,102,241,0.1)"
-                            stroke="#6366f1"
+                            fill="rgba(37,99,235,0.08)"
+                            stroke="#2563eb"
                             strokeWidth="2"
                             style={{
                                 transformOrigin: "36px 36px",
@@ -61,7 +61,7 @@ export default function SuccessAnimation({
                         {/* Checkmark path — draws itself */}
                         <path
                             d="M20 37 L30 48 L52 25"
-                            stroke="#6366f1"
+                            stroke="#2563eb"
                             strokeWidth="4"
                             strokeLinecap="round"
                             strokeLinejoin="round"

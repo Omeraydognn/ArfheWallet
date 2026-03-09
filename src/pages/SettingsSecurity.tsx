@@ -37,11 +37,13 @@ import {
     Timer
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { WalletContext } from '../AppContext';
 import { useToast } from '../components/ToastProvider';
 
 export default function SettingsSecurity() {
     const navigate = useNavigate();
+    const { t } = useTranslation();
     const context = useContext(WalletContext);
     const accountManager = context?.accountManager;
     const storageManager = context?.storageManager;
@@ -53,7 +55,12 @@ export default function SettingsSecurity() {
     const [passwordError, setPasswordError] = useState("");
 
     const [secretsDialogOpen, setSecretsDialogOpen] = useState(false);
-    const [revealedAccount, setRevealedAccount] = useState<any>(null);
+    const [revealedAccount, setRevealedAccount] = useState<{
+        name?: string;
+        address?: string;
+        privateKey?: string;
+        mnemonic?: string;
+    } | null>(null);
 
     const [showPrivateKey, setShowPrivateKey] = useState(false);
     const [showMnemonic, setShowMnemonic] = useState(false);
@@ -77,7 +84,7 @@ export default function SettingsSecurity() {
         if (!storageManager) return;
 
         if (!storageManager.hasPassword()) {
-            setPasswordError("No password set for this wallet.");
+            setPasswordError(t("security.noPasswordSet"));
             return;
         }
 
@@ -87,7 +94,7 @@ export default function SettingsSecurity() {
             setPasswordDialogOpen(false);
             revealSecrets(selectedAccountIndex!);
         } else {
-            setPasswordError("Incorrect password.");
+            setPasswordError(t("security.incorrectPassword"));
         }
     };
 
@@ -110,14 +117,14 @@ export default function SettingsSecurity() {
 
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text);
-        showToast("Secret copied to clipboard!", "success");
+        showToast(t("security.secretCopied"), "success");
     };
 
     const handleAutoLockChange = (val: number) => {
         setAutoLockTimer(val);
         storageManager?.setLocal("autoLockTimeout", val);
         window.dispatchEvent(new Event("autolock_updated"));
-        showToast("Auto-Lock timer updated", "success");
+        showToast(t("security.autoLockUpdated"), "success");
     };
 
     return (
@@ -126,21 +133,20 @@ export default function SettingsSecurity() {
 
                 {/* Header */}
                 <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
-                    <IconButton onClick={() => navigate('/settings')}>
+                    <IconButton onClick={() => navigate('/settings')} aria-label="Go back to settings">
                         <ArrowBack />
                     </IconButton>
                     <Typography variant="h4" fontWeight={800}>
-                        Security Keys
+                        {t('security.securityKeys')}
                     </Typography>
                 </Stack>
 
                 <Alert severity="warning" sx={{ mb: 4, borderRadius: 3 }}>
-                    Reviewing your private keys is dangerous. Never share these keys with anyone.
-                    Anyone with these keys can steal your assets.
+                    {t('security.dangerWarning')}
                 </Alert>
 
                 <Typography variant="h6" fontWeight={700} gutterBottom sx={{ px: 1 }}>
-                    Your Accounts
+                    {t('security.yourAccounts')}
                 </Typography>
 
                 <Paper elevation={0} sx={{ borderRadius: 4, overflow: 'hidden', mb: 3, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
@@ -160,7 +166,7 @@ export default function SettingsSecurity() {
                                         secondary={(acc.address || "0x").slice(0, 10) + "..." + (acc.address || "0x").slice(-8)}
                                     />
                                     <Button variant="outlined" size="small" color="inherit">
-                                        Reveal
+                                        {t('security.reveal')}
                                     </Button>
                                 </ListItemButton>
                             </ListItem>
@@ -169,7 +175,7 @@ export default function SettingsSecurity() {
                 </Paper>
 
                 <Typography variant="h6" fontWeight={700} gutterBottom sx={{ px: 1, mt: 5 }}>
-                    Security Preferences
+                    {t('security.securityPreferences')}
                 </Typography>
 
                 <Paper elevation={0} sx={{ borderRadius: 4, overflow: 'hidden', mb: 3, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', p: 3 }}>
@@ -179,8 +185,8 @@ export default function SettingsSecurity() {
                                 <Timer sx={{ color: 'primary.main' }} />
                             </Box>
                             <Box>
-                                <Typography variant="body1" fontWeight={700}>Auto-Lock Timer</Typography>
-                                <Typography variant="body2" color="text.secondary">Time before wallet locks due to inactivity</Typography>
+                                <Typography variant="body1" fontWeight={700}>{t('security.autoLock')}</Typography>
+                                <Typography variant="body2" color="text.secondary">{t('security.autoLockDesc')}</Typography>
                             </Box>
                         </Box>
 
@@ -190,10 +196,12 @@ export default function SettingsSecurity() {
                                 onChange={(e) => handleAutoLockChange(Number(e.target.value))}
                                 sx={{ borderRadius: 3, fontWeight: 600 }}
                             >
-                                <MenuItem value={1 * 60 * 1000}>1 Minute</MenuItem>
-                                <MenuItem value={5 * 60 * 1000}>5 Minutes</MenuItem>
-                                <MenuItem value={15 * 60 * 1000}>15 Minutes</MenuItem>
-                                <MenuItem value={0}>Never</MenuItem>
+                                <MenuItem value={1 * 60 * 1000}>{t('security.duration1min')}</MenuItem>
+                                <MenuItem value={5 * 60 * 1000}>{t('security.duration5min')}</MenuItem>
+                                <MenuItem value={15 * 60 * 1000}>{t('security.duration15min')}</MenuItem>
+                                <MenuItem value={30 * 60 * 1000}>{t('security.duration30min')}</MenuItem>
+                                <MenuItem value={60 * 60 * 1000}>{t('security.duration1hour')}</MenuItem>
+                                <MenuItem value={0}>{t('security.durationNever')}</MenuItem>
                             </Select>
                         </FormControl>
                     </Stack>
@@ -201,19 +209,18 @@ export default function SettingsSecurity() {
 
             </Container>
 
-
             {/* Password Dialog */}
-            <Dialog open={passwordDialogOpen} onClose={() => setPasswordDialogOpen(false)} maxWidth="xs" fullWidth>
-                <DialogTitle fontWeight={700}>Enter Password</DialogTitle>
+            <Dialog open={passwordDialogOpen} onClose={() => setPasswordDialogOpen(false)} maxWidth="xs" fullWidth aria-labelledby="password-dialog-title">
+                <DialogTitle id="password-dialog-title" fontWeight={700}>{t('security.enterPassword')}</DialogTitle>
                 <DialogContent>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        Please enter your wallet password to decrypt these secrets.
+                        {t('security.enterPasswordDesc')}
                     </Typography>
                     <TextField
                         autoFocus
                         fullWidth
                         type="password"
-                        label="Password"
+                        label={t('auth.password')}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         error={!!passwordError}
@@ -225,25 +232,24 @@ export default function SettingsSecurity() {
                     />
                 </DialogContent>
                 <DialogActions sx={{ p: 3, pt: 0 }}>
-                    <Button onClick={() => setPasswordDialogOpen(false)} color="inherit">Cancel</Button>
-                    <Button onClick={handleVerifyPassword} variant="contained" color="primary">Verify</Button>
+                    <Button onClick={() => setPasswordDialogOpen(false)} color="inherit">{t('common.cancel')}</Button>
+                    <Button onClick={handleVerifyPassword} variant="contained" color="primary">{t('security.verify')}</Button>
                 </DialogActions>
             </Dialog>
 
 
             {/* Secrets Reveal Dialog */}
-            <Dialog open={secretsDialogOpen} onClose={() => setSecretsDialogOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
-                    <Warning /> Sensitive Information
+            <Dialog open={secretsDialogOpen} onClose={() => setSecretsDialogOpen(false)} maxWidth="sm" fullWidth aria-labelledby="secrets-dialog-title">
+                <DialogTitle id="secrets-dialog-title" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
+                    <Warning /> {t('security.sensitiveInfo')}
                 </DialogTitle>
                 <DialogContent>
                     <Alert severity="error" sx={{ mb: 3 }}>
-                        You are viewing the private keys for <b>{revealedAccount?.name}</b>.
-                        Ensure no one is looking at your screen.
+                        {t('security.viewingKeysFor', { name: revealedAccount?.name })}
                     </Alert>
 
                     {/* Private Key Section */}
-                    <Typography variant="subtitle2" fontWeight={700} gutterBottom>Private Key</Typography>
+                    <Typography variant="subtitle2" fontWeight={700} gutterBottom>{t('security.privateKey')}</Typography>
                     <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 3, bgcolor: 'action.hover', position: 'relative', overflow: 'hidden' }}>
                         <Typography
                             variant="body2"
@@ -266,16 +272,16 @@ export default function SettingsSecurity() {
                                     onClick={() => setShowPrivateKey(true)}
                                     startIcon={<Visibility />}
                                 >
-                                    Click to Reveal
+                                    {t('security.clickToReveal')}
                                 </Button>
                             </Box>
                         )}
                         {showPrivateKey && (
                             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-                                <IconButton size="small" onClick={() => handleCopy(revealedAccount?.privateKey)}>
+                                <IconButton size="small" onClick={() => handleCopy(revealedAccount?.privateKey ?? '')} aria-label="Copy private key">
                                     <ContentCopy fontSize="small" />
                                 </IconButton>
-                                <IconButton size="small" onClick={() => setShowPrivateKey(false)}>
+                                <IconButton size="small" onClick={() => setShowPrivateKey(false)} aria-label="Hide private key">
                                     <VisibilityOff fontSize="small" />
                                 </IconButton>
                             </Box>
@@ -285,7 +291,7 @@ export default function SettingsSecurity() {
                     {/* Mnemonic Section (if exists) */}
                     {revealedAccount?.mnemonic && (
                         <>
-                            <Typography variant="subtitle2" fontWeight={700} gutterBottom>Secret Recovery Phrase (Mnemonic)</Typography>
+                            <Typography variant="subtitle2" fontWeight={700} gutterBottom>{t('security.secretRecoveryPhrase')}</Typography>
                             <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, bgcolor: 'action.hover', position: 'relative', overflow: 'hidden' }}>
                                 {/* Filter blur container */}
                                 <Box sx={{
@@ -304,16 +310,16 @@ export default function SettingsSecurity() {
                                             onClick={() => setShowMnemonic(true)}
                                             startIcon={<Visibility />}
                                         >
-                                            Click to Reveal
+                                            {t('security.clickToReveal')}
                                         </Button>
                                     </Box>
                                 )}
                                 {showMnemonic && (
                                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-                                        <IconButton size="small" onClick={() => handleCopy(revealedAccount?.mnemonic)}>
+                                        <IconButton size="small" onClick={() => handleCopy(String(revealedAccount?.mnemonic ?? ''))} aria-label="Copy recovery phrase">
                                             <ContentCopy fontSize="small" />
                                         </IconButton>
-                                        <IconButton size="small" onClick={() => setShowMnemonic(false)}>
+                                        <IconButton size="small" onClick={() => setShowMnemonic(false)} aria-label="Hide recovery phrase">
                                             <VisibilityOff fontSize="small" />
                                         </IconButton>
                                     </Box>
@@ -325,7 +331,7 @@ export default function SettingsSecurity() {
                 </DialogContent>
                 <DialogActions sx={{ p: 3 }}>
                     <Button onClick={() => setSecretsDialogOpen(false)} variant="contained" color="primary" fullWidth size="large">
-                        Done
+                        {t('common.done')}
                     </Button>
                 </DialogActions>
             </Dialog>

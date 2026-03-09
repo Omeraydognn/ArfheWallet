@@ -21,7 +21,7 @@ export interface TrackedTransaction {
 
 export interface ExplorerSearchResult {
     type: 'ADDRESS' | 'TRANSACTION' | 'BLOCK' | 'NOT_FOUND';
-    data: any;
+    data: unknown;
 }
 
 export interface GraphNode {
@@ -78,7 +78,7 @@ export class ExplorerService {
         if (!this.alchemy) throw new Error("Alchemy SDK not initialized");
 
         // Use conditional spreading to handle strict optional property types
-        const params: any = {
+        const params = {
             fromBlock: "0x0",
             toBlock: "latest",
             category: [
@@ -88,12 +88,9 @@ export class ExplorerService {
             withMetadata: true,
             excludeZeroValue: false,
             maxCount: 20,
-            fromAddress: address
+            fromAddress: address,
+            ...(pageKey ? { pageKey } : {})
         };
-
-        if (pageKey) {
-            params.pageKey = pageKey;
-        }
 
         const response = await this.alchemy.core.getAssetTransfers({
             fromBlock: "0x0",
@@ -115,7 +112,8 @@ export class ExplorerService {
                 category: [AssetTransfersCategory.EXTERNAL, AssetTransfersCategory.ERC20],
                 withMetadata: true,
                 maxCount: 50,
-                order: 'desc' as any // Alchemy SDK might not strongly type 'desc' in all versions but it supports it
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Alchemy SDK doesn't strongly type 'desc' order
+                order: 'desc' as any
             }),
             this.alchemy.core.getAssetTransfers({
                 fromBlock: "0x0",
@@ -124,6 +122,7 @@ export class ExplorerService {
                 category: [AssetTransfersCategory.EXTERNAL, AssetTransfersCategory.ERC20],
                 withMetadata: true,
                 maxCount: 50,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Alchemy SDK doesn't strongly type 'desc' order
                 order: 'desc' as any
             })
         ]);
@@ -162,6 +161,7 @@ export class ExplorerService {
                 category: [AssetTransfersCategory.EXTERNAL, AssetTransfersCategory.ERC20],
                 maxCount: 100, // Increased limit
                 withMetadata: true,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Alchemy SDK doesn't strongly type 'desc' order
                 order: 'desc' as any
             }),
             this.alchemy.core.getAssetTransfers({
@@ -171,6 +171,7 @@ export class ExplorerService {
                 category: [AssetTransfersCategory.EXTERNAL, AssetTransfersCategory.ERC20],
                 maxCount: 100, // Increased limit
                 withMetadata: true,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Alchemy SDK doesn't strongly type 'desc' order
                 order: 'desc' as any
             })
         ]);
@@ -260,25 +261,27 @@ export class ExplorerService {
     async search(queryInput: string): Promise<ExplorerSearchResult> {
         if (!this.alchemy) throw new Error("SDK missing");
 
-        // Explicitly type query as string
-        const query: string = queryInput.trim();
+        const query = queryInput.trim();
 
         // 1. Check if Address
         if (isAddress(query)) {
             return { type: 'ADDRESS', data: query };
         }
 
+        // After isAddress type guard narrows, re-bind as plain string
+        const q: string = query;
+
         // 2. Check if Tx Hash
-        if (query.length === 66 && query.startsWith("0x")) {
-            const tx = await this.alchemy.core.getTransaction(query);
+        if (q.length === 66 && q.startsWith("0x")) {
+            const tx = await this.alchemy.core.getTransaction(q);
             if (tx) {
                 return { type: 'TRANSACTION', data: tx };
             }
         }
 
         // 3. Check if Block Number (numeric)
-        if (/^\d+$/.test(query)) {
-            const block = await this.alchemy.core.getBlock(parseInt(query));
+        if (/^\d+$/.test(q)) {
+            const block = await this.alchemy.core.getBlock(parseInt(q));
             if (block) {
                 return { type: 'BLOCK', data: block };
             }

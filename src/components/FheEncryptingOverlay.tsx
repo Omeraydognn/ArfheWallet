@@ -16,9 +16,9 @@ interface FheEncryptingOverlayProps {
     message?: string;
 }
 
-// Indigo/violet wallet theme
-const THEME_PRIMARY = "#6366f1";
-const THEME_SECONDARY = "#8b5cf6";
+// Cool blue-steel wallet theme
+const THEME_PRIMARY = "#2563eb";
+const THEME_SECONDARY = "#1e3a8a";
 
 function MatrixRainCanvas() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,7 +50,7 @@ function MatrixRainCanvas() {
             for (let i = 0; i < drops.length; i++) {
                 const text = CHARS[Math.floor(Math.random() * CHARS.length)];
                 const opacity = Math.random() > 0.8 ? 0.7 : 0.2;
-                ctx.fillStyle = `rgba(99, 102, 241, ${opacity})`;
+                ctx.fillStyle = `rgba(37, 99, 235, ${opacity})`;
                 ctx.fillText(text, i * fontSize, drops[i] * fontSize);
 
                 if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
@@ -123,7 +123,7 @@ function OverlayContent({ message }: { message: string }) {
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            background: `rgba(99,102,241,0.08)`,
+                            background: `rgba(37,99,235,0.06)`,
                             border: `2px solid ${THEME_PRIMARY}60`,
                             animation: "fhe-pulse 1.6s ease-in-out infinite",
                             "@keyframes fhe-pulse": {

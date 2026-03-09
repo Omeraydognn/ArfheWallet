@@ -1,16 +1,38 @@
 import * as React from "react";
-import { Typography, Box, Button, Grid, Alert, Stack, TextField, Paper, Container, IconButton, InputAdornment, CircularProgress } from "@mui/material";
+import { Typography, Box, Button, Grid, Alert, Stack, TextField, Paper, Container, IconButton, InputAdornment, CircularProgress, LinearProgress } from "@mui/material";
 import { AppContext, WalletContext } from "../AppContext.js";
 import { useNavigate } from "react-router";
-import { Visibility, VisibilityOff, Google, Lock } from "@mui/icons-material";
+import { Visibility, VisibilityOff, Google, Lock, Fingerprint } from "@mui/icons-material";
 import { Mnemonic } from "ethers";
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
+import { BiometricService } from '../backend/BiometricService';
+import type AccountManager from '../backend/AccountManager';
+import type StorageManager from '../backend/StorageManager';
 
 // --- Web3Auth Imports ---
 import { Web3Auth } from "@web3auth/modal";
 import { CHAIN_NAMESPACES, WEB3AUTH_NETWORK } from "@web3auth/base";
 import { EthereumPrivateKeyProvider } from "@web3auth/ethereum-provider";
 
-const clientId = "BPi5PB_UiIZ-cPz1GtV5i1I2iOSOHuimiXBI0e-Oe_u6X3oVAbCiAZOTEBtTXw4tsluTITPqA8zMsfxIKMjiqNQ"; // Web3Auth public testing clientId
+const clientId = import.meta.env.VITE_WEB3AUTH_CLIENT_ID || "BPi5PB_UiIZ-cPz1GtV5i1I2iOSOHuimiXBI0e-Oe_u6X3oVAbCiAZOTEBtTXw4tsluTITPqA8zMsfxIKMjiqNQ"; // Fallback: Web3Auth public testing clientId
+
+/** Calculate password strength 0-100 */
+function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
+  let score = 0;
+  if (pw.length >= 6) score += 15;
+  if (pw.length >= 8) score += 15;
+  if (pw.length >= 12) score += 10;
+  if (/[a-z]/.test(pw)) score += 10;
+  if (/[A-Z]/.test(pw)) score += 15;
+  if (/[0-9]/.test(pw)) score += 15;
+  if (/[^a-zA-Z0-9]/.test(pw)) score += 20;
+  score = Math.min(100, score);
+  if (score < 30) return { score, label: i18n.t("auth.strengthWeak"), color: "#ef4444" };
+  if (score < 60) return { score, label: i18n.t("auth.strengthFair"), color: "#f59e0b" };
+  if (score < 80) return { score, label: i18n.t("auth.strengthGood"), color: "#3b82f6" };
+  return { score, label: i18n.t("auth.strengthStrong"), color: "#22c55e" };
+}
 
 enum AuthStep {
   CHOICE,
@@ -20,10 +42,27 @@ enum AuthStep {
   SET_PASSWORD
 }
 
+interface WalletStepProps {
+  accountManager: AccountManager | undefined;
+  onDone: () => void;
+}
+
+interface PasswordScreenProps {
+  storageManager: StorageManager | undefined;
+  accountManager: AccountManager | undefined;
+  onDone: () => void;
+}
+
+interface LoginProps {
+  storageManager: StorageManager | undefined;
+  accountManager: AccountManager | undefined;
+}
+
 // --- Steps Components ---
 
-function CreateWallet({ accountManager, onDone }) {
-  const [words, setWords] = React.useState([]);
+function CreateWallet({ accountManager, onDone }: WalletStepProps) {
+  const { t } = useTranslation();
+  const [words, setWords] = React.useState<string[]>([]);
   const [isGenerated, setIsGenerated] = React.useState(false);
 
   const handleGenerate = () => {
@@ -39,19 +78,19 @@ function CreateWallet({ accountManager, onDone }) {
   return (
     <Box>
       <Typography variant="h5" fontWeight={700} gutterBottom align="center" color="text.primary">
-        Create New Wallet
+        {t('auth.createNewWallet')}
       </Typography>
 
       {isGenerated ? (
         <>
           <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
-            Write down these words in the correct order. Keep them safe!
+            {t('auth.writeDownWords')}
           </Typography>
 
           <Paper elevation={0} variant="outlined" sx={{ p: 2, borderRadius: 3, bgcolor: 'grey.50' }}>
             <Grid container spacing={1}>
               {words.map((word, index) => (
-                <Grid item xs={6} sm={4} key={index}>
+                <Grid size={{ xs: 6, sm: 4 }} key={index}>
                   <Box sx={{
                     display: 'flex',
                     borderRadius: 2,
@@ -67,7 +106,7 @@ function CreateWallet({ accountManager, onDone }) {
                       bgcolor: 'grey.100',
                       fontSize: 12,
                       color: 'text.secondary',
-                      borderRight: '1px solid #f3f4f6'
+                      borderRight: '1px solid #e5e5e5'
                     }}>
                       {index + 1}
                     </Box>
@@ -87,13 +126,13 @@ function CreateWallet({ accountManager, onDone }) {
             size="large"
             sx={{ mt: 4, borderRadius: 3, height: 48, fontSize: 16 }}
           >
-            I Saved My Phrase
+            {t('auth.iSavedMyPhrase')}
           </Button>
         </>
       ) : (
         <Box sx={{ textAlign: 'center', py: 4 }}>
           <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>
-            Generate a new secret recovery phrase to create your wallet.
+            {t('auth.generateDescription')}
           </Typography>
           <Button
             variant="contained"
@@ -103,7 +142,7 @@ function CreateWallet({ accountManager, onDone }) {
             size="large"
             sx={{ borderRadius: 3, height: 48 }}
           >
-            Generate Phrase
+            {t('auth.generatePhrase')}
           </Button>
         </Box>
       )}
@@ -111,9 +150,10 @@ function CreateWallet({ accountManager, onDone }) {
   );
 }
 
-function ImportWallet({ accountManager, onDone }) {
+function ImportWallet({ accountManager, onDone }: WalletStepProps) {
+  const { t } = useTranslation();
   const [mnemonic, setMnemonic] = React.useState("");
-  const [error, setError] = React.useState(null);
+  const [error, setError] = React.useState<string | null>(null);
 
   const [isScanning, setIsScanning] = React.useState(false);
 
@@ -121,7 +161,7 @@ function ImportWallet({ accountManager, onDone }) {
     if (!accountManager) return;
 
     if (!Mnemonic.isValidMnemonic(mnemonic.trim())) {
-      setError("Invalid recovery phrase. Please check your words.");
+      setError(t('auth.invalidMnemonic'));
       return;
     }
 
@@ -129,22 +169,22 @@ function ImportWallet({ accountManager, onDone }) {
     try {
       const index = accountManager.ImportAccount(mnemonic.trim());
       if (index === -1) {
-        setError("Failed to import account.");
+        setError(t('auth.importFailed'));
         setIsScanning(false);
         return;
       }
 
       const rpcs = [
-        (import.meta as any).env.VITE_ALCHEMY_MAINNET_API_KEY || "https://cloudflare-eth.com",
-        (import.meta as any).env.VITE_ALCHEMY_SEPOLIA_API_KEY || "https://rpc.sepolia.org",
-        (import.meta as any).env.VITE_ALCHEMY_ARBSEPOLIA_API_KEY || "https://sepolia-rollup.arbitrum.io/rpc",
-        (import.meta as any).env.VITE_ALCHEMY_BASESEPOLIA_API_KEY || "https://sepolia.base.org"
+        import.meta.env.VITE_ALCHEMY_MAINNET_API_KEY || "https://cloudflare-eth.com",
+        import.meta.env.VITE_ALCHEMY_SEPOLIA_API_KEY || "https://rpc.sepolia.org",
+        import.meta.env.VITE_ALCHEMY_ARBSEPOLIA_API_KEY || "https://sepolia-rollup.arbitrum.io/rpc",
+        import.meta.env.VITE_ALCHEMY_BASESEPOLIA_API_KEY || "https://sepolia.base.org"
       ];
       await accountManager.AutoDiscoverAccounts(rpcs, 3, index);
 
       onDone();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
       setIsScanning(false);
     }
   };
@@ -152,10 +192,10 @@ function ImportWallet({ accountManager, onDone }) {
   return (
     <Box>
       <Typography variant="h5" fontWeight={700} gutterBottom align="center" color="text.primary">
-        Import Wallet
+        {t('auth.importTitle')}
       </Typography>
       <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
-        Enter your 12 or 24-word recovery phrase.
+        {t('auth.importDescription')}
       </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>}
@@ -187,7 +227,7 @@ function ImportWallet({ accountManager, onDone }) {
         size="large"
         sx={{ mt: 3, borderRadius: 3, height: 48 }}
       >
-        {isScanning ? "Scanning Derived Accounts..." : "Import Wallet"}
+        {isScanning ? t('auth.scanningAccounts') : t('auth.importWallet')}
       </Button>
     </Box>
   );
@@ -196,43 +236,50 @@ function ImportWallet({ accountManager, onDone }) {
 /**
  * Set Password screen — shown AFTER wallet creation/import to encrypt account data.
  */
-function SetPasswordScreen({ storageManager, accountManager, onDone }) {
+function SetPasswordScreen({ storageManager, accountManager, onDone }: PasswordScreenProps) {
+  const { t } = useTranslation();
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
 
+  const strength = getPasswordStrength(password);
+
   const handleSubmit = async () => {
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (password.length < 8) {
+      setError(t('auth.passwordMinLength'));
+      return;
+    }
+    if (strength.score < 30) {
+      setError(t('auth.passwordTooWeak'));
       return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords don't match.");
+      setError(t('auth.passwordMismatch'));
       return;
     }
 
     setIsLoading(true);
     try {
       // Initialize encryption with the new password (generates salt + hashes password)
-      const ok = await storageManager.initEncryption(password);
+      const ok = await storageManager?.initEncryption(password);
       if (!ok) {
-        setError("Failed to initialize encryption.");
+        setError(t('auth.encryptionFailed'));
         setIsLoading(false);
         return;
       }
 
       // Now persist the in-memory accounts to encrypted storage
-      await accountManager.loadFromEncryptedStorage(); // This will detect plaintext and auto-migrate
+      await accountManager?.loadFromEncryptedStorage(); // This will detect plaintext and auto-migrate
       // If no migration happened (fresh create), manually trigger save
-      if (storageManager.hasUnencryptedAccounts()) {
-        await storageManager.migrateToEncrypted();
+      if (storageManager?.hasUnencryptedAccounts()) {
+        await storageManager?.migrateToEncrypted();
       }
 
       onDone();
-    } catch (e: any) {
-      setError(e.message || "Encryption failed.");
+    } catch (e) {
+      setError((e instanceof Error ? e.message : String(e)) || "Encryption failed.");
     } finally {
       setIsLoading(false);
     }
@@ -243,10 +290,10 @@ function SetPasswordScreen({ storageManager, accountManager, onDone }) {
       <Box sx={{ textAlign: 'center', mb: 3 }}>
         <Lock sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
         <Typography variant="h5" fontWeight={700} color="text.primary">
-          Secure Your Wallet
+          {t('auth.secureYourWallet')}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Set a password to encrypt your private keys. Your keys will be stored securely using AES-256 encryption.
+          {t('auth.secureDescription')}
         </Typography>
       </Box>
 
@@ -254,7 +301,7 @@ function SetPasswordScreen({ storageManager, accountManager, onDone }) {
 
       <Stack spacing={2}>
         <TextField
-          label="Password"
+          label={t('auth.password')}
           type={showPassword ? "text" : "password"}
           fullWidth
           value={password}
@@ -262,7 +309,7 @@ function SetPasswordScreen({ storageManager, accountManager, onDone }) {
           InputProps={{
             endAdornment: (
               <InputAdornment position="end">
-                <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                <IconButton onClick={() => setShowPassword(!showPassword)} edge="end" aria-label={showPassword ? "Hide password" : "Show password"}>
                   {showPassword ? <VisibilityOff /> : <Visibility />}
                 </IconButton>
               </InputAdornment>
@@ -271,8 +318,31 @@ function SetPasswordScreen({ storageManager, accountManager, onDone }) {
           sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3, bgcolor: 'white' } }}
         />
 
+        {/* Password Strength Meter */}
+        {password.length > 0 && (
+          <Box>
+            <LinearProgress
+              variant="determinate"
+              value={strength.score}
+              sx={{
+                height: 6,
+                borderRadius: 3,
+                bgcolor: 'grey.200',
+                '& .MuiLinearProgress-bar': {
+                  bgcolor: strength.color,
+                  borderRadius: 3,
+                  transition: 'transform 0.3s ease, background-color 0.3s ease',
+                },
+              }}
+            />
+            <Typography variant="caption" sx={{ color: strength.color, fontWeight: 600, mt: 0.5, display: 'block', textAlign: 'right' }}>
+              {strength.label}
+            </Typography>
+          </Box>
+        )}
+
         <TextField
-          label="Confirm Password"
+          label={t('auth.confirmPassword')}
           type={showPassword ? "text" : "password"}
           fullWidth
           value={confirmPassword}
@@ -282,10 +352,8 @@ function SetPasswordScreen({ storageManager, accountManager, onDone }) {
         />
       </Stack>
 
-      <Paper elevation={0} sx={{ p: 2, mt: 2, borderRadius: 2, bgcolor: 'rgba(99, 102, 241, 0.04)', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
-        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6 }}>
-          Your password encrypts your private keys using <strong>AES-256-GCM</strong> with <strong>PBKDF2</strong> key derivation (100,000 iterations). Keys are never stored in plaintext.
-        </Typography>
+      <Paper elevation={0} sx={{ p: 2, mt: 2, borderRadius: 2, bgcolor: 'rgba(37, 99, 235, 0.04)', border: '1px solid rgba(37, 99, 235, 0.08)' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: t('auth.encryptionNote') }} />
       </Paper>
 
       <Button
@@ -296,7 +364,7 @@ function SetPasswordScreen({ storageManager, accountManager, onDone }) {
         size="large"
         sx={{ mt: 3, borderRadius: 3, height: 48 }}
       >
-        {isLoading ? <CircularProgress size={24} color="inherit" /> : "Encrypt & Continue"}
+        {isLoading ? <CircularProgress size={24} color="inherit" /> : t('auth.encryptAndContinue')}
       </Button>
     </Box>
   );
@@ -305,12 +373,23 @@ function SetPasswordScreen({ storageManager, accountManager, onDone }) {
 /**
  * Login / Unlock screen — decrypts accounts using password.
  */
-function LoginIntoWallet({ storageManager, accountManager }) {
+function LoginIntoWallet({ storageManager, accountManager }: LoginProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [showPassword, setShowPassword] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [biometricAvailable, setBiometricAvailable] = React.useState(false);
+
+  // Check if biometric login is available on mount
+  React.useEffect(() => {
+    (async () => {
+      const available = await BiometricService.isBiometricAvailable();
+      const registered = BiometricService.isEnabled();
+      setBiometricAvailable(available && registered);
+    })();
+  }, []);
 
   const handleSubmit = async () => {
     if (!storageManager) {
@@ -319,7 +398,7 @@ function LoginIntoWallet({ storageManager, accountManager }) {
     }
 
     if (password.length < 1) {
-      setError("Please enter your password.");
+      setError(t('auth.enterPasswordPrompt'));
       return;
     }
 
@@ -328,7 +407,7 @@ function LoginIntoWallet({ storageManager, accountManager }) {
       // Verify password and derive AES key
       const ok = await storageManager.initEncryption(password);
       if (!ok) {
-        setError("Incorrect password.");
+        setError(t('auth.incorrectPassword'));
         setIsLoading(false);
         return;
       }
@@ -337,8 +416,35 @@ function LoginIntoWallet({ storageManager, accountManager }) {
       await accountManager?.loadFromEncryptedStorage();
 
       navigate("/home");
-    } catch (e: any) {
-      setError(e.message || "Unlock failed.");
+    } catch (e) {
+      setError((e instanceof Error ? e.message : String(e)) || "Unlock failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBiometricUnlock = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const masterPassword = await BiometricService.authenticateBiometric();
+      if (!masterPassword) {
+        setError(t('auth.biometricFailed'));
+        setIsLoading(false);
+        return;
+      }
+
+      const ok = await storageManager?.initEncryption(masterPassword);
+      if (!ok) {
+        setError(t('auth.biometricFailed'));
+        setIsLoading(false);
+        return;
+      }
+
+      await accountManager?.loadFromEncryptedStorage();
+      navigate("/home");
+    } catch (e) {
+      setError(t('auth.biometricFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -347,16 +453,16 @@ function LoginIntoWallet({ storageManager, accountManager }) {
   return (
     <Box>
       <Typography variant="h5" fontWeight={700} gutterBottom align="center" color="text.primary">
-        Welcome Back
+        {t('auth.welcomeBack')}
       </Typography>
       <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 4 }}>
-        Enter your password to decrypt and unlock your wallet
+        {t('auth.welcomeBackDesc')}
       </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>}
 
       <TextField
-        label="Password"
+        label={t('auth.password')}
         type={showPassword ? "text" : "password"}
         fullWidth
         value={password}
@@ -368,7 +474,7 @@ function LoginIntoWallet({ storageManager, accountManager }) {
         InputProps={{
           endAdornment: (
             <InputAdornment position="end">
-              <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+              <IconButton onClick={() => setShowPassword(!showPassword)} edge="end" aria-label={showPassword ? "Hide password" : "Show password"}>
                 {showPassword ? <VisibilityOff /> : <Visibility />}
               </IconButton>
             </InputAdornment>
@@ -390,8 +496,33 @@ function LoginIntoWallet({ storageManager, accountManager }) {
         size="large"
         sx={{ mt: 3, borderRadius: 3, height: 48 }}
       >
-        {isLoading ? <CircularProgress size={24} color="inherit" /> : "Unlock"}
+        {isLoading ? <CircularProgress size={24} color="inherit" /> : t('auth.unlock')}
       </Button>
+
+      {/* Biometric Unlock Button */}
+      {biometricAvailable && (
+        <Button
+          variant="outlined"
+          fullWidth
+          onClick={handleBiometricUnlock}
+          disabled={isLoading}
+          size="large"
+          startIcon={<Fingerprint />}
+          sx={{
+            mt: 2,
+            borderRadius: 3,
+            height: 48,
+            borderColor: 'rgba(37, 99, 235, 0.25)',
+            color: 'primary.main',
+            '&:hover': {
+              borderColor: 'primary.main',
+              bgcolor: 'rgba(37, 99, 235, 0.04)',
+            }
+          }}
+        >
+          {t('auth.biometricUnlock')}
+        </Button>
+      )}
     </Box>
   );
 }
@@ -399,6 +530,7 @@ function LoginIntoWallet({ storageManager, accountManager }) {
 // --- Main Auth Component ---
 
 export default function Auth() {
+  const { t } = useTranslation();
   const context = React.useContext(WalletContext);
   const accountManager = context?.accountManager;
   const storageManager = context?.storageManager;
@@ -444,8 +576,8 @@ export default function Auth() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      bgcolor: '#f3f4f6',
-      background: 'radial-gradient(circle at 50% 10%, #fff 0%, #f3f4f6 100%)',
+      bgcolor: '#f7f7f8',
+      background: 'radial-gradient(circle at 50% 10%, #fff 0%, #f7f7f8 100%)',
       p: 2
     }}>
       <Container maxWidth="xs">
@@ -454,13 +586,13 @@ export default function Auth() {
           borderRadius: 4,
           bgcolor: 'rgba(255, 255, 255, 0.9)',
           backdropFilter: 'blur(20px)',
-          border: '1px solid #e5e7eb',
+          border: '1px solid #d4d4d4',
           boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
         }}>
           {/* Logo Area */}
           <Box sx={{ textAlign: 'center', mb: 4 }}>
             <Typography variant="h5" fontWeight={800} letterSpacing={1} sx={{
-              background: 'linear-gradient(90deg, #fff, #6366f1, #fff)',
+              background: 'linear-gradient(90deg, #dbeafe, #2563eb, #dbeafe)',
               backgroundSize: '200% auto',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -488,7 +620,7 @@ export default function Auth() {
           {step === AuthStep.CHOICE && (
             <Stack spacing={2}>
               <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 2 }}>
-                Welcome to the next generation of privacy-first crypto wallets.
+                {t('auth.welcomeMessage')}
               </Typography>
 
               <Button
@@ -501,7 +633,7 @@ export default function Auth() {
                     const chainConfig = {
                       chainNamespace: CHAIN_NAMESPACES.EIP155,
                       chainId: "0x1",
-                      rpcTarget: (import.meta as any).env.VITE_ALCHEMY_MAINNET_API_KEY || "https://cloudflare-eth.com",
+                      rpcTarget: import.meta.env.VITE_ALCHEMY_MAINNET_API_KEY || "https://cloudflare-eth.com",
                       displayName: "Ethereum Mainnet",
                       blockExplorerUrl: "https://etherscan.io",
                       ticker: "ETH",
@@ -530,7 +662,6 @@ export default function Auth() {
                           accountName = userInfo.name;
                         }
                       } catch (e) {
-                        console.warn("Could not fetch user info from Web3Auth", e);
                       }
 
                       if (privateKey) {
@@ -538,9 +669,9 @@ export default function Auth() {
 
                         const rpcs = [
                           chainConfig.rpcTarget,
-                          (import.meta as any).env.VITE_ALCHEMY_SEPOLIA_API_KEY || "https://rpc.sepolia.org",
-                          (import.meta as any).env.VITE_ALCHEMY_ARBSEPOLIA_API_KEY || "https://sepolia-rollup.arbitrum.io/rpc",
-                          (import.meta as any).env.VITE_ALCHEMY_BASESEPOLIA_API_KEY || "https://sepolia.base.org"
+                          import.meta.env.VITE_ALCHEMY_SEPOLIA_API_KEY || "https://rpc.sepolia.org",
+                          import.meta.env.VITE_ALCHEMY_ARBSEPOLIA_API_KEY || "https://sepolia-rollup.arbitrum.io/rpc",
+                          import.meta.env.VITE_ALCHEMY_BASESEPOLIA_API_KEY || "https://sepolia.base.org"
                         ];
                         await accountManager?.AutoDiscoverAccounts(rpcs, 3, importedIndex);
 
@@ -548,7 +679,6 @@ export default function Auth() {
                       }
                     }
                   } catch (error) {
-                    console.error("Web3Auth Login error:", error);
                   } finally {
                     setIsSocialLoading(false);
                   }
@@ -557,17 +687,17 @@ export default function Auth() {
                 sx={{
                   borderRadius: 3,
                   height: 48,
-                  bgcolor: '#0f172a',
+                  bgcolor: '#2563eb',
                   color: 'white',
-                  '&:hover': { bgcolor: '#1e293b' }
+                  '&:hover': { bgcolor: '#172554' }
                 }}
               >
-                {isSocialLoading ? "Connecting & Scanning..." : "Continue with Social"}
+                {isSocialLoading ? t('auth.connectingScanning') : t('auth.continueWithSocial')}
               </Button>
 
               <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
                 <Box sx={{ flex: 1, height: '1px', bgcolor: 'grey.300' }} />
-                <Typography variant="caption" sx={{ px: 2, color: 'text.secondary', fontWeight: 600 }}>OR</Typography>
+                <Typography variant="caption" sx={{ px: 2, color: 'text.secondary', fontWeight: 600 }}>{t('auth.or')}</Typography>
                 <Box sx={{ flex: 1, height: '1px', bgcolor: 'grey.300' }} />
               </Box>
 
@@ -575,17 +705,17 @@ export default function Auth() {
                 variant="outlined"
                 size="large"
                 onClick={() => setStep(AuthStep.CREATE)}
-                sx={{ borderRadius: 3, height: 48, borderColor: '#e5e7eb', color: 'text.primary' }}
+                sx={{ borderRadius: 3, height: 48, borderColor: '#d4d4d4', color: 'text.primary' }}
               >
-                Create New Wallet
+                {t('auth.createWallet')}
               </Button>
               <Button
                 variant="outlined"
                 size="large"
                 onClick={() => setStep(AuthStep.IMPORT)}
-                sx={{ borderRadius: 3, height: 48, borderColor: '#e5e7eb', color: 'text.primary' }}
+                sx={{ borderRadius: 3, height: 48, borderColor: '#d4d4d4', color: 'text.primary' }}
               >
-                I Have A Wallet
+                {t('auth.iHaveAWallet')}
               </Button>
             </Stack>
           )}
@@ -604,7 +734,7 @@ export default function Auth() {
                 color="inherit"
                 sx={{ mt: 2, textTransform: 'none', color: 'text.secondary' }}
               >
-                Cancel
+                {t('auth.cancel')}
               </Button>
             </Box>
           )}

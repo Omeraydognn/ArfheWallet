@@ -7,7 +7,7 @@ export default class ArbitrumOneNetwork extends Network {
             NetworkId.Arbitrum_One,
             "Arbitrum One",
             "https://arb-mainnet.g.alchemy.com/v2/",
-            (import.meta as any).env.VITE_ALCHEMY_ARBMAINNET_API_KEY
+            import.meta.env.VITE_ALCHEMY_ARBMAINNET_API_KEY
         );
     }
 }

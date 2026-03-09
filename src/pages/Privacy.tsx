@@ -30,6 +30,7 @@ import {
   VisibilityOff
 } from '@mui/icons-material';
 import { WalletContext } from '../AppContext.js';
+import { isFheNetwork, NetworkId } from '../backend/NetworkTypes.js';
 
 type PrivacyLevel = 'open' | 'semi-open' | 'full';
 
@@ -50,6 +51,52 @@ const FHEPrivacyPanel = () => {
   const context = useContext(WalletContext);
   const network = context?.networkProvider?.getActiveNetwork();
   const activeAccount = context?.accountManager?.GetActive();
+  const activeNetworkId = network?.network_id ?? NetworkId.Unknown;
+  const showFhe = isFheNetwork(activeNetworkId);
+
+  // On mainnet, show a dedicated "FHE not available on mainnet" message
+  if (!showFhe) {
+    return (
+      <Box sx={{ pb: 12, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', pt: { xs: 12, md: 16 }, minHeight: '80vh' }}>
+        <Paper elevation={24} sx={{
+          p: { xs: 4, md: 6 },
+          borderRadius: 6,
+          textAlign: 'center',
+          background: theme.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(30,41,59,0.95) 0%, rgba(15,23,42,0.98) 100%)'
+            : 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(240,244,248,0.98) 100%)',
+          border: '1px solid',
+          borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+          boxShadow: theme.palette.mode === 'dark' ? '0 25px 50px -12px rgba(0,0,0,0.5)' : '0 25px 50px -12px rgba(0,0,0,0.1)',
+          maxWidth: 500,
+          mx: 2
+        }}>
+          <Box sx={{
+            width: 80, height: 80, borderRadius: '50%', mx: 'auto', mb: 3,
+            background: 'rgba(37, 99, 235, 0.1)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <Shield sx={{ fontSize: 40, color: '#2563eb' }} />
+          </Box>
+          <Typography variant="h4" fontWeight={900} sx={{
+            background: 'linear-gradient(to right, #2563eb, #60a5fa)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            mb: 2,
+            letterSpacing: '-0.02em'
+          }}>
+            Coming Soon
+          </Typography>
+          <Typography variant="body1" sx={{ color: 'text.secondary', fontSize: '1.1rem', lineHeight: 1.6, mb: 2 }}>
+            FHE Privacy features are currently available only on testnet networks. Switch to a testnet (Sepolia, Arbitrum Sepolia, or Base Sepolia) to explore privacy features.
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.disabled', fontSize: '0.85rem' }}>
+            Mainnet FHE support will be enabled once smart contracts are deployed.
+          </Typography>
+        </Paper>
+      </Box>
+    );
+  }
 
   const [privacySetting, setPrivacySetting] = useState<PrivacyLevel>('full');
 
@@ -90,8 +137,7 @@ const FHEPrivacyPanel = () => {
     try {
       if (!network || !activeAccount) throw new Error("Wallet not connected");
 
-      // @ts-ignore
-      const contractAddr = tokenKey === "eETH" ? CONTRACTS["ETH"].shielded : CONTRACTS["USDC"].shielded;
+      const contractAddr = tokenKey === "eETH" ? CONTRACTS.ETH.shielded : CONTRACTS.USDC.shielded;
       const userAddr = activeAccount.GetAddress();
       if (!userAddr) throw new Error("No Address");
 
@@ -101,8 +147,7 @@ const FHEPrivacyPanel = () => {
       setDecrypted(prev => ({ ...prev, [tokenKey]: true }));
 
     } catch (e) {
-      console.error(e);
-      alert("Decryption Failed: " + (e as any).message);
+      alert("Decryption Failed: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setLoadingBalance("");
       setPendingDecryptToken(null);
@@ -268,8 +313,8 @@ const FHEPrivacyPanel = () => {
             p: 3,
             mb: 4,
             borderRadius: 3,
-            background: 'linear-gradient(to right, rgba(79, 70, 229, 0.05), transparent)',
-            borderLeft: '4px solid #4f46e5'
+            background: 'linear-gradient(to right, rgba(37, 99, 235, 0.05), transparent)',
+            borderLeft: '4px solid #2563eb'
           }}>
             <Typography variant="body2" color="text.secondary">
               Current Status:
@@ -296,7 +341,7 @@ const FHEPrivacyPanel = () => {
                 <ListItem key={item.id} divider sx={{ borderColor: 'divider' }}>
                   <ListItemAvatar>
                     <Avatar sx={{
-                      bgcolor: item.encrypted ? 'rgba(79, 70, 229, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                      bgcolor: item.encrypted ? 'rgba(37, 99, 235, 0.1)' : 'rgba(16, 185, 129, 0.1)',
                       color: item.encrypted ? 'primary.main' : 'success.main'
                     }}>
                       {item.encrypted ? <Lock fontSize="small" /> : <LockOpen fontSize="small" />}
@@ -319,8 +364,8 @@ const FHEPrivacyPanel = () => {
       </Box>
 
       {/* Password Dialog */}
-      <Dialog open={passwordOpen} onClose={() => setPasswordOpen(false)}>
-        <DialogTitle>Enter Wallet Password</DialogTitle>
+      <Dialog open={passwordOpen} onClose={() => setPasswordOpen(false)} aria-labelledby="privacy-password-title">
+        <DialogTitle id="privacy-password-title">Enter Wallet Password</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
             Please enter your password to decrypt your shielded balance (Simulated).
@@ -344,7 +389,13 @@ const FHEPrivacyPanel = () => {
 };
 
 // Helper Component
-const PrivacyOption = ({ label, active, color, icon, onClick }: any) => {
+const PrivacyOption = ({ label, active, color, icon, onClick }: {
+  label: string;
+  active: boolean;
+  color: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) => {
   const getColors = () => {
     switch (color) {
       case 'error': return active ? '#ef4444' : 'transparent';

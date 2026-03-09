@@ -7,7 +7,7 @@ export default class BaseMainnetNetwork extends Network {
             NetworkId.Base_Mainnet,
             "Base Mainnet",
             "https://base-mainnet.g.alchemy.com/v2/",
-            (import.meta as any).env.VITE_ALCHEMY_BASEMAINNET_API_KEY
+            import.meta.env.VITE_ALCHEMY_BASEMAINNET_API_KEY
         );
     }
 }

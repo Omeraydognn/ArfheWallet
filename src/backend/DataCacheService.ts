@@ -7,9 +7,30 @@
  * - Manual refresh or WC tx: invalidate()
  */
 
+import type { TokenBalance } from "./NetworkTypes.js";
+
+/** Minimal token info for cache storage (subset of DisplayToken) */
+interface CachedTokenInfo {
+    name: string;
+    symbol: string;
+    logoSrc: string;
+    contractAddress: string;
+    decimals: number;
+    isShielded?: boolean;
+    [key: string]: unknown;
+}
+
+/** Extended balance with optional metadata fields added at runtime */
+type BalanceRecord = TokenBalance & {
+    isShielded?: boolean;
+    symbol?: string;
+    name?: string;
+    [key: string]: unknown;
+};
+
 interface CachedPortfolio {
-    balances: Record<string, any>;
-    tokens: any[];
+    balances: Record<string, BalanceRecord>;
+    tokens: CachedTokenInfo[];
     prices: Record<string, number>;
     totalUsd: number;
     balanceTimestamp: number;
@@ -59,8 +80,8 @@ export class DataCacheService {
         address: string,
         networkId: string | number,
         data: {
-            balances: Record<string, any>;
-            tokens: any[];
+            balances: Record<string, BalanceRecord>;
+            tokens: CachedTokenInfo[];
             prices: Record<string, number>;
             totalUsd: number;
         }

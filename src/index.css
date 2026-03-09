@@ -2,8 +2,43 @@
   display: none;
 }
 
+/* ── Accessibility: focus-visible ring for keyboard navigation ── */
+*:focus-visible {
+  outline: 2px solid #525252;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Accessibility: skip-to-content link (visible on focus) ── */
+.skip-to-content {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: #171717;
+  color: #fff;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: left 0.15s;
+}
+.skip-to-content:focus {
+  left: 8px;
+}
+
+/* ── Accessibility: reduced motion preference ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 #root {
   width: 100% !important;
   height: 100% !important;
-
 }

@@ -2,6 +2,17 @@ import Account from "./Account.js";
 import StorageManager from "./StorageManager.js";
 import { HDNodeWallet, Wallet, keccak256, toUtf8Bytes, JsonRpcProvider } from "ethers";
 
+/** Shape of an account as stored in localStorage / encrypted storage */
+interface StoredAccount {
+  name: string;
+  mnemonic?: { phrase: string; path?: string; locale?: string };
+  private_key?: string;
+  public_key?: string;
+  address?: string;
+  derivationPath?: string;
+  owned_tokens?: Record<string, string[]>;
+}
+
 export default class AccountManager {
   active: number;
   accounts: Account[];
@@ -15,7 +26,7 @@ export default class AccountManager {
     // Synchronously load from plaintext localStorage for backward compatibility.
     // This ensures the app works immediately even before password unlock.
     // After unlock, loadFromEncryptedStorage() will replace with decrypted data.
-    const plainAccounts = storageManager.getLocal<any[]>("accounts") || [];
+    const plainAccounts = storageManager.getLocal<StoredAccount[]>("accounts") || [];
     const plainActive = storageManager.getLocal<number>("active") ?? -1;
 
     if (plainAccounts.length > 0) {
@@ -35,22 +46,20 @@ export default class AccountManager {
   async loadFromEncryptedStorage(): Promise<void> {
     try {
       // Try encrypted storage first
-      const storedAccounts = await this.linkedStorageManager.decryptAndRetrieve<any[]>("accounts");
+      const storedAccounts = await this.linkedStorageManager.decryptAndRetrieve<StoredAccount[]>("accounts");
       const storedActive = await this.linkedStorageManager.decryptAndRetrieve<number>("active");
 
       if (storedAccounts && storedAccounts.length > 0) {
         this.accounts = this.hydrateAccounts(storedAccounts);
         this.active = (storedActive !== null && storedActive >= 0) ? storedActive : 0;
-        console.log(`[AccountManager] 🔓 Loaded ${this.accounts.length} accounts from encrypted storage`);
       } else {
         // Fallback: check for unencrypted accounts (pre-migration)
-        const plainAccounts = this.linkedStorageManager.getLocal<any[]>("accounts") || [];
+        const plainAccounts = this.linkedStorageManager.getLocal<StoredAccount[]>("accounts") || [];
         const plainActive = this.linkedStorageManager.getLocal<number>("active") ?? -1;
 
         if (plainAccounts.length > 0) {
           this.accounts = this.hydrateAccounts(plainAccounts);
           this.active = plainActive >= 0 ? plainActive : 0;
-          console.log(`[AccountManager] ⚠️ Loaded ${this.accounts.length} accounts from PLAINTEXT — will migrate`);
           // Auto-migrate to encrypted
           await this.linkedStorageManager.migrateToEncrypted();
         }
@@ -59,7 +68,6 @@ export default class AccountManager {
 
       this.notifyListeners();
     } catch (error) {
-      console.error("[AccountManager] Failed to load accounts:", error);
       // Keep whatever was loaded in constructor
     }
   }
@@ -67,11 +75,10 @@ export default class AccountManager {
   /**
    * Hydrate raw stored objects back into Account instances with wallet objects.
    */
-  private hydrateAccounts(storedAccounts: any[]): Account[] {
+  private hydrateAccounts(storedAccounts: StoredAccount[]): Account[] {
     return storedAccounts.map((stored) => {
       const account = new Account();
       account.name = stored.name;
-      account.mnemonic = stored.mnemonic;
       account.private_key = stored.private_key;
       account.public_key = stored.public_key;
       account.address = stored.address;
@@ -89,14 +96,13 @@ export default class AccountManager {
       if (stored.mnemonic && stored.mnemonic.phrase) {
         try {
           account.ethers_wallet = HDNodeWallet.fromPhrase(stored.mnemonic.phrase, "", account.derivationPath);
+          account.mnemonic = account.ethers_wallet.mnemonic ?? undefined;
         } catch (e) {
-          console.error("Failed to restore wallet from mnemonic", e);
         }
       } else if (stored.private_key) {
         try {
-          account.ethers_wallet = new Wallet(stored.private_key) as any;
+          account.ethers_wallet = new Wallet(stored.private_key);
         } catch (e) {
-          console.error("Failed to restore wallet from private key", e);
         }
       }
 
@@ -170,7 +176,6 @@ export default class AccountManager {
 
   AddAccount(account: Account): number {
     if (!account.mnemonic && !account.ethers_wallet) {
-      console.error("Account to be added returned undefined or missing wallet. Please check.");
       return -1;
     }
     const index = this.accounts.push(account) - 1;
@@ -205,7 +210,6 @@ export default class AccountManager {
       this.updateStorage();
       return index;
     } catch (e) {
-      console.error("Failed to import private key:", e);
       return -1;
     }
   }
@@ -294,7 +298,6 @@ export default class AccountManager {
           break;
         }
 
-        console.log(`[Auto-Discovery] Scanning Account ${derivedIndex} (${account.address}) on ${providers.length} networks...`);
 
         let isUsed = false;
         await Promise.all(providers.map(async (provider, idx) => {
@@ -304,36 +307,30 @@ export default class AccountManager {
               provider.getTransactionCount(account.address!),
               provider.getBalance(account.address!)
             ]);
-            console.log(`[Auto-Discovery] Network ${idx} -> txCount: ${txCount}, balance: ${balance.toString()} wei`);
             if (txCount > 0 || balance > 0n) {
               isUsed = true;
             }
           } catch (e) {
-            console.error(`[Auto-Discovery] RPC Error on Network ${idx}:`, e);
           }
         }));
 
         if (isUsed) {
           gap = 0;
           unusedIndices = [];
-          console.log(`[Auto-Discovery] ✔ DISCOVERED USED ACCOUNT at index ${derivedIndex}: ${account.address}`);
         } else {
           gap++;
           unusedIndices.push(derivedIndex);
-          console.log(`[Auto-Discovery] ✖ Account unused. Gap is now ${gap}/${gapLimit}`);
         }
       }
 
       this.SetActive(originalActive < this.accounts.length ? originalActive : 0);
     } catch (e) {
-      console.warn("Auto-Discovery failed:", e);
       this.SetActive(originalActive < this.accounts.length ? originalActive : 0);
     }
   }
 
   RemoveAccount(account_index: number) {
     if (account_index < 0 || account_index >= this.accounts.length) {
-      console.error("Account does not exist. Returning...");
       return;
     }
     this.accounts.splice(account_index, 1);
@@ -354,7 +351,6 @@ export default class AccountManager {
 
   SetActive(index: number): boolean {
     if (index < 0 || index >= this.accounts.length) {
-      console.error("Invalid account index: " + index);
       return false;
     }
     this.active = index;
@@ -369,5 +365,17 @@ export default class AccountManager {
 
   private CreateRandomAccountName(): string {
     return "New User #" + (this.accounts.length + 1);
+  }
+
+  /**
+   * Wipe all sensitive data (private keys, mnemonics, wallet objects) from memory.
+   * Called during lock to ensure no decrypted key material remains in RAM.
+   * After this, accounts still hold name/address for UI but cannot sign transactions.
+   * Re-unlock (loadFromEncryptedStorage) will re-hydrate wallet objects.
+   */
+  clearSensitiveData(): void {
+    for (const account of this.accounts) {
+      account.wipeKeys();
+    }
   }
 }

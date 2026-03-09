@@ -53,7 +53,7 @@ export function isUdDomain(input: string): boolean {
 // ------------------------------------------------------------------
 
 const ETH_MAINNET_RPC =
-    (import.meta as any).env.VITE_ALCHEMY_MAINNET_API_KEY ||
+    import.meta.env.VITE_ALCHEMY_MAINNET_API_KEY ||
     "https://cloudflare-eth.com"; // CORS-safe public fallback
 
 let ensProvider: JsonRpcProvider | null = null;
@@ -71,7 +71,6 @@ async function resolveENS(name: string): Promise<string | null> {
         if (resolved && isAddress(resolved)) return resolved;
         return null;
     } catch (e) {
-        console.warn(`[DomainResolver] ENS resolution failed for "${name}":`, e);
         return null;
     }
 }
@@ -80,9 +79,10 @@ async function resolveENS(name: string): Promise<string | null> {
 // Unstoppable Domains Resolution
 // ------------------------------------------------------------------
 
-let udResolution: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- UD SDK Resolution type is dynamically imported
+let udResolution: { addr: (name: string, currency: string) => Promise<string | undefined> } | null = null;
 
-async function getUdResolution(): Promise<any> {
+async function getUdResolution(): Promise<typeof udResolution> {
     if (udResolution) return udResolution;
     try {
         // Dynamic import so the heavy UD SDK doesn't block initial page load
@@ -90,7 +90,6 @@ async function getUdResolution(): Promise<any> {
         udResolution = new Resolution();
         return udResolution;
     } catch (e) {
-        console.error("[DomainResolver] Failed to load @unstoppabledomains/resolution:", e);
         return null;
     }
 }
@@ -99,12 +98,11 @@ async function resolveUD(name: string): Promise<string | null> {
     try {
         const resolution = await getUdResolution();
         if (!resolution) return null;
-        const address: string = await resolution.addr(name, "ETH");
+        const address = await resolution.addr(name, "ETH");
         if (address && isAddress(address)) return address;
         return null;
-    } catch (e: any) {
+    } catch (e) {
         // UD throws specific errors for unregistered or unsupported domains
-        console.warn(`[DomainResolver] UD resolution failed for "${name}":`, e?.message ?? e);
         return null;
     }
 }

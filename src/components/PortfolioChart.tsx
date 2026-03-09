@@ -72,7 +72,7 @@ const generateMockHistory = (currentBalance: number, timeframe: Timeframe) => {
     return history.reverse();
 };
 
-export default function PortfolioChart({ currentBalanceUsd }: PortfolioChartProps) {
+function PortfolioChart({ currentBalanceUsd }: PortfolioChartProps) {
     const theme = useTheme();
     const [timeframe, setTimeframe] = useState<Timeframe>('1W');
 
@@ -87,7 +87,7 @@ export default function PortfolioChart({ currentBalanceUsd }: PortfolioChartProp
     const changePct = startValue > 0 ? (changeUsd / startValue) * 100 : 0;
     const isPositive = changeUsd >= 0;
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
+    const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ value: number; payload?: { formattedTime?: string } }> }) => {
         if (active && payload && payload.length) {
             return (
                 <Box
@@ -101,7 +101,7 @@ export default function PortfolioChart({ currentBalanceUsd }: PortfolioChartProp
                     }}
                 >
                     <Typography variant="body2" color="text.secondary" mb={0.5}>
-                        {payload[0].payload.formattedTime}
+                        {payload[0].payload?.formattedTime}
                     </Typography>
                     <Typography variant="subtitle2" fontWeight={700}>
                         ${payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -199,3 +199,5 @@ export default function PortfolioChart({ currentBalanceUsd }: PortfolioChartProp
         </Box>
     );
 }
+
+export default React.memo(PortfolioChart);

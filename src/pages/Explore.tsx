@@ -1,512 +1,675 @@
+/**
+ * Explore.tsx — In-App dApp Browser & Curated dApp Directory
+ * 
+ * Premium "App Store" style layout with glassmorphic design.
+ * - Featured dApps carousel
+ * - Category-based filtering  
+ * - Search functionality
+ * - WalletConnect v2 integration for safe connections
+ * - FHE Security Guard for transaction approval
+ */
+
 import * as React from 'react';
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useMemo } from 'react';
 import {
-  Container,
-  Paper,
-  Typography,
-  TextField,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  CircularProgress,
-  Box,
-  InputAdornment,
-  Chip,
-  Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  IconButton,
-  Stack,
-  useTheme,
-  alpha
+    Container, Box, Typography, TextField, Paper, Chip,
+    IconButton, InputAdornment, CircularProgress, Alert,
+    alpha, useTheme, Tooltip, Button, Dialog, DialogTitle,
+    DialogContent, DialogActions, Stack, Badge
 } from '@mui/material';
 import {
-  Bolt,
-  Public,
-  ArrowForward,
-  ArrowBack,
-  Refresh,
-  Close,
-  ContentCopy
+    Search, OpenInNew, Explore as ExploreIcon, Shield,
+    Star, TrendingUp, SwapHoriz, Image, CompareArrows,
+    Build, People, AccountBalance, Close, QrCode2,
+    Link as LinkIcon, WifiTethering, ContentCopy, Verified
 } from '@mui/icons-material';
-import { WalletContext } from "../AppContext.js";
-import { ActiveAccountContext } from "../ActiveAccountProvider.js";
-import { TrackedTransaction } from "../backend/ExplorerService.js";
-import { formatEther, formatUnits } from 'ethers';
+import { useTranslation } from 'react-i18next';
+import { ethers } from 'ethers';
+import { WalletContext } from '../AppContext';
+import { ActiveAccountContext } from '../ActiveAccountProvider';
+import {
+    DAPP_REGISTRY, DAPP_CATEGORIES, DApp, DAppCategory,
+    getFeaturedDApps, searchDApps, getDAppsByCategory, getDAppsForChain
+} from '../backend/DAppRegistry';
+import { openDApp } from '../backend/DAppConnectionService';
+import DAppApprovalModal, { ApprovalRequest } from '../components/DAppApprovalModal';
+import { WalletConnectRequest } from '../backend/WalletConnectService';
+import type { WCSessionInfo, ImageErrorEvent } from '../types/index';
 
-// Helper to handle Ethers v5 BigNumber conversion to BigInt for v6
-const safeToBigInt = (val: any): bigint | undefined => {
-  if (val === undefined || val === null) return undefined;
-  if (typeof val === 'bigint') return val;
-  if (typeof val === 'number') return BigInt(Math.floor(val)); // Handle number, but careful with decimals
-  if (typeof val === 'string') {
-    if (val.startsWith('0x')) return BigInt(val);
-    // If it's a decimal string like "0.5", we can't just BigInt it. 
-    // But formatEther expects Wei (integer). 
-    // If we have a string, assume it's integer string if it looks like one.
-    if (/^\d+$/.test(val)) return BigInt(val);
-    return undefined;
-  }
-  // Handle Ethers v5 BigNumber object { hex: '0x...', type: 'BigNumber' }
-  if (val.hex) return BigInt(val.hex);
-  return undefined;
+// ─── Category Icon Map ──────────────────────────────────────────────
+
+const CATEGORY_ICONS: Record<DAppCategory, React.ReactNode> = {
+    defi: <AccountBalance />,
+    dex: <SwapHoriz />,
+    fhe: <Shield />,
+    nft: <Image />,
+    bridge: <CompareArrows />,
+    tools: <Build />,
+    social: <People />,
 };
+
+// ─── Main Component ─────────────────────────────────────────────────
 
 const Explore = () => {
-  const wallet_context = useContext(WalletContext);
-  const active_context = useContext(ActiveAccountContext);
-  const net = wallet_context?.networkProvider?.getActiveNetwork();
-  const myAddress = active_context?.activeAccount?.GetAddress();
-  const theme = useTheme();
+    const theme = useTheme();
+    const { t } = useTranslation();
+    const walletContext = useContext(WalletContext);
+    const activeContext = useContext(ActiveAccountContext);
+    const network = walletContext?.networkProvider?.getActiveNetwork();
 
-  // State
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [transactions, setTransactions] = useState<TrackedTransaction[]>([]);
-  const [error, setError] = useState("");
+    // State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [activeCategory, setActiveCategory] = useState<DAppCategory | 'all'>('all');
+    const [wcDialogOpen, setWcDialogOpen] = useState(false);
+    const [wcUri, setWcUri] = useState('');
+    const [wcLoading, setWcLoading] = useState(false);
+    const [wcError, setWcError] = useState('');
+    const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
+    const [approvalLoading, setApprovalLoading] = useState(false);
+    const [wcSessionCount, setWcSessionCount] = useState(0);
 
-  // Search & View State
-  const [searchQuery, setSearchQuery] = useState('');
-  const [viewAddress, setViewAddress] = useState<string | undefined>(undefined);
-  const [isSearching, setIsSearching] = useState(false);
+    // WalletConnect session count
+    useEffect(() => {
+        const wc = walletContext?.walletConnectService;
+        if (!wc) return;
+        const updateCount = () => {
+            setWcSessionCount(wc.getActiveSessions?.()?.length || 0);
+        };
+        updateCount();
+        wc.setOnSessionUpdate?.(updateCount);
+    }, [walletContext?.walletConnectService]);
 
-  // Modal State
-  const [selectedTx, setSelectedTx] = useState<any>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+    // Setup WalletConnect request handler for approval modal
+    useEffect(() => {
+        const wc = walletContext?.walletConnectService;
+        if (!wc) return;
 
-  // Initialize View Address
-  useEffect(() => {
-    if (myAddress && !viewAddress) {
-      setViewAddress(myAddress);
-    }
-  }, [myAddress]);
+        wc.setOnRequest((req: WalletConnectRequest) => {
+            setApprovalRequest({
+                id: req.id,
+                method: req.params?.request?.method || 'unknown',
+                params: req.params,
+                dApp: req.dApp,
+                topic: req.topic,
+            });
+        });
+    }, [walletContext?.walletConnectService]);
 
-  // Fetch Logic
-  const fetchHistory = async (reset = false, targetAddr = viewAddress) => {
-    if (!net || !targetAddr) return;
+    // Filter dApps
+    const filteredDApps = useMemo(() => {
+        let list = searchQuery
+            ? searchDApps(searchQuery)
+            : activeCategory === 'all'
+                ? [...DAPP_REGISTRY]
+                : getDAppsByCategory(activeCategory);
 
-    if (!net.explorerService || !net.explorerService.isReady()) {
-      setError("Advanced Explorer features (History, Search) are not available. Please check your API Key configuration.");
-      setLoading(false);
-      return;
-    }
+        return list;
+    }, [searchQuery, activeCategory]);
 
-    try {
-      if (reset) {
-        setLoading(true);
-        setError("");
-        setTransactions([]);
-      } else {
-        setLoadingMore(true);
-      }
+    const featuredDApps = useMemo(() => getFeaturedDApps(), []);
 
-      const result = await net.explorerService.fetchHistory(targetAddr);
+    // Handlers
+    const handleDAppClick = (dApp: DApp) => {
+        openDApp(dApp);
+    };
 
-      if (reset) {
-        setTransactions(result.transactions);
-      } else {
-        const currentIds = new Set(transactions.map(t => t.uniqueId));
-        const newTxs = result.transactions.filter(t => !currentIds.has(t.uniqueId));
-        setTransactions(prev => [...prev, ...newTxs]);
-      }
+    const handleWcConnect = async () => {
+        const wc = walletContext?.walletConnectService;
+        if (!wc || !wcUri.trim()) return;
 
-    } catch (e: any) {
-      console.error("Explore fetch error:", e);
-      setError("Failed to fetch transaction history. " + (e.message || "Unknown error"));
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      setIsSearching(false);
-    }
-  };
-
-  useEffect(() => {
-    if (viewAddress && net) {
-      fetchHistory(true, viewAddress);
-    }
-  }, [net?.network_id, viewAddress]);
-
-  const handleSearch = async () => {
-    if (!searchQuery || !net?.explorerService) return;
-    setIsSearching(true);
-    setError("");
-
-    try {
-      const result = await net.explorerService.search(searchQuery);
-
-      if (result.type === 'ADDRESS') {
-        setViewAddress(result.data);
-        setSearchQuery('');
-      } else if (result.type === 'TRANSACTION') {
-        setSelectedTx(result.data);
-        setDetailsOpen(true);
-        setSearchQuery('');
-      } else if (result.type === 'BLOCK') {
-        setError(`Block Found: #${result.data.number} - Hash: ${result.data.hash}. (Detailed Block View Coming Soon)`);
-      } else {
-        setError("No results found. Try an Address, Tx Hash, or Block Number.");
-      }
-    } catch (e: any) {
-      setError("Search failed: " + e.message);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  const handleRefresh = () => {
-    fetchHistory(true);
-  };
-
-  const handleTxClick = async (tx: TrackedTransaction) => {
-    try {
-      setSelectedTx(tx);
-      setDetailsOpen(true);
-
-      if (net?.explorerService) {
-        const raw = await net.explorerService.getTransactionDetails(tx.hash);
-        if (raw) {
-          setSelectedTx((prev: any) => ({ ...prev, ...raw }));
-        }
-      }
-
-    } catch (e) {
-      console.error("Failed to load tx details", e);
-    }
-  };
-
-  const getMethodColor = (label: string) => {
-    switch (label) {
-      case 'Transfer': return 'primary';
-      case 'Approve': return 'warning';
-      case 'Swap': return 'secondary';
-      case 'Reverted': return 'error';
-      default: return 'default';
-    }
-  };
-
-  const getDirectionIcon = (direction: string) => {
-    if (direction === 'Sent') return <ArrowForward fontSize="small" color="error" />;
-    return <ArrowBack fontSize="small" color="success" />;
-  };
-
-  if (loading && transactions.length === 0) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: 2 }}>
-        <CircularProgress color="primary" />
-        <Typography variant="body2" color="text.secondary">Indexing Blockchain History...</Typography>
-      </Box>
-    );
-  }
-
-  // Calculate safe values for render
-  const safeValueDisplay = () => {
-    if (!selectedTx) return "0 ETH";
-    if (selectedTx.formattedValue) return selectedTx.formattedValue;
-
-    // Fallback if only raw value exists
-    const safeBig = safeToBigInt(selectedTx.value); // handles v5 BigNumber
-    if (safeBig !== undefined) {
-      return formatEther(safeBig) + " ETH";
-    }
-    return "0 ETH";
-  };
-
-  const safeGasPriceDisplay = () => {
-    if (!selectedTx || !selectedTx.gasPrice) return "N/A";
-
-    const safeBig = safeToBigInt(selectedTx.gasPrice);
-    if (safeBig !== undefined) {
-      try {
-        return formatUnits(safeBig, "gwei") + " Gwei";
-      } catch { return "Error"; }
-    }
-    return "N/A";
-  };
-
-  return (
-    <Box sx={{ pb: 12 }}>
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-
-        <Box sx={{ textAlign: 'center', mb: 6 }}>
-          <Typography variant="h3" fontWeight={800} sx={{
-            mb: 2,
-            background: 'linear-gradient(45deg, #fff 30%, #a5b4fc 90%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}>
-            Arfhe Explorer
-          </Typography>
-
-          <Box sx={{ maxWidth: 600, mx: 'auto', position: 'relative' }}>
-            <TextField
-              fullWidth
-              variant="outlined"
-              placeholder="Search by Address, Tx Hash, or Block..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 50,
-                  bgcolor: 'background.paper',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                  pl: 3
-                }
-              }}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Button
-                      variant="contained"
-                      onClick={handleSearch}
-                      disabled={isSearching}
-                      sx={{ borderRadius: 50, mr: -1, minWidth: 100, py: 1 }}
-                    >
-                      {isSearching ? <CircularProgress size={20} color="inherit" /> : "Search"}
-                    </Button>
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Box>
-        </Box>
-
-        {error && <Alert severity="warning" sx={{ mb: 4 }} onClose={() => setError("")}>{error}</Alert>}
-
-        {/* Responsive Layout without Grid */}
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, gap: 4 }}>
-
-          {/* Stats / Sidebar */}
-          <Box sx={{ width: { xs: '100%', lg: '30%' }, maxWidth: { lg: 350 } }}>
-            <Paper sx={{
-              p: 3,
-              borderRadius: 4,
-              bgcolor: alpha(theme.palette.background.paper, 0.85),
-              backdropFilter: 'blur(20px)',
-              boxShadow: '0 8px 32px -8px rgba(0,0,0,0.08)',
-              border: '1px solid',
-              borderColor: 'divider',
-              backgroundImage: 'none'
-            }}>
-              <Typography variant="h6" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <Public sx={{ mr: 1, color: 'primary.main' }} /> Network Status
-              </Typography>
-
-              <StatRow label="Network" value={net?.network_name || "Unknown"} />
-              <StatRow label="Viewing Address" value={viewAddress ? `${viewAddress.slice(0, 10)}...${viewAddress.slice(-6)}` : "None"} />
-              <StatRow label="Transactions Found" value={transactions.length} />
-
-              {viewAddress !== myAddress && (
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  color="secondary"
-                  sx={{ mt: 2 }}
-                  onClick={() => setViewAddress(myAddress)}
-                >
-                  Back to My Wallet
-                </Button>
-              )}
-            </Paper>
-          </Box>
-
-          {/* Transactions List */}
-          <Box sx={{ flex: 1, width: '100%', overflow: 'hidden' }}>
-            <Paper sx={{
-              p: 0,
-              borderRadius: 4,
-              overflow: 'hidden',
-              bgcolor: alpha(theme.palette.background.paper, 0.85),
-              backdropFilter: 'blur(20px)',
-              boxShadow: '0 8px 32px -8px rgba(0,0,0,0.08)',
-              border: '1px solid',
-              borderColor: 'divider',
-              backgroundImage: 'none'
-            }}>
-              <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="h6" fontWeight={700}>
-                  {viewAddress === myAddress ? "My Transactions" : "Address History"}
-                </Typography>
-                <Button startIcon={<Refresh />} size="small" onClick={handleRefresh} disabled={loadingMore}>
-                  Refresh
-                </Button>
-              </Box>
-
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Method</TableCell>
-                      <TableCell>Tx Hash</TableCell>
-                      <TableCell>Time</TableCell>
-                      <TableCell>From / To</TableCell>
-                      <TableCell align="right">VALUE</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {transactions.map((tx, idx) => (
-                      <TableRow
-                        key={`${tx.uniqueId || tx.hash}-${idx}`}
-                        hover
-                        onClick={() => handleTxClick(tx)}
-                        sx={{ cursor: 'pointer' }}
-                      >
-                        <TableCell>
-                          <Chip
-                            label={tx.status === 'Reverted' ? 'Reverted' : tx.methodLabel}
-                            size="small"
-                            color={getMethodColor(tx.status === 'Reverted' ? 'Reverted' : tx.methodLabel) as any}
-                            variant={tx.status === 'Reverted' ? 'filled' : 'outlined'}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Bolt sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
-                            <Typography fontFamily="monospace" fontSize="0.875rem" color="primary">
-                              {tx.hash.substring(0, 8)}...
-                            </Typography>
-                          </Box>
-                        </TableCell>
-                        <TableCell sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
-                          {new Date(tx.timestamp).toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                              {getDirectionIcon(tx.direction)}
-                            </Box>
-                            <Box>
-                              <Typography variant="caption" display="block" color="text.secondary">
-                                {tx.direction === 'Sent' ? 'To:' : 'From:'}
-                              </Typography>
-                              <Typography fontFamily="monospace" fontSize="0.75rem" color="text.primary">
-                                {tx.direction === 'Sent' ?
-                                  (tx.to ? `${tx.to.slice(0, 6)}...` : 'Contract') :
-                                  `${tx.from.slice(0, 6)}...`
-                                }
-                              </Typography>
-                            </Box>
-                          </Box>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography
-                            variant="body2"
-                            fontWeight={700}
-                            color={tx.direction === 'Received' ? 'success.main' : 'text.primary'}
-                          >
-                            {tx.direction === 'Sent' ? '-' : '+'}{tx.formattedValue}
-                          </Typography>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {transactions.length === 0 && !loading && (
-                      <TableRow>
-                        <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
-                          <Bolt sx={{ fontSize: 64, color: 'text.disabled', mb: 2, opacity: 0.5 }} />
-                          <Typography variant="h6" color="text.secondary" fontWeight={700}>No transactions found</Typography>
-                          <Typography variant="body2" color="text.disabled">This address hasn't made any transactions yet.</Typography>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-          </Box>
-        </Box>
-
-        <Dialog
-          open={detailsOpen}
-          onClose={() => setDetailsOpen(false)}
-          maxWidth="md"
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 4,
-              bgcolor: alpha(theme.palette.background.paper, 0.85),
-              backdropFilter: 'blur(20px)',
-              backgroundImage: 'none',
-              boxShadow: '0 16px 40px -8px rgba(0,0,0,0.2)'
+        setWcLoading(true);
+        setWcError('');
+        try {
+            await wc.init();
+            await wc.pair(wcUri.trim());
+            setWcDialogOpen(false);
+            setWcUri('');
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (msg === 'ALREADY_PAIRED') {
+                setWcError(t('explore.alreadyPaired'));
+            } else if (msg === 'URI_EXPIRED') {
+                setWcError(t('explore.uriExpired'));
+            } else {
+                setWcError(msg || t('explore.connectionFailed'));
             }
-          }}
-        >
-          {/* Fix: set component="div" to avoid h2 > h6 nesting issues */}
-          <DialogTitle component="div" sx={{ borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="h6">Transaction Details</Typography>
-            <IconButton onClick={() => setDetailsOpen(false)}><Close /></IconButton>
-          </DialogTitle>
-          <DialogContent sx={{ pt: 3 }}>
-            {selectedTx && (
-              <Stack spacing={2}>
-                <DetailRow label="Transaction Hash" value={selectedTx.hash} copyable />
-                <DetailRow label="Block Number" value={selectedTx.blockNumber?.toString() || selectedTx.blockNum} />
-                <DetailRow label="From" value={selectedTx.from} copyable />
-                <DetailRow label="To" value={selectedTx.to || "Contract Creation"} copyable />
-                <DetailRow
-                  label="Value"
-                  value={safeValueDisplay()}
-                />
-                <DetailRow label="Nonce" value={selectedTx.nonce?.toString()} />
-                <DetailRow
-                  label="Gas Price"
-                  value={safeGasPriceDisplay()}
-                />
-              </Stack>
-            )}
-          </DialogContent>
-          <DialogActions sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-            <Button
-              onClick={() => window.open(`https://etherscan.io/tx/${selectedTx?.hash}`, '_blank')}
-              startIcon={<Public />}
+        } finally {
+            setWcLoading(false);
+        }
+    };
+
+    const handleApprove = async (req: ApprovalRequest) => {
+        const wc = walletContext?.walletConnectService;
+        const account = activeContext?.activeAccount;
+        if (!wc || !account) return;
+
+        setApprovalLoading(true);
+        try {
+            const method = req.params?.request?.method || req.method;
+            let result: unknown;
+            const wallet = account.ethers_wallet;
+            if (!wallet) throw new Error('Wallet not available');
+
+            if (method === 'personal_sign') {
+                const message = req.params?.request?.params?.[0];
+                // Decode hex message to string if needed
+                const msgBytes = message?.startsWith('0x')
+                    ? new Uint8Array(Buffer.from(message.slice(2), 'hex'))
+                    : message;
+                result = await wallet.signMessage(msgBytes);
+            } else if (method === 'eth_sendTransaction') {
+                const txParams = req.params?.request?.params?.[0];
+                const rpcUrl = network?.rpc_url;
+                if (!rpcUrl) throw new Error('No RPC URL available');
+                const provider = new ethers.JsonRpcProvider(rpcUrl);
+                const connectedWallet = wallet.connect(provider);
+                const txResponse = await connectedWallet.sendTransaction(txParams);
+                result = txResponse.hash;
+            } else if (method.includes('signTypedData')) {
+                // For typed data, use raw signMessage as fallback
+                const rawData = req.params?.request?.params?.[1];
+                const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+                const { domain, types, message: msg } = parsed;
+                // Remove EIP712Domain from types if present
+                const cleanTypes = { ...types };
+                delete cleanTypes.EIP712Domain;
+                result = await wallet.signTypedData(domain, cleanTypes, msg);
+            }
+
+            await wc.approveRequest(account, {
+                id: req.id,
+                topic: req.topic!,
+                params: req.params,
+                dApp: req.dApp,
+            }, result);
+        } catch (e) {
+        } finally {
+            setApprovalLoading(false);
+            setApprovalRequest(null);
+        }
+    };
+
+    const handleReject = async (req: ApprovalRequest) => {
+        const wc = walletContext?.walletConnectService;
+        if (!wc) return;
+
+        await wc.rejectRequest({
+            id: req.id,
+            topic: req.topic!,
+            params: req.params,
+            dApp: req.dApp,
+        });
+        setApprovalRequest(null);
+    };
+
+    return (
+        <Box sx={{ pb: 12, minHeight: '100vh' }}>
+            <Container maxWidth="lg" sx={{ py: 4 }}>
+
+                {/* ── Hero Header ── */}
+                <Box sx={{ textAlign: 'center', mb: 5 }}>
+                    <Typography
+                        variant="h3"
+                        fontWeight={900}
+                        sx={{
+                            mb: 1,
+                            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.text.secondary}, ${theme.palette.primary.light})`,
+                            backgroundSize: '200% auto',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            animation: 'shimmer 3s linear infinite',
+                            '@keyframes shimmer': {
+                                '0%': { backgroundPosition: '0% center' },
+                                '100%': { backgroundPosition: '200% center' },
+                            },
+                        }}
+                    >
+                        {t('explore.title')}
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 500, mx: 'auto' }}>
+                        {t('explore.subtitle')}
+                    </Typography>
+                </Box>
+
+                {/* ── Search + WalletConnect Button ── */}
+                <Box sx={{ display: 'flex', gap: 1.5, mb: 4, maxWidth: 700, mx: 'auto' }}>
+                    <TextField
+                        fullWidth
+                        placeholder={t('explore.searchPlaceholder')}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        InputProps={{
+                            startAdornment: (
+                                <InputAdornment position="start">
+                                    <Search color="action" />
+                                </InputAdornment>
+                            ),
+                        }}
+                        sx={{
+                            '& .MuiOutlinedInput-root': {
+                                borderRadius: 4,
+                                bgcolor: alpha(theme.palette.background.paper, 0.8),
+                                backdropFilter: 'blur(10px)',
+                                '&:hover': { bgcolor: alpha(theme.palette.background.paper, 0.95) },
+                            }
+                        }}
+                    />
+                    <Tooltip title={t('explore.walletConnect')}>
+                        <Badge badgeContent={wcSessionCount} color="success" max={9}>
+                            <IconButton
+                                onClick={() => setWcDialogOpen(true)}
+                                aria-label={t('explore.walletConnect')}
+                                sx={{
+                                    width: 56, height: 56,
+                                    borderRadius: 4,
+                                    bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                    border: '1px solid',
+                                    borderColor: alpha(theme.palette.primary.main, 0.2),
+                                    '&:hover': {
+                                        bgcolor: alpha(theme.palette.primary.main, 0.2),
+                                    }
+                                }}
+                            >
+                                <WifiTethering color="primary" />
+                            </IconButton>
+                        </Badge>
+                    </Tooltip>
+                </Box>
+
+                {/* ── Category Pills ── */}
+                <Box sx={{
+                    display: 'flex',
+                    gap: 1,
+                    mb: 4,
+                    overflowX: 'auto',
+                    pb: 1,
+                    justifyContent: 'center',
+                    flexWrap: 'wrap',
+                    '&::-webkit-scrollbar': { display: 'none' },
+                }}>
+                    <Chip
+                        label={t('explore.all')}
+                        variant={activeCategory === 'all' ? 'filled' : 'outlined'}
+                        color={activeCategory === 'all' ? 'primary' : 'default'}
+                        onClick={() => { setActiveCategory('all'); setSearchQuery(''); }}
+                        sx={{ fontWeight: 700, borderRadius: 3, px: 1 }}
+                    />
+                    {DAPP_CATEGORIES.map(cat => (
+                        <Chip
+                            key={cat.id}
+                            icon={CATEGORY_ICONS[cat.id] as React.ReactElement}
+                            label={t(cat.labelKey)}
+                            variant={activeCategory === cat.id ? 'filled' : 'outlined'}
+                            color={activeCategory === cat.id ? 'primary' : 'default'}
+                            onClick={() => { setActiveCategory(cat.id); setSearchQuery(''); }}
+                            sx={{
+                                fontWeight: 600,
+                                borderRadius: 3,
+                                px: 0.5,
+                                '& .MuiChip-icon': { fontSize: 18 },
+                            }}
+                        />
+                    ))}
+                </Box>
+
+                {/* ── Featured Section ── */}
+                {activeCategory === 'all' && !searchQuery && (
+                    <Box sx={{ mb: 5 }}>
+                        <Typography variant="h6" fontWeight={800} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Star sx={{ color: '#f59e0b' }} /> {t('explore.featured')}
+                        </Typography>
+                        <Box sx={{
+                            display: 'flex',
+                            gap: 2,
+                            overflowX: 'auto',
+                            pb: 2,
+                            '&::-webkit-scrollbar': { height: 4 },
+                            '&::-webkit-scrollbar-thumb': { bgcolor: 'divider', borderRadius: 2 },
+                        }}>
+                            {featuredDApps.map(dApp => (
+                                <FeaturedCard key={dApp.id} dApp={dApp} onClick={handleDAppClick} />
+                            ))}
+                        </Box>
+                    </Box>
+                )}
+
+                {/* ── dApp Grid ── */}
+                <Box sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                        xs: 'repeat(1, 1fr)',
+                        sm: 'repeat(2, 1fr)',
+                        md: 'repeat(3, 1fr)',
+                    },
+                    gap: 2,
+                }}>
+                    {filteredDApps.map(dApp => (
+                        <DAppCard key={dApp.id} dApp={dApp} onClick={handleDAppClick} />
+                    ))}
+                </Box>
+
+                {filteredDApps.length === 0 && (
+                    <Box sx={{ textAlign: 'center', py: 8 }}>
+                        <ExploreIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+                        <Typography variant="h6" color="text.secondary" fontWeight={700}>
+                            {t('explore.noResults')}
+                        </Typography>
+                        <Typography variant="body2" color="text.disabled">
+                            {t('explore.tryDifferent')}
+                        </Typography>
+                    </Box>
+                )}
+            </Container>
+
+            {/* ── WalletConnect Dialog ── */}
+            <Dialog
+                open={wcDialogOpen}
+                onClose={() => { setWcDialogOpen(false); setWcError(''); }}
+                maxWidth="sm"
+                fullWidth
+                aria-labelledby="wc-dialog-title"
+                PaperProps={{
+                    sx: {
+                        borderRadius: 4,
+                        bgcolor: alpha(theme.palette.background.paper, 0.95),
+                        backdropFilter: 'blur(20px)',
+                        backgroundImage: 'none',
+                    }
+                }}
             >
-              View on Etherscan
-            </Button>
-            <Button onClick={() => setDetailsOpen(false)} variant="contained">Close</Button>
-          </DialogActions>
-        </Dialog>
-      </Container>
-    </Box>
-  );
+                <DialogTitle id="wc-dialog-title" component="div" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid', borderColor: 'divider' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <WifiTethering color="primary" />
+                        <Typography fontWeight={700}>{t('explore.walletConnect')}</Typography>
+                    </Box>
+                    <IconButton onClick={() => { setWcDialogOpen(false); setWcError(''); }} size="small" aria-label="Close WalletConnect dialog">
+                        <Close />
+                    </IconButton>
+                </DialogTitle>
+                <DialogContent sx={{ pt: 3 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        {t('explore.wcDescription')}
+                    </Typography>
+
+                    {wcError && (
+                        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} onClose={() => setWcError('')}>
+                            {wcError}
+                        </Alert>
+                    )}
+
+                    <TextField
+                        fullWidth
+                        label={t('explore.wcUriLabel')}
+                        placeholder="wc:a281567bb3e4..."
+                        value={wcUri}
+                        onChange={(e) => setWcUri(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleWcConnect()}
+                        InputProps={{
+                            startAdornment: (
+                                <InputAdornment position="start">
+                                    <LinkIcon color="action" />
+                                </InputAdornment>
+                            ),
+                        }}
+                        sx={{
+                            '& .MuiOutlinedInput-root': { borderRadius: 3 },
+                        }}
+                    />
+
+                    <Paper
+                        elevation={0}
+                        sx={{
+                            mt: 2, p: 2, borderRadius: 2,
+                            bgcolor: alpha(theme.palette.info.main, 0.05),
+                            border: '1px solid',
+                            borderColor: alpha(theme.palette.info.main, 0.15),
+                        }}
+                    >
+                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                            💡 {t('explore.wcHint')}
+                        </Typography>
+                    </Paper>
+
+                    {/* Active Sessions */}
+                    {wcSessionCount > 0 && (
+                        <Box sx={{ mt: 3 }}>
+                            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                                {t('explore.activeSessions')} ({wcSessionCount})
+                            </Typography>
+                            {walletContext?.walletConnectService?.getActiveSessions?.()?.map((session: WCSessionInfo) => (
+                                <Box
+                                    key={session.topic}
+                                    sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 1.5,
+                                        p: 1.5,
+                                        borderRadius: 2,
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                        mb: 1,
+                                    }}
+                                >
+                                    <Box
+                                        component="img"
+                                        src={session.peer?.metadata?.icons?.[0] || ''}
+                                        alt=""
+                                        onError={(e: ImageErrorEvent) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                        sx={{ width: 28, height: 28, borderRadius: 1 }}
+                                    />
+                                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                                        <Typography fontSize={13} fontWeight={600} noWrap>
+                                            {session.peer?.metadata?.name || 'Unknown'}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" noWrap>
+                                            {session.peer?.metadata?.url || ''}
+                                        </Typography>
+                                    </Box>
+                                    <Button
+                                        size="small"
+                                        color="error"
+                                        onClick={() => walletContext?.walletConnectService?.disconnect(session.topic)}
+                                        sx={{ fontSize: 11, minWidth: 'auto' }}
+                                    >
+                                        {t('explore.disconnect')}
+                                    </Button>
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions sx={{ p: 3, pt: 1 }}>
+                    <Button
+                        variant="contained"
+                        fullWidth
+                        onClick={handleWcConnect}
+                        disabled={wcLoading || !wcUri.trim()}
+                        sx={{ borderRadius: 3, height: 48, fontWeight: 700 }}
+                    >
+                        {wcLoading ? <CircularProgress size={24} color="inherit" /> : t('explore.connect')}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* ── DApp Approval Modal (FHE Security Guard) ── */}
+            <DAppApprovalModal
+                open={!!approvalRequest}
+                request={approvalRequest}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                loading={approvalLoading}
+            />
+        </Box>
+    );
 };
 
-const StatRow = ({ label, value, color = 'text.primary' }: any) => (
-  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-    <Typography variant="body2" color="text.secondary">{label}</Typography>
-    <Typography variant="body1" fontWeight={600} color={color}>{value}</Typography>
-  </Box>
-);
+// ─── Featured Card ──────────────────────────────────────────────────
 
-const DetailRow = ({ label, value, copyable, code }: any) => (
-  <Box sx={{ width: '100%', mb: 1 }}>
-    <Box sx={{ mb: 1 }}>
-      <Typography variant="caption" color="text.secondary">{label}</Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography
-          variant="body2"
-          sx={{
-            wordBreak: 'break-all',
-            fontFamily: code ? 'monospace' : 'inherit',
-            bgcolor: code ? 'action.hover' : 'transparent',
-            p: code ? 1 : 0,
-            borderRadius: 1
-          }}
+function FeaturedCard({ dApp, onClick }: { dApp: DApp; onClick: (d: DApp) => void }) {
+    const theme = useTheme();
+    const { t } = useTranslation();
+    const catInfo = DAPP_CATEGORIES.find(c => c.id === dApp.category);
+
+    return (
+        <Paper
+            elevation={0}
+            onClick={() => onClick(dApp)}
+            sx={{
+                minWidth: 260,
+                maxWidth: 300,
+                p: 3,
+                borderRadius: 4,
+                cursor: 'pointer',
+                bgcolor: alpha(theme.palette.background.paper, 0.8),
+                backdropFilter: 'blur(20px)',
+                border: '1px solid',
+                borderColor: alpha(catInfo?.color || theme.palette.primary.main, 0.2),
+                background: `linear-gradient(135deg, ${alpha(catInfo?.color || '#2563eb', 0.05)} 0%, ${alpha(theme.palette.background.paper, 0.9)} 100%)`,
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: `0 12px 24px -8px ${alpha(catInfo?.color || '#2563eb', 0.25)}`,
+                    borderColor: alpha(catInfo?.color || theme.palette.primary.main, 0.4),
+                },
+                flexShrink: 0,
+            }}
         >
-          {value || "N/A"}
-        </Typography>
-        {copyable && value && (
-          <IconButton size="small" onClick={() => navigator.clipboard.writeText(value)}>
-            <ContentCopy fontSize="inherit" />
-          </IconButton>
-        )}
-      </Box>
-    </Box>
-  </Box>
-);
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <Box
+                    component="img"
+                    src={dApp.icon}
+                    alt={dApp.name}
+                    onError={(e: ImageErrorEvent) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/48?text=' + dApp.name[0]; }}
+                    sx={{
+                        width: 48, height: 48,
+                        borderRadius: 3,
+                        boxShadow: `0 4px 12px ${alpha(catInfo?.color || '#000', 0.2)}`,
+                    }}
+                />
+                <Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Typography fontWeight={800} fontSize={16}>
+                            {dApp.name}
+                        </Typography>
+                        <Verified sx={{ fontSize: 14, color: 'primary.main' }} />
+                    </Box>
+                    <Chip
+                        label={t(catInfo?.labelKey || 'explore.catTools')}
+                        size="small"
+                        sx={{
+                            height: 20, fontSize: 10, fontWeight: 700,
+                            bgcolor: alpha(catInfo?.color || '#666', 0.1),
+                            color: catInfo?.color,
+                        }}
+                    />
+                </Box>
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }}>
+                {dApp.description}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 2 }}>
+                <Chip
+                    icon={<OpenInNew sx={{ fontSize: '14px !important' }} />}
+                    label={t('explore.open')}
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontWeight: 600, borderRadius: 2, fontSize: 11 }}
+                />
+            </Box>
+        </Paper>
+    );
+}
+
+// ─── Standard dApp Card ─────────────────────────────────────────────
+
+function DAppCard({ dApp, onClick }: { dApp: DApp; onClick: (d: DApp) => void }) {
+    const theme = useTheme();
+    const { t } = useTranslation();
+    const catInfo = DAPP_CATEGORIES.find(c => c.id === dApp.category);
+
+    return (
+        <Paper
+            elevation={0}
+            onClick={() => onClick(dApp)}
+            sx={{
+                p: 2.5,
+                borderRadius: 3,
+                cursor: 'pointer',
+                bgcolor: alpha(theme.palette.background.paper, 0.7),
+                backdropFilter: 'blur(12px)',
+                border: '1px solid',
+                borderColor: alpha(theme.palette.divider, 0.5),
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: `0 8px 20px -4px ${alpha(theme.palette.common.black, 0.1)}`,
+                    borderColor: alpha(catInfo?.color || theme.palette.primary.main, 0.3),
+                    bgcolor: alpha(theme.palette.background.paper, 0.9),
+                },
+            }}
+        >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box
+                    component="img"
+                    src={dApp.icon}
+                    alt={dApp.name}
+                    onError={(e: ImageErrorEvent) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/40?text=' + dApp.name[0]; }}
+                    sx={{
+                        width: 44, height: 44,
+                        borderRadius: 2.5,
+                        flexShrink: 0,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                    }}
+                />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Typography fontWeight={700} fontSize={14} noWrap>
+                            {dApp.name}
+                        </Typography>
+                        {dApp.featured && <Star sx={{ fontSize: 13, color: '#f59e0b' }} />}
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                        {dApp.description}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+                        <Chip
+                            label={t(catInfo?.labelKey || dApp.category)}
+                            size="small"
+                            sx={{
+                                height: 18, fontSize: 9, fontWeight: 700,
+                                bgcolor: alpha(catInfo?.color || '#666', 0.1),
+                                color: catInfo?.color,
+                            }}
+                        />
+                        {dApp.chains.length > 0 && dApp.chains.length <= 3 && (
+                            <Chip
+                                label={dApp.chains.map(c => getChainLabel(c)).join(', ')}
+                                size="small"
+                                variant="outlined"
+                                sx={{ height: 18, fontSize: 9, fontWeight: 600 }}
+                            />
+                        )}
+                    </Box>
+                </Box>
+                <OpenInNew sx={{ fontSize: 16, color: 'text.disabled', flexShrink: 0 }} />
+            </Box>
+        </Paper>
+    );
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────
+
+function getChainLabel(chainId: number): string {
+    switch (chainId) {
+        case 1: return 'ETH';
+        case 11155111: return 'Sepolia';
+        case 42161: return 'ARB';
+        case 421614: return 'ARB Sep';
+        case 8453: return 'Base';
+        case 84532: return 'Base Sep';
+        case 8008135: return 'Fhenix';
+        default: return `#${chainId}`;
+    }
+}
 
 export default Explore;

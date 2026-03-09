@@ -14,7 +14,8 @@ import {
   Tab,
   Tooltip,
   useTheme,
-  alpha
+  alpha,
+  Divider
 } from "@mui/material";
 import {
   TrendingUp,
@@ -25,18 +26,32 @@ import {
   Refresh,
   Add,
   Visibility,
-  VisibilityOff
+  VisibilityOff,
+  WarningAmber,
+  VisibilityOffOutlined,
 } from "@mui/icons-material";
 import { useMatrixText } from "../hooks/useMatrixText.js";
 import ImportTokenModal from "../components/ImportTokenModal.js";
 import ImportNftModal from "../components/ImportNftModal.js";
 import NftGalleryCard from "../components/NftGalleryCard.js";
+import OnboardingTour, {
+  BackupReminderBanner,
+  isOnboardingCompleted,
+  isBackupReminderDismissed,
+  dismissBackupReminder,
+} from "../components/OnboardingTour.js";
 import { AppContext, WalletContext } from "../AppContext.js";
 import { ActiveAccountContext } from "../ActiveAccountProvider.js";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { NetworkId } from "../backend/NetworkTypes.js";
-
 import { getAddress } from "ethers";
+import type { TypographyProps } from "@mui/material";
+import type { DisplayToken, BalanceMap, WrappedBalance, NFTDisplayItem } from "../types/index.js";
+import { TokenListSkeleton, NftGridSkeleton } from "../components/SkeletonLoaders.js";
+import { useToast } from "../components/ToastProvider.js";
+import { classifyError, NetworkError, NetworkErrorType, getErrorFallbackMessage } from "../backend/NetworkErrorHandler.js";
+import { usePersistedState } from "../hooks/usePersistedState.js";
 
 const KNOWN_LOGOS: Record<string, string> = {
   "ETH": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png",
@@ -46,19 +61,43 @@ const KNOWN_LOGOS: Record<string, string> = {
   "cUSDC": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
   "USDT": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png",
   "LINK": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x514910771AF9Ca656af840dff83E8264EcF986CA/logo.png",
-  "EURC": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c/logo.png"
+  "EURC": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c/logo.png",
+  "BTC": "https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
+  "WBTC": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599/logo.png",
+  "DAI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x6B175474E89094C44Da98b954EedeAC495271d0F/logo.png",
+  "UNI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984/logo.png",
+  "AAVE": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9/logo.png",
+  "ARB": "https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg",
+  "OP": "https://assets.coingecko.com/coins/images/25244/small/Optimism.png",
+  "MATIC": "https://assets.coingecko.com/coins/images/4713/small/polygon.png",
+  "POL": "https://assets.coingecko.com/coins/images/4713/small/polygon.png",
+  "AVAX": "https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png",
+  "BNB": "https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png",
+  "SOL": "https://assets.coingecko.com/coins/images/4128/small/solana.png",
+  "DOGE": "https://assets.coingecko.com/coins/images/5/small/dogecoin.png",
+  "SHIB": "https://assets.coingecko.com/coins/images/11939/small/shiba.png",
+  "PEPE": "https://assets.coingecko.com/coins/images/29850/small/pepe-token.jpeg",
+  "MKR": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2/logo.png",
+  "CRV": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xD533a949740bb3306d119CC777fa900bA034cd52/logo.png",
+  "COMP": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xc00e94Cb662C3520282E6f5717214004A7f26888/logo.png",
+  "LDO": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32/logo.png",
+  "SNX": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xC011a73ee8576Fb46F5E1c5751cA3B9Fe0af2a6F/logo.png",
+  "MON": "https://coin-images.coingecko.com/coins/images/38927/small/mon.png",
 };
 
-// Token logo resolver: Alchemy → TrustWallet CDN → symbol fallback
+// Token logo resolver: Alchemy → known symbol → TrustWallet CDN fallback
 const getTokenLogoUrl = (contractAddress: string, logoSrc?: string, symbol?: string, name?: string): string => {
-  // 1. Use Alchemy logo if available (skip broken local placeholders like /logos/eth.png)
+  // 1. Use cached/Alchemy logo if available (skip broken local placeholders like /logos/eth.png)
   if (logoSrc && logoSrc.length > 0 && !logoSrc.startsWith("/logos/")) return logoSrc;
 
-  // 2. Known tokens by symbol
+  // 2. Known tokens by symbol (case-insensitive)
+  const symUpper = symbol?.toUpperCase();
+  if (symUpper && KNOWN_LOGOS[symUpper]) return KNOWN_LOGOS[symUpper];
   if (symbol && KNOWN_LOGOS[symbol]) return KNOWN_LOGOS[symbol];
   if (contractAddress === "ETH" || name === "Ethereum") return KNOWN_LOGOS["ETH"];
 
-  // 3. TrustWallet assets CDN (requires checksummed address)
+  // 3. TrustWallet assets CDN fallback (requires checksummed address)
+  //    Works for Ethereum mainnet tokens — most widely used
   if (contractAddress && contractAddress.startsWith("0x")) {
     try {
       const checksummed = getAddress(contractAddress);
@@ -85,22 +124,28 @@ const stringToColor = (str: string): string => {
 function MatrixBalance({ value, isHidden, variant = "h3" }: {
   value: string;
   isHidden: boolean;
-  variant?: any;
+  variant?: TypographyProps["variant"];
 }) {
   const displayed = useMatrixText(value, isHidden);
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   return (
     <Typography
       variant={variant}
       fontWeight="800"
       sx={{
         letterSpacing: -1,
-        // Always use the same gradient — no green on hidden
-        background: 'linear-gradient(45deg, #fff 50%, #6366f1 90%)',
+        background: isDark
+          ? 'linear-gradient(135deg, #eff6ff 0%, #bfdbfe 50%, #3b82f6 100%)'
+          : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #1e3a8a 100%)',
         WebkitBackgroundClip: 'text',
         WebkitTextFillColor: 'transparent',
         fontFamily: isHidden ? 'monospace' : 'inherit',
         transition: 'all 0.3s ease',
         userSelect: 'none',
+        filter: isDark
+          ? 'drop-shadow(0 2px 8px rgba(37, 99, 235, 0.3))'
+          : 'drop-shadow(0 1px 4px rgba(37, 99, 235, 0.15))',
       }}
     >
       {displayed}
@@ -109,32 +154,42 @@ function MatrixBalance({ value, isHidden, variant = "h3" }: {
 }
 
 function Home() {
+  const { t } = useTranslation();
   const theme = useTheme();
   const wallet_context = React.useContext(WalletContext);
   const active_context = React.useContext(ActiveAccountContext);
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
-  const [balances, setBalances] = useState<Record<string, any>>({});
-  // Initialize from cache immediately to prevent blank screen
-  const [tokens, setTokens] = useState(() => {
+  const [balances, setBalances] = useState<BalanceMap>({});
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [tokens, setTokens] = useState<DisplayToken[]>(() => {
     try {
       const initialNetId = wallet_context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Mainnet;
-      return wallet_context?.tokenCache?.getAllTokens(initialNetId) ?? [];
+      const cached = wallet_context?.tokenCache?.getAllTokens(initialNetId) ?? [];
+      return cached.map(t => ({ ...t, isShielded: false, isSpam: false, isSuspicious: false, isHidden: false, spamScore: 0 }));
     } catch { return []; }
   });
-  const [nfts, setNfts] = useState<any[]>(() => {
+  const [nfts, setNfts] = useState<NFTDisplayItem[]>(() => {
     try {
       const initialNetId = wallet_context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Mainnet;
-      return wallet_context?.nftCache?.getAllNFTs(initialNetId) ?? [];
+      const cached = wallet_context?.nftCache?.getAllNFTs(initialNetId) ?? [];
+      return cached.map(n => ({ ...n, balance: 0 }));
     } catch { return []; }
   });
   const [totalBalanceUsd, setTotalBalanceUsd] = useState(0.00);
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
-  const [tabIndex, setTabIndex] = useState(0);
-  const [isBalanceHidden, setIsBalanceHidden] = useState(false);
+  // Persisted state: survives popup close/reopen
+  const [tabIndex, setTabIndex] = usePersistedState("home_tab", 0);
+  const [isBalanceHidden, setIsBalanceHidden] = usePersistedState("balance_hidden", false);
   const [importTokenModalOpen, setImportTokenModalOpen] = useState(false);
   const [importNftModalOpen, setImportNftModalOpen] = useState(false);
+  const [showHiddenTokens, setShowHiddenTokens] = useState(false);
+
+  // Onboarding tour (first-time UX)
+  const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingCompleted());
+  const [showBackupReminder, setShowBackupReminder] = useState(() => !isBackupReminderDismissed());
 
   // Network Switcher State
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -168,9 +223,19 @@ function Home() {
     if (!forceRefresh && dataCache) {
       const cached = dataCache.get(address, activeNetworkId);
       if (cached) {
-        console.log("[Home] Using cached data (age: " + Math.round((dataCache.getAge(address, activeNetworkId) ?? 0) / 1000) + "s)");
         setBalances(cached.balances);
-        setTokens(cached.tokens);
+        setTokens(cached.tokens.map(t => ({
+          name: t.name,
+          symbol: t.symbol,
+          logoSrc: t.logoSrc,
+          contractAddress: t.contractAddress,
+          decimals: t.decimals,
+          isShielded: t.isShielded ?? false,
+          isSpam: false,
+          isSuspicious: false,
+          isHidden: false,
+          spamScore: 0,
+        })));
         setPrices(cached.prices);
         setTotalBalanceUsd(cached.totalUsd);
         return;
@@ -189,7 +254,6 @@ function Home() {
           const instance = FheCofheService.getInstance();
 
           if (!instance.isReadyForAccount(address, activeNetworkId)) {
-            console.log("[Home] Initializing cofhejs (TRUE FHE) for account:", address);
             const ethers = await import("ethers");
             const provider = new ethers.JsonRpcProvider(net.rpc_url);
             const privateKey = active_context.activeAccount.private_key;
@@ -197,10 +261,8 @@ function Home() {
             const signer = new ethers.Wallet(privateKey, provider);
 
             await instance.init(provider, signer);
-            console.log("[Home] ✅ cofhejs TRUE FHE Ready!");
           }
         } catch (e) {
-          console.error("[Home] cofhejs FHE initialization failed:", e);
         }
       }
 
@@ -210,17 +272,17 @@ function Home() {
       );
 
       // 2. Fetch Wrapped Token Balances (Only on Sepolia)
-      const wrappedBalances: any[] = [];
+      const wrappedBalances: WrappedBalance[] = [];
       const WRAPPED_USDC_ADDRESS = activeNetworkId === NetworkId.Arbitrum_Sepolia
-        ? ((import.meta as any).env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase()
+        ? (import.meta.env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase()
         : activeNetworkId === NetworkId.Base_Sepolia
-          ? ((import.meta as any).env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase()
-          : ((import.meta as any).env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
+          ? (import.meta.env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase()
+          : (import.meta.env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
       const WRAPPED_ETH_ADDRESS = activeNetworkId === NetworkId.Arbitrum_Sepolia
-        ? ((import.meta as any).env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase()
+        ? (import.meta.env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase()
         : activeNetworkId === NetworkId.Base_Sepolia
-          ? ((import.meta as any).env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase()
-          : ((import.meta as any).env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
+          ? (import.meta.env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase()
+          : (import.meta.env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
       const IGNORED_CONTRACTS = [
         "0xbde0a2e375b67c802d4651fecf3b678b1886d15b", // SimpleWrappedUSDC (old)
         "0x3e0722a877e52fe755e8bf02372342c63930fd57", // MockFHEWrappedUSDC (old)
@@ -241,7 +303,6 @@ function Home() {
       if (isFheNetwork) {
         // Fetch Wrapped USDC - Always show, even if balance is 0
         if (WRAPPED_USDC_ADDRESS) {
-          console.log("[Home] Fetching wrapped USDC balance...", WRAPPED_USDC_ADDRESS);
 
           try {
             // Get encrypted (shielded) balance via FHE unseal - V4 contracts have NO ERC20 balance
@@ -250,12 +311,9 @@ function Home() {
               const shieldedBal = await net.getShieldedBalance(WRAPPED_USDC_ADDRESS, address, active_context.activeAccount);
               if (shieldedBal && parseFloat(shieldedBal) > 0) {
                 wrappedUsdcBalance = shieldedBal;
-                console.log("[Home] Wrapped USDC shielded balance:", wrappedUsdcBalance);
               } else {
-                console.log("[Home] Wrapped USDC balance: 0 (no encrypted balance)");
               }
             } catch (e) {
-              console.warn("[Home] Failed to fetch shielded USDC balance:", e);
             }
 
             // Always add to list, even if balance is 0
@@ -275,13 +333,11 @@ function Home() {
               contractAddress: WRAPPED_USDC_ADDRESS
             });
           } catch (e) {
-            console.warn("[Home] Failed to fetch Wrapped USDC balance:", e);
           }
         }
 
         // Fetch Wrapped ETH - Always show, even if balance is 0
         if (WRAPPED_ETH_ADDRESS) {
-          console.log("[Home] Fetching wrapped ETH balance...", WRAPPED_ETH_ADDRESS);
 
           try {
             // Get encrypted (shielded) balance via FHE unseal - V4 contracts have NO ERC20 balance
@@ -290,12 +346,9 @@ function Home() {
               const shieldedBal = await net.getShieldedBalance(WRAPPED_ETH_ADDRESS, address, active_context.activeAccount);
               if (shieldedBal && parseFloat(shieldedBal) > 0) {
                 wrappedEthBalance = shieldedBal;
-                console.log("[Home] Wrapped ETH shielded balance:", wrappedEthBalance);
               } else {
-                console.log("[Home] Wrapped ETH balance: 0 (no encrypted balance)");
               }
             } catch (e) {
-              console.warn("[Home] Failed to fetch shielded ETH balance:", e);
             }
 
             // Always add to list, even if balance is 0
@@ -315,7 +368,6 @@ function Home() {
               contractAddress: WRAPPED_ETH_ADDRESS
             });
           } catch (e) {
-            console.warn("[Home] Failed to fetch Wrapped ETH balance:", e);
           }
         }
       }
@@ -332,16 +384,22 @@ function Home() {
 
       // --- IMMEDIATE RENDER ---
       // We render the tokens immediately with 0 price, then update later.
-      const initialDisplay = allBalances.map(tb => {
+      const nativeSym = net.currency_symbol || "ETH";
+      const nativeName = nativeSym === "ETH" ? "Ethereum" : nativeSym;
+      const initialDisplay: DisplayToken[] = allBalances.map(tb => {
         const cachedMeta = wallet_context.tokenCache.getToken(activeNetworkId, tb.contractAddress);
-        const sym = cachedMeta?.symbol ?? (tb.isNative ? "ETH" : "???");
+        const sym = cachedMeta?.symbol ?? (tb.isNative ? nativeSym : "???");
         return {
-          name: cachedMeta?.name ?? (tb.isNative ? "Ethereum" : "Unknown Token"),
+          name: cachedMeta?.name ?? (tb.isNative ? nativeName : "Unknown Token"),
           symbol: sym,
           logoSrc: getTokenLogoUrl(tb.contractAddress, cachedMeta?.logoSrc, sym),
           contractAddress: tb.contractAddress,
           decimals: cachedMeta?.decimals ?? 18,
-          isShielded: tb.isShielded ?? false
+          isShielded: ('isShielded' in tb) ? tb.isShielded : false,
+          isSpam: false,
+          isSuspicious: false,
+          isHidden: false,
+          spamScore: 0,
         };
       });
       setTokens(initialDisplay); // Show list instantly
@@ -350,51 +408,100 @@ function Home() {
       let currentPrices: Record<string, number> = {};
       try {
         currentPrices = await net.getTokenPrices(contractAddresses);
-      } catch (e) { console.warn("Price fetch skipped"); }
+      } catch (e) { /* silenced */ }
 
-      // Testnet price fallback: fetch mainnet ETH/USDC prices and map known testnet tokens by symbol if they lack a price
+      // Testnet & custom network price fallback: fetch mainnet prices and map known tokens by symbol
       if (activeNetworkId !== NetworkId.Ethereum_Mainnet) {
         try {
-          // Check if there are any balances missing prices
-          const unpriced = allBalances.some((tb: any) => {
-            const key = tb.isNative ? "ETH" : tb.contractAddress.toLowerCase();
-            return typeof currentPrices[key] !== 'number';
+          // Collect all token symbols we need to price
+          const allSymbols = new Set<string>();
+          allBalances.forEach((tb) => {
+            const meta = wallet_context.tokenCache.getToken(activeNetworkId, tb.contractAddress);
+            const sym = meta?.symbol ?? (tb.isNative ? nativeSym : "");
+            if (sym) allSymbols.add(sym.toUpperCase());
           });
 
-          if (unpriced) {
-            const ethRes = await fetch("/api/coingecko/simple/price?ids=ethereum,chainlink,usd-coin&vs_currencies=usd");
+          // Map of symbol → CoinGecko ID for well-known tokens
+          const symbolToCoinGeckoId: Record<string, string> = {
+            "ETH": "ethereum", "WETH": "ethereum", "cETH": "ethereum",
+            "BTC": "bitcoin", "WBTC": "wrapped-bitcoin", "tBTC": "bitcoin",
+            "USDC": "usd-coin", "cUSDC": "usd-coin", "wUSDC": "usd-coin",
+            "USDT": "tether",
+            "DAI": "dai",
+            "LINK": "chainlink",
+            "UNI": "uniswap",
+            "AAVE": "aave",
+            "ARB": "arbitrum",
+            "OP": "optimism",
+            "MATIC": "matic-network", "POL": "matic-network",
+            "SOL": "solana",
+            "AVAX": "avalanche-2",
+            "BNB": "binancecoin",
+            "EURC": "euro-coin",
+            "MKR": "maker",
+            "SNX": "havven",
+            "COMP": "compound-governance-token",
+            "CRV": "curve-dao-token",
+            "LDO": "lido-dao",
+            "PEPE": "pepe",
+            "SHIB": "shiba-inu",
+            "DOGE": "dogecoin",
+            "MON": "monad",  // Monad testnet
+          };
+
+          // Determine which CoinGecko IDs we need to fetch
+          const idsToFetch = new Set<string>();
+          allSymbols.forEach(sym => {
+            const cgId = symbolToCoinGeckoId[sym];
+            if (cgId) idsToFetch.add(cgId);
+          });
+
+          // Also add native token symbol mapping
+          const nativeSymUpper = nativeSym.toUpperCase();
+          if (symbolToCoinGeckoId[nativeSymUpper]) {
+            idsToFetch.add(symbolToCoinGeckoId[nativeSymUpper]);
+          }
+
+          // Always include ethereum for ETH-based networks
+          idsToFetch.add("ethereum");
+
+          if (idsToFetch.size > 0) {
+            const idsParam = Array.from(idsToFetch).join(",");
+            const ethRes = await fetch(`/api/coingecko/simple/price?ids=${idsParam}&vs_currencies=usd`);
             const ethJson = await ethRes.json();
-            const ethPrice = ethJson.ethereum?.usd ?? 0;
-            const linkPrice = ethJson.chainlink?.usd ?? 0;
-            const usdcPrice = ethJson["usd-coin"]?.usd ?? 1;
 
-            if (currentPrices["ETH"] === undefined) currentPrices["ETH"] = ethPrice;
+            // Build symbol → price map from CoinGecko response
+            const symbolPriceMap: Record<string, number> = {};
+            for (const [sym, cgId] of Object.entries(symbolToCoinGeckoId)) {
+              if (ethJson[cgId]?.usd !== undefined) {
+                symbolPriceMap[sym] = ethJson[cgId].usd;
+              }
+            }
 
-            const symbolPriceMap: Record<string, number> = {
-              "ETH": ethPrice,
-              "WETH": ethPrice,
-              "cETH": ethPrice,
-              "USDC": usdcPrice,
-              "cUSDC": usdcPrice,
-              "EURC": usdcPrice,
-              "wUSDC": usdcPrice,
-              "LINK": linkPrice,
-            };
+            // Set ETH price key for built-in networks
+            if (ethJson.ethereum?.usd && currentPrices["ETH"] === undefined) {
+              currentPrices["ETH"] = ethJson.ethereum.usd;
+            }
 
             // Apply prices by matching token symbol from cache ONLY if not already priced
-            allBalances.forEach((tb: any) => {
+            allBalances.forEach((tb) => {
               const meta = wallet_context.tokenCache.getToken(activeNetworkId, tb.contractAddress);
-              const symbol = meta?.symbol ?? (tb.isNative ? "ETH" : "");
+              const symbol = meta?.symbol ?? (tb.isNative ? nativeSym : "");
               const key = tb.contractAddress.toLowerCase();
+              const symUpper = symbol.toUpperCase();
 
-              if (currentPrices[key] === undefined && symbol && symbolPriceMap[symbol] !== undefined) {
-                currentPrices[key] = symbolPriceMap[symbol];
+              if (currentPrices[key] === undefined && symUpper && symbolPriceMap[symUpper] !== undefined) {
+                currentPrices[key] = symbolPriceMap[symUpper];
               }
             });
-            console.log("[Home] Testnet symbol price mapping applied:", currentPrices);
+
+            // Also set native price key by symbol for custom networks
+            if (net.isCustom && symbolPriceMap[nativeSymUpper] !== undefined) {
+              currentPrices[nativeSym] = symbolPriceMap[nativeSymUpper];
+            }
+
           }
         } catch (e) {
-          console.warn("[Home] Testnet price fallback failed:", e);
         }
       }
 
@@ -405,8 +512,20 @@ function Home() {
       const balanceMap: Record<string, any> = {};
 
       // Process public token balances
+      // For native token, use currency symbol as price key; for custom networks prices may not exist
+      const nativePriceKey = nativeSym;  // e.g. "ETH", "MON", "MATIC" etc.
       tokenBalances.forEach((tb) => {
-        const p = tb.isNative ? (currentPrices["ETH"] ?? 0) : (currentPrices[tb.contractAddress.toLowerCase()] ?? 0);
+        let p = 0;
+        if (tb.isNative) {
+          if (net.isCustom) {
+            // Custom networks: only use price if explicitly fetched for this symbol
+            p = currentPrices[nativePriceKey] ?? 0;
+          } else {
+            p = currentPrices["ETH"] ?? 0;
+          }
+        } else {
+          p = currentPrices[tb.contractAddress.toLowerCase()] ?? 0;
+        }
         const valUsd = parseFloat(tb.tokenBalance) * p;
         totalUsd += valUsd;
 
@@ -438,25 +557,52 @@ function Home() {
       setBalances(balanceMap);
       setTotalBalanceUsd(totalUsd);
 
-      // ── Store final display data in cache ──
-      const displayTokens: any[] = [];
+      // ── Spam Filter + Display Data ──
+      const spamFilter = wallet_context.spamFilter;
+      const displayTokens: DisplayToken[] = [];
 
-      Object.values(balanceMap).forEach((b: any) => {
+      Object.values(balanceMap).forEach((b) => {
         const lowerAddr = b.contractAddress.toLowerCase();
-        if (IGNORED_CONTRACTS.includes(lowerAddr)) return;
+        // Only apply IGNORED filter on Ethereum Sepolia (these are old broken contracts on Sepolia only)
+        if (activeNetworkId === NetworkId.Ethereum_Sepolia && IGNORED_CONTRACTS.includes(lowerAddr)) return;
 
-        // Tokens in balanceMap have already been filtered by Network.ts (either balance > 0 or explicitly cached)
         const meta = wallet_context.tokenCache.getToken(activeNetworkId, lowerAddr) ||
           wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress);
 
+        const tokenName = meta?.name ?? (b.isNative ? nativeName : "Token");
+        const tokenSymbol = meta?.symbol ?? (b.isNative ? nativeSym : "???");
+        const hasLogo = !!(meta?.logoSrc && meta.logoSrc.length > 0);
+
+        // Run spam check (skip native tokens)
+        const spamResult = (b.contractAddress !== "ETH" && b.contractAddress !== "NATIVE" && !b.isNative)
+          ? spamFilter.checkToken(activeNetworkId, b.contractAddress, tokenSymbol, tokenName, meta?.decimals ?? 18, hasLogo, b.isAlchemySpam ?? false)
+          : { isSpam: false, isSuspicious: false, isHidden: false, score: 0, reasons: [] };
+
         displayTokens.push({
-          name: meta?.name ?? (b.isNative ? "Ethereum" : "Token"),
-          symbol: meta?.symbol ?? (b.isNative ? "ETH" : "???"),
+          name: tokenName,
+          symbol: tokenSymbol,
           logoSrc: meta?.logoSrc ?? "",
           contractAddress: b.contractAddress,
           decimals: meta?.decimals ?? 18,
-          isShielded: b.isShielded ?? false
+          isShielded: b.isShielded ?? false,
+          isSpam: spamResult.isSpam,
+          isSuspicious: spamResult.isSuspicious,
+          isHidden: spamResult.isHidden,
+          spamScore: spamResult.score,
         });
+      });
+
+      // Mark all current contracts as "known" for next visit
+      const allContracts = displayTokens
+        .filter(t => t.contractAddress !== "ETH" && t.contractAddress !== "NATIVE")
+        .map(t => t.contractAddress);
+      spamFilter.markAllKnown(activeNetworkId, allContracts);
+
+      // Sort tokens by USD value (highest to lowest)
+      displayTokens.sort((a, b) => {
+        const valA = balanceMap[a.contractAddress]?.totalValueUsd ?? 0;
+        const valB = balanceMap[b.contractAddress]?.totalValueUsd ?? 0;
+        return valB - valA;
       });
 
       setTokens(displayTokens);
@@ -475,16 +621,17 @@ function Home() {
         );
         setNfts(nftWithBalances);
       } catch (err) {
-        console.warn("Failed to fetch custom NFT balances", err);
       }
 
       // ── Persist to cache for next mount ──
+      // Clear any previous error on successful fetch
+      setFetchError(null);
       if (dataCache) {
         const finalTokens = displayTokens.length > 0
           ? displayTokens.map(t => ({ ...t, isShielded: balanceMap[t.contractAddress]?.isShielded ?? false }))
-          : Object.values(balanceMap).map((b: any) => ({
-            name: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.name ?? (b.isNative ? "Ethereum" : "Token"),
-            symbol: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.symbol ?? (b.isNative ? "ETH" : "???"),
+          : Object.values(balanceMap).map((b) => ({
+            name: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.name ?? (b.isNative ? nativeName : "Token"),
+            symbol: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.symbol ?? (b.isNative ? nativeSym : "???"),
             logoSrc: wallet_context.tokenCache.getToken(activeNetworkId, b.contractAddress)?.logoSrc ?? "",
             contractAddress: b.contractAddress,
             decimals: 18,
@@ -496,17 +643,43 @@ function Home() {
           prices: currentPrices,
           totalUsd,
         });
-        console.log("[Home] Data cached for", address, activeNetworkId);
       }
 
     } catch (err) {
-      console.error("Error fetching data:", err);
+
+      // Classify the error and show a user-friendly toast
+      const classified = err instanceof NetworkError
+        ? err.classified
+        : classifyError(err);
+
+      const errorMsg = t(classified.i18nKey, { defaultValue: getErrorFallbackMessage(classified.type) });
+
+      setFetchError(errorMsg);
+
+      // Show toast with retry action for retryable errors
+      if (classified.retryable) {
+        showToast(errorMsg, "error", {
+          duration: 8000,
+          actionLabel: t("common.retry"),
+          onAction: () => {
+            setFetchError(null);
+            fetchData(true);
+          },
+          dedupeKey: "home-fetch-error",
+        });
+      } else {
+        showToast(errorMsg, "error", {
+          duration: 6000,
+          dedupeKey: "home-fetch-error",
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    setFetchError(null);
     fetchData();
   }, [active_context?.activeAccount, activeNetworkId]);
 
@@ -540,7 +713,7 @@ function Home() {
                   activeNetworkId === NetworkId.Arbitrum_Sepolia ? '#60a5fa' :
                     activeNetworkId === NetworkId.Base_Mainnet ? '#0052ff' :
                       activeNetworkId === NetworkId.Base_Sepolia ? '#93c5fd' :
-                        '#94a3b8',
+                        (wallet_context?.networkProvider?.getCustomNetworks()?.find(cn => cn.chainId === (activeNetworkId as number))?.iconColor) || '#404040',
             mr: 1
           }} />
           {activeNetwork?.network_name}
@@ -569,11 +742,22 @@ function Home() {
           <MenuItem onClick={() => handleNetworkClose(NetworkId.Base_Sepolia)}>
             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#93c5fd', mr: 1 }} /> Base Sepolia
           </MenuItem>
+          {/* Custom Networks */}
+          {(wallet_context?.networkProvider?.getCustomNetworks() ?? []).length > 0 && (
+            <Divider sx={{ my: 0.5 }} />
+          )}
+          {(wallet_context?.networkProvider?.getCustomNetworks() ?? []).map((cn) => (
+            <MenuItem key={cn.chainId} onClick={() => handleNetworkClose(cn.chainId as NetworkId)}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: cn.iconColor || '#404040', mr: 1 }} />
+              {cn.networkName}
+            </MenuItem>
+          ))}
         </Menu>
 
         <IconButton
-          onClick={() => fetchData(true)}
+          onClick={() => { setFetchError(null); fetchData(true); }}
           disabled={loading}
+          aria-label="Refresh balances"
           sx={{
             bgcolor: 'background.paper',
             ml: 1,
@@ -593,89 +777,268 @@ function Home() {
       {/* 1. Main Balance Card */}
       <Box sx={{ p: 3, pt: 2 }}>
         <Paper elevation={0} sx={{
-          p: 3,
-          borderRadius: 4,
-          background: 'linear-gradient(45deg, #6366f1 20%,  #fff 80%)',
-          color: 'white',
-          boxShadow: '0 20px 40px -10px rgba(50, 47, 113, 0.4)',
+          p: 0,
+          borderRadius: 5,
+          background: theme.palette.mode === 'dark'
+            ? 'linear-gradient(145deg, #0b1120 0%, #2563eb 35%, #172554 65%, #1d4ed8 100%)'
+            : 'linear-gradient(145deg, #dbeafe 0%, #bfdbfe 35%, #93c5fd 65%, #60a5fa 100%)',
+          color: theme.palette.mode === 'dark' ? '#eff6ff' : '#2563eb',
+          boxShadow: theme.palette.mode === 'dark'
+            ? '0 20px 60px -15px rgba(11, 17, 32, 0.7), 0 0 0 1px rgba(96, 165, 250, 0.06), inset 0 1px 0 rgba(239, 246, 255, 0.04)'
+            : '0 16px 48px -12px rgba(37, 99, 235, 0.2), 0 0 0 1px rgba(37, 99, 235, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           position: 'relative',
           overflow: 'hidden',
-          mb: 2
+          mb: 2,
+          border: 'none',
         }}>
-          <Typography variant="body2" sx={{ opacity: 0.8 }} gutterBottom>
-            Total Balance
-          </Typography>
+          {/* ── Animated mesh gradient overlay ────────────────── */}
+          <Box sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: theme.palette.mode === 'dark'
+              ? `
+                radial-gradient(ellipse 120% 80% at 20% 10%, rgba(72, 101, 129, 0.25) 0%, transparent 50%),
+                radial-gradient(ellipse 80% 120% at 80% 90%, rgba(51, 78, 104, 0.2) 0%, transparent 50%),
+                radial-gradient(circle at 60% 40%, rgba(59, 130, 246, 0.1) 0%, transparent 40%)
+              `
+              : `
+                radial-gradient(ellipse 120% 80% at 20% 10%, rgba(255, 255, 255, 0.35) 0%, transparent 50%),
+                radial-gradient(ellipse 80% 120% at 80% 90%, rgba(239, 246, 255, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 60% 40%, rgba(255, 255, 255, 0.15) 0%, transparent 40%)
+              `,
+            pointerEvents: 'none',
+            animation: 'meshShift 8s ease-in-out infinite alternate',
+            '@keyframes meshShift': {
+              '0%': { opacity: 0.6 },
+              '50%': { opacity: 1 },
+              '100%': { opacity: 0.7 },
+            },
+          }} />
 
-          {/* Balance with Matrix privacy toggle */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <MatrixBalance
-              value={`$${totalBalanceUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-              isHidden={isBalanceHidden}
-              variant="h3"
-            />
-            <Tooltip title={isBalanceHidden ? 'Show Balance' : 'Hide Balance'}>
-              <IconButton
-                size="small"
-                onClick={() => setIsBalanceHidden(!isBalanceHidden)}
+          {/* ── Subtle noise texture ─────────────────────────── */}
+          <Box sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            opacity: 0.03,
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+            pointerEvents: 'none',
+          }} />
+
+          {/* ── Top accent line ──────────────────────────────── */}
+          <Box sx={{
+            position: 'absolute',
+            top: 0,
+            left: '15%',
+            right: '15%',
+            height: '1px',
+            background: theme.palette.mode === 'dark'
+              ? 'linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent)'
+              : 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent)',
+          }} />
+
+          {/* ── Card content ─────────────────────────────────── */}
+          <Box sx={{ position: 'relative', zIndex: 2, p: 3, width: '100%', textAlign: 'center' }}>
+            {/* Total Balance label with subtle icon */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, mb: 1.5 }}>
+              <Box sx={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                bgcolor: theme.palette.mode === 'dark' ? '#3b82f6' : '#1e3a8a',
+                boxShadow: theme.palette.mode === 'dark'
+                  ? '0 0 8px rgba(59, 130, 246, 0.5)'
+                  : '0 0 8px rgba(72, 101, 129, 0.4)',
+                animation: 'pulse 3s ease-in-out infinite',
+                '@keyframes pulse': {
+                  '0%, 100%': { opacity: 0.5, transform: 'scale(1)' },
+                  '50%': { opacity: 1, transform: 'scale(1.3)' },
+                },
+              }} />
+              <Typography variant="body2" sx={{
+                color: theme.palette.mode === 'dark' ? '#93c5fd' : '#1e40af',
+                fontWeight: 600,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                fontSize: '0.7rem',
+              }}>
+                Total Balance
+              </Typography>
+            </Box>
+
+            {/* Balance with Matrix privacy toggle */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+              <MatrixBalance
+                value={`$${totalBalanceUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                isHidden={isBalanceHidden}
+                variant="h3"
+              />
+              <Tooltip title={isBalanceHidden ? t('home.showBalance') : t('home.hideBalance')}>
+                <IconButton
+                  size="small"
+                  onClick={() => setIsBalanceHidden(!isBalanceHidden)}
+                  aria-label={isBalanceHidden ? t('home.showBalance') : t('home.hideBalance')}
+                  sx={{
+                    color: theme.palette.mode === 'dark' ? '#3b82f6' : '#1e3a8a',
+                    transition: 'all 0.25s ease',
+                    '&:hover': {
+                      color: theme.palette.mode === 'dark' ? '#93c5fd' : '#1d4ed8',
+                      bgcolor: theme.palette.mode === 'dark' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(37, 99, 235, 0.08)',
+                    },
+                  }}
+                >
+                  {isBalanceHidden ? <Visibility fontSize="small" /> : <VisibilityOff fontSize="small" />}
+                </IconButton>
+              </Tooltip>
+            </Box>
+
+            {/* ── Separator line ─────────────────────────────── */}
+            <Box sx={{
+              mt: 2.5,
+              mb: 2,
+              mx: 'auto',
+              width: '60%',
+              height: '1px',
+              background: theme.palette.mode === 'dark'
+                ? 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.25), transparent)'
+                : 'linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.12), transparent)',
+            }} />
+
+            {/* Action Buttons */}
+            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1.5 }}>
+              <Button
+                variant="contained"
+                onClick={() => navigate('/portfolio')}
+                startIcon={<TrendingUp sx={{ fontSize: 16 }} />}
                 sx={{
-                  color: 'rgba(255,255,255,0.7)',
-                  transition: 'all 0.2s',
-                  '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.1)' }
+                  bgcolor: 'rgba(255, 255, 255, 0.12)',
+                  color: '#eff6ff',
+                  backdropFilter: 'blur(8px)',
+                  boxShadow: 'none',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: 3,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  px: 2.5,
+                  py: 0.8,
+                  transition: 'all 0.25s ease',
+                  '&:hover': {
+                    bgcolor: 'rgba(255, 255, 255, 0.2)',
+                    borderColor: 'rgba(255, 255, 255, 0.25)',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
+                    transform: 'translateY(-1px)',
+                  },
                 }}
               >
-                {isBalanceHidden ? <Visibility fontSize="small" /> : <VisibilityOff fontSize="small" />}
-              </IconButton>
-            </Tooltip>
+                Portfolio
+              </Button>
+              <Button
+                variant="contained"
+                onClick={() => navigate('/revoke')}
+                startIcon={<Shield sx={{ fontSize: 16 }} />}
+                sx={{
+                  bgcolor: 'rgba(255, 255, 255, 0.12)',
+                  color: '#eff6ff',
+                  backdropFilter: 'blur(8px)',
+                  boxShadow: 'none',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: 3,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  px: 2.5,
+                  py: 0.8,
+                  transition: 'all 0.25s ease',
+                  '&:hover': {
+                    bgcolor: 'rgba(255, 255, 255, 0.2)',
+                    borderColor: 'rgba(255, 255, 255, 0.25)',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
+                    transform: 'translateY(-1px)',
+                  },
+                }}
+              >
+                Revoke
+              </Button>
+            </Box>
           </Box>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, zIndex: 10 }}>
-            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)', fontWeight: 600, bgcolor: 'rgba(0,0,0,0.1)', px: 1.5, py: 0.5, borderRadius: 2 }}>
-              +2.45% (1D)
-            </Typography>
-          </Box>
-
-          {/* Action Buttons (Portfolio, Revoke) */}
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', mt: 3, gap: 1.5, zIndex: 10 }}>
-            <Button
-              variant="contained"
-              onClick={() => navigate('/portfolio')}
-              startIcon={<TrendingUp />}
-              sx={{
-                bgcolor: 'rgba(255,255,255,0.2)',
-                color: 'white',
-                backdropFilter: 'blur(10px)',
-                boxShadow: 'none',
-                borderRadius: 3,
-                textTransform: 'none',
-                fontWeight: 600,
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
-              }}
-            >
-              Portfolio
-            </Button>
-            <Button
-              variant="contained"
-              onClick={() => navigate('/revoke')}
-              startIcon={<Shield />}
-              sx={{
-                bgcolor: 'rgba(255,255,255,0.2)',
-                color: 'white',
-                backdropFilter: 'blur(10px)',
-                boxShadow: 'none',
-                borderRadius: 3,
-                textTransform: 'none',
-                fontWeight: 600,
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
-              }}
-            >
-              Revoke
-            </Button>
-          </Box>
+          {/* ── Bottom accent line ───────────────────────────── */}
+          <Box sx={{
+            position: 'absolute',
+            bottom: 0,
+            left: '25%',
+            right: '25%',
+            height: '1px',
+            background: theme.palette.mode === 'dark'
+              ? 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.15), transparent)'
+              : 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent)',
+          }} />
         </Paper>
       </Box>
+
+      {/* Backup Reminder Banner */}
+      {showBackupReminder && !showOnboarding && (
+        <BackupReminderBanner
+          onBackup={() => {
+            setShowBackupReminder(false);
+            dismissBackupReminder();
+            navigate('/settings/security');
+          }}
+          onDismiss={() => {
+            setShowBackupReminder(false);
+            dismissBackupReminder();
+          }}
+        />
+      )}
+
+      {/* Network Error Banner */}
+      {fetchError && !loading && (
+        <Box sx={{ px: 2, mb: 1 }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.error.main, 0.08),
+              border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+            }}
+          >
+            <WarningAmber sx={{ color: 'error.main', fontSize: 20 }} />
+            <Typography variant="body2" color="error.main" sx={{ flex: 1, fontWeight: 600, fontSize: '0.78rem' }}>
+              {fetchError}
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              onClick={() => { setFetchError(null); fetchData(true); }}
+              startIcon={<Refresh sx={{ fontSize: 14 }} />}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 700,
+                fontSize: '0.72rem',
+                minWidth: 'auto',
+                px: 1.5,
+              }}
+            >
+              {t("common.retry")}
+            </Button>
+          </Paper>
+        </Box>
+      )}
 
       {/* 3. Assets Tab List */}
       <Box sx={{ px: 2 }}>
@@ -692,10 +1055,10 @@ function Home() {
           <Tab
             label={
               <Stack direction="row" spacing={1} alignItems="center">
-                <span>Tokens</span>
-                {tokens.length > 0 && (
+                <span>{t('home.tokens')}</span>
+                {tokens.filter((t) => !t.isSpam && !t.isHidden).length > 0 && (
                   <Chip
-                    label={tokens.length}
+                    label={tokens.filter((t) => !t.isSpam && !t.isHidden).length}
                     size="small"
                     sx={{ height: 18, fontSize: '0.65rem', fontWeight: 800, bgcolor: 'action.hover', color: 'text.secondary' }}
                   />
@@ -703,59 +1066,120 @@ function Home() {
               </Stack>
             }
           />
-          <Tab label="NFTs" />
+          <Tab label={t('home.nfts')} />
         </Tabs>
 
         {tabIndex === 0 && (
           <Box>
-            {tokens.map((token: any, idx: number) => {
-              const b = balances[token.contractAddress];
-              const rawBalance = b ? parseFloat(b.tokenBalance) : 0;
-              const balanceStr = rawBalance > 0
-                ? (rawBalance < 0.0001 ? '<0.0001' : rawBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }))
-                : '0';
-              const valUsd = b?.totalValueUsd ?? 0;
-              const valStr = valUsd > 0 ? `$${valUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00';
+            {(() => {
+              const visibleTokens = tokens.filter((t) => !t.isSpam && !t.isHidden);
+              const hiddenTokens = tokens.filter((t) => t.isSpam || t.isHidden);
+              const displayList = showHiddenTokens ? tokens : visibleTokens;
 
               return (
-                <AssetItem
-                  key={`${token.contractAddress}-${idx}`}
-                  symbol={token.symbol}
-                  name={token.name}
-                  balance={isBalanceHidden ? '•••••' : balanceStr}
-                  value={isBalanceHidden ? '$•••••' : valStr}
-                  icon={getTokenLogoUrl(token.contractAddress, token.logoSrc, token.symbol, token.name)}
-                  isShielded={token.isShielded ?? false}
-                  isLast={idx === tokens.length - 1}
-                />
+                <>
+                  {displayList.map((token, idx: number) => {
+                    const b = balances[token.contractAddress];
+                    const rawBalance = b ? parseFloat(b.tokenBalance) : 0;
+                    const balanceStr = rawBalance > 0
+                      ? (rawBalance < 0.0001 ? '<0.0001' : rawBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }))
+                      : '0';
+                    const valUsd = b?.totalValueUsd ?? 0;
+                    const valStr = valUsd > 0 ? `$${valUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00';
+
+                    return (
+                      <AssetItem
+                        key={`${token.contractAddress}-${idx}`}
+                        symbol={token.symbol}
+                        name={token.name}
+                        balance={isBalanceHidden ? '•••••' : balanceStr}
+                        value={isBalanceHidden ? '$•••••' : valStr}
+                        icon={getTokenLogoUrl(token.contractAddress, token.logoSrc, token.symbol, token.name)}
+                        isShielded={token.isShielded ?? false}
+                        isLast={idx === displayList.length - 1}
+                        isSuspicious={token.isSuspicious ?? false}
+                        isSpamHidden={token.isSpam || token.isHidden}
+                        onClick={() => navigate(`/token/${encodeURIComponent(token.contractAddress)}`)}
+                        onToggleHide={() => {
+                          if (!wallet_context) return;
+                          const sf = wallet_context.spamFilter;
+                          const addr = token.contractAddress.toLowerCase();
+                          if (sf.isTokenHidden(activeNetworkId, addr)) {
+                            sf.unhideToken(activeNetworkId, addr);
+                          } else {
+                            sf.hideToken(activeNetworkId, addr);
+                          }
+                          // Update token in state
+                          setTokens((prev) => prev.map(t =>
+                            t.contractAddress === token.contractAddress
+                              ? { ...t, isHidden: !t.isHidden, isSpam: false }
+                              : t
+                          ));
+                        }}
+                      />
+                    );
+                  })}
+                  {visibleTokens.length === 0 && loading && (
+                    <TokenListSkeleton rows={5} />
+                  )}
+                  {visibleTokens.length === 0 && !loading && (
+                    <Box sx={{
+                      textAlign: 'center',
+                      py: 6,
+                      px: 3,
+                      bgcolor: 'background.paper',
+                      borderRadius: 3,
+                      border: '1px dashed',
+                      borderColor: 'divider'
+                    }}>
+                      <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                        {t('home.noAssets')}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* Hidden token toggle */}
+                  {hiddenTokens.length > 0 && (
+                    <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center' }}>
+                      <Button
+                        variant="text"
+                        size="small"
+                        color="warning"
+                        startIcon={showHiddenTokens ? <VisibilityOff /> : <VisibilityOffOutlined />}
+                        onClick={() => setShowHiddenTokens(!showHiddenTokens)}
+                        sx={{ fontWeight: 600, fontSize: '0.75rem', textTransform: 'none' }}
+                      >
+                        {showHiddenTokens ? t('home.hideSpamTokens') : t('home.hiddenSpamCount', { count: hiddenTokens.length })}
+                      </Button>
+                    </Box>
+                  )}
+                </>
               );
-            })}
-            {tokens.length === 0 && !loading && (
-              <Box sx={{
-                textAlign: 'center',
-                py: 6,
-                px: 3,
-                bgcolor: 'background.paper',
-                borderRadius: 3,
-                border: '1px dashed',
-                borderColor: 'divider'
-              }}>
-                <Typography variant="body2" color="text.secondary" fontWeight={500}>
-                  No assets found on this network
-                </Typography>
-              </Box>
-            )}
+            })()}
 
             {/* Tokens Tab Footer */}
             <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
               <Button
-                variant="text"
-                color="primary"
+                variant="outlined"
                 startIcon={<Add />}
                 onClick={() => setImportTokenModalOpen(true)}
-                sx={{ fontWeight: 600, px: 3, py: 1 }}
+                sx={{
+                  fontWeight: 600,
+                  px: 3,
+                  py: 1,
+                  borderRadius: 3,
+                  fontSize: '0.8rem',
+                  textTransform: 'none',
+                  borderColor: 'divider',
+                  color: 'text.secondary',
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    color: 'primary.main',
+                    bgcolor: theme.palette.mode === 'dark' ? 'rgba(96,165,250,0.04)' : 'rgba(37,99,235,0.03)',
+                  },
+                }}
               >
-                Import Custom Token
+                {t('home.importCustomToken')}
               </Button>
             </Box>
           </Box>
@@ -772,7 +1196,7 @@ function Home() {
                   pb: 2,
                 }}
               >
-                {nfts.map((nft: any, idx: number) => (
+                {nfts.map((nft, idx: number) => (
                   <NftGalleryCard
                     key={`${nft.contractAddress}-${idx}`}
                     contractAddress={nft.contractAddress}
@@ -784,15 +1208,17 @@ function Home() {
                   />
                 ))}
               </Box>
-            ) : !loading ? (
+            ) : loading ? (
+              <NftGridSkeleton count={4} />
+            ) : (
               <Box sx={{
                 textAlign: 'center',
                 py: 8,
                 px: 3,
-                bgcolor: 'background.paper',
                 borderRadius: 3,
-                border: '1px dashed',
-                borderColor: 'divider',
+                background: theme.palette.mode === 'dark'
+                  ? 'linear-gradient(135deg, rgba(17,29,43,0.5) 0%, rgba(26,47,69,0.3) 100%)'
+                  : 'linear-gradient(135deg, rgba(239,246,255,0.8) 0%, rgba(217,226,236,0.4) 100%)',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
@@ -800,30 +1226,45 @@ function Home() {
               }}>
                 <Box sx={{
                   width: 64, height: 64, borderRadius: 4,
-                  background: 'linear-gradient(45deg, #f3f4f6, #e5e7eb)',
+                  background: theme.palette.mode === 'dark'
+                    ? 'linear-gradient(45deg, #172554, #1d4ed8)'
+                    : 'linear-gradient(45deg, #dbeafe, #bfdbfe)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   mb: 1
                 }}>
                   <Hub sx={{ color: 'text.disabled', fontSize: 32 }} />
                 </Box>
                 <Typography variant="subtitle1" color="text.primary" fontWeight={700}>
-                  No NFTs Found
+                  {t('home.noNftsTitle')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Your digital collectibles will appear here.
+                  {t('home.noNftsDesc')}
                 </Typography>
               </Box>
-            ) : null}
+            )}
 
             <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
               <Button
                 variant="outlined"
-                color="secondary"
                 startIcon={<Add />}
                 onClick={() => setImportNftModalOpen(true)}
-                sx={{ fontWeight: 600, px: 3, py: 1, borderRadius: 2 }}
+                sx={{
+                  fontWeight: 600,
+                  px: 3,
+                  py: 1,
+                  borderRadius: 3,
+                  fontSize: '0.8rem',
+                  textTransform: 'none',
+                  borderColor: 'divider',
+                  color: 'text.secondary',
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    color: 'primary.main',
+                    bgcolor: theme.palette.mode === 'dark' ? 'rgba(96,165,250,0.04)' : 'rgba(37,99,235,0.03)',
+                  },
+                }}
               >
-                Import Custom NFT
+                {t('home.importCustomNft')}
               </Button>
             </Box>
           </Box>
@@ -840,24 +1281,36 @@ function Home() {
         onClose={() => setImportNftModalOpen(false)}
         onImportSuccess={fetchData}
       />
+
+      {/* Onboarding Tour (first-time users) */}
+      <OnboardingTour
+        open={showOnboarding}
+        onClose={() => setShowOnboarding(false)}
+      />
     </Box>
   );
 }
 
-function AssetItem({ symbol, name, balance, value, icon, isShielded = false, isLast = false }: {
+function AssetItem({ symbol, name, balance, value, icon, isShielded = false, isLast = false, isSuspicious = false, isSpamHidden = false, onToggleHide, onClick }: {
   symbol: string,
   name: string,
   balance: string,
   value: string,
   icon: string,
   isShielded?: boolean,
-  isLast?: boolean
+  isLast?: boolean,
+  isSuspicious?: boolean,
+  isSpamHidden?: boolean,
+  onToggleHide?: () => void,
+  onClick?: () => void,
 }) {
+  const { t } = useTranslation();
   const [imgError, setImgError] = useState(false);
   const fallbackColor = stringToColor(symbol || name);
 
   return (
     <Box
+      onClick={onClick}
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -865,10 +1318,11 @@ function AssetItem({ symbol, name, balance, value, icon, isShielded = false, isL
         px: 2,
         py: 1.5,
         borderRadius: 2.5,
-        cursor: 'default',
-        transition: 'background-color 0.15s ease',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'background-color 0.15s ease, opacity 0.2s ease',
+        opacity: isSpamHidden ? 0.45 : 1,
         '&:hover': {
-          bgcolor: 'rgba(99, 102, 241, 0.04)',
+          bgcolor: 'rgba(37, 99, 235, 0.03)',
         },
         ...(!isLast && {
           borderBottom: '1px solid',
@@ -925,7 +1379,7 @@ function AssetItem({ symbol, name, balance, value, icon, isShielded = false, isL
           </Typography>
           {isShielded && (
             <Chip
-              label="Private"
+              label={t('home.private')}
               size="small"
               sx={{
                 height: 18,
@@ -934,6 +1388,36 @@ function AssetItem({ symbol, name, balance, value, icon, isShielded = false, isL
                 bgcolor: 'rgba(16, 185, 129, 0.12)',
                 color: '#10b981',
                 '& .MuiChip-label': { px: 0.75 },
+              }}
+            />
+          )}
+          {isSuspicious && !isSpamHidden && (
+            <Chip
+              icon={<WarningAmber sx={{ fontSize: '0.7rem !important' }} />}
+              label={t('home.suspicious')}
+              size="small"
+              sx={{
+                height: 18,
+                fontSize: '0.58rem',
+                fontWeight: 700,
+                bgcolor: 'rgba(245, 158, 11, 0.12)',
+                color: '#f59e0b',
+                '& .MuiChip-label': { px: 0.5 },
+                '& .MuiChip-icon': { color: '#f59e0b', ml: 0.3 },
+              }}
+            />
+          )}
+          {isSpamHidden && (
+            <Chip
+              label={t('home.spam')}
+              size="small"
+              sx={{
+                height: 18,
+                fontSize: '0.58rem',
+                fontWeight: 700,
+                bgcolor: 'rgba(239, 68, 68, 0.12)',
+                color: '#ef4444',
+                '& .MuiChip-label': { px: 0.5 },
               }}
             />
           )}
@@ -958,7 +1442,7 @@ function AssetItem({ symbol, name, balance, value, icon, isShielded = false, isL
       <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
         <Typography
           variant="body2"
-          sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em', lineHeight: 1.3 }}
+          sx={{ fontWeight: 700, color: isSpamHidden ? 'text.disabled' : 'text.primary', letterSpacing: '-0.01em', lineHeight: 1.3 }}
         >
           {value}
         </Typography>
@@ -973,6 +1457,27 @@ function AssetItem({ symbol, name, balance, value, icon, isShielded = false, isL
           {balance} {symbol}
         </Typography>
       </Box>
+
+      {/* Hide/Unhide Toggle */}
+      {onToggleHide && (
+        <Tooltip title={isSpamHidden ? "Show token" : "Hide token"} arrow>
+          <IconButton
+            size="small"
+            onClick={(e) => { e.stopPropagation(); onToggleHide(); }}
+            aria-label={isSpamHidden ? "Show token" : "Hide token"}
+            sx={{
+              ml: 0.5,
+              flexShrink: 0,
+              width: 28,
+              height: 28,
+              color: isSpamHidden ? 'text.disabled' : 'text.secondary',
+              '&:hover': { color: 'warning.main' },
+            }}
+          >
+            {isSpamHidden ? <Visibility sx={{ fontSize: 16 }} /> : <VisibilityOffOutlined sx={{ fontSize: 16 }} />}
+          </IconButton>
+        </Tooltip>
+      )}
     </Box>
   );
 }

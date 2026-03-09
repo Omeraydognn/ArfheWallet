@@ -13,7 +13,7 @@ interface ImportNftModalProps {
 export default function ImportNftModal({ open, onClose, onImportSuccess }: ImportNftModalProps) {
     const [address, setAddress] = useState('');
     const [loading, setLoading] = useState(false);
-    const [nftInfo, setNftInfo] = useState<any>(null);
+    const [nftInfo, setNftInfo] = useState<{ name: string; symbol: string; contractAddress: string; imageUrl?: string } | null>(null);
     const [error, setError] = useState('');
 
     const wallet_context = React.useContext(WalletContext);
@@ -56,7 +56,7 @@ export default function ImportNftModal({ open, onClose, onImportSuccess }: Impor
     const handleImport = () => {
         if (nftInfo && wallet_context) {
             const net = wallet_context.networkProvider.getActiveNetwork();
-            wallet_context.nftCache.setNFT(net.network_id, nftInfo);
+            wallet_context.nftCache.setNFT(net.network_id, { ...nftInfo, logoSrc: nftInfo.imageUrl ?? '' });
 
             onImportSuccess();
             onClose();
@@ -64,7 +64,7 @@ export default function ImportNftModal({ open, onClose, onImportSuccess }: Impor
     };
 
     return (
-        <Modal open={open} onClose={onClose} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Modal open={open} onClose={onClose} aria-labelledby="import-nft-title" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Box sx={{
                 bgcolor: 'background.paper',
                 borderRadius: 4,
@@ -74,7 +74,7 @@ export default function ImportNftModal({ open, onClose, onImportSuccess }: Impor
                 boxShadow: '0 24px 48px rgba(0,0,0,0.2)',
                 position: 'relative'
             }}>
-                <IconButton sx={{ position: 'absolute', top: 12, right: 12 }} onClick={onClose}>
+                <IconButton sx={{ position: 'absolute', top: 12, right: 12 }} onClick={onClose} aria-label="Close import NFT">
                     <Close />
                 </IconButton>
 
@@ -82,7 +82,7 @@ export default function ImportNftModal({ open, onClose, onImportSuccess }: Impor
                     <Box sx={{ p: 1, bgcolor: 'secondary.main', borderRadius: 2, color: 'white', display: 'flex' }}>
                         <Collections />
                     </Box>
-                    <Typography variant="h6" fontWeight="700">Import NFT</Typography>
+                    <Typography id="import-nft-title" variant="h6" fontWeight="700">Import NFT</Typography>
                 </Box>
 
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

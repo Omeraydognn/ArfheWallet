@@ -69,9 +69,8 @@ const GraphExplorer = () => {
       try {
         const data = await net.explorerService.fetchGraphData(targetAddress);
         setGraphData(data);
-      } catch (e: any) {
-        console.error("Graph fetch failed", e);
-        setError(e.message);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
       } finally {
         setLoading(false);
       }
@@ -93,7 +92,7 @@ const GraphExplorer = () => {
   const getNodeColor = (n: GraphNode) => {
     if (n.id.toLowerCase() === targetAddress?.toLowerCase()) return '#2563eb'; // Center: Blue
     if (n.type === 'exchange') return '#ea580c'; // Exchange: Orange
-    return theme.palette.mode === 'dark' ? '#94a3b8' : '#334155'; // Slate 400 (Dark) / Slate 700 (Light)
+    return theme.palette.mode === 'dark' ? '#93c5fd' : '#1e40af'; // Cool 300 (Dark) / Cool 700 (Light)
   };
 
   // Helper: Edge Color (Green for Incoming, Red for Outgoing)
@@ -188,9 +187,9 @@ const GraphExplorer = () => {
           selector: ':selected',
           style: {
             'border-width': 4,
-            'border-color': '#4f46e5', // Indigo Highlight
-            'line-color': '#4f46e5',
-            'target-arrow-color': '#4f46e5',
+            'border-color': '#2563eb', // Cool accent
+            'line-color': '#2563eb',
+            'target-arrow-color': '#2563eb',
             'z-index': 999,
             'opacity': 1
           }
@@ -285,238 +284,437 @@ const GraphExplorer = () => {
 
   return (
     <Box sx={{
-      height: '100dvh', // Dynamic Viewport Height for mobile bounds
+      height: '100dvh',
       width: '100vw',
       overflow: 'hidden',
       bgcolor: 'background.default',
-      position: 'relative'
+      position: 'relative',
     }}>
 
-      {/* Search Header */}
+      {/* ── Gradient Header Bar ────────────────────────────── */}
       <Box sx={{
         position: 'absolute',
-        top: 30,
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 100,
+        background: theme.palette.mode === 'dark'
+          ? 'linear-gradient(180deg, rgba(11,17,32,0.95) 0%, transparent 100%)'
+          : 'linear-gradient(180deg, rgba(239,246,255,0.95) 0%, transparent 100%)',
+        zIndex: 40,
+        pointerEvents: 'none',
+      }} />
+
+      {/* ── Search Header ──────────────────────────────────── */}
+      <Box sx={{
+        position: 'absolute',
+        top: 16,
         left: '50%',
         transform: 'translateX(-50%)',
-        width: '90%',
-        maxWidth: 600,
+        width: '92%',
+        maxWidth: 420,
         zIndex: 50,
         display: 'flex',
-        justifyContent: 'center'
+        justifyContent: 'center',
       }}>
-        <Paper elevation={4} sx={{
-          p: '2px 4px',
+        <Paper elevation={0} sx={{
+          p: '4px 6px',
           display: 'flex',
           alignItems: 'center',
           width: '100%',
-          borderRadius: 50,
-          bgcolor: alpha(theme.palette.background.paper, 0.85),
-          backdropFilter: 'blur(20px)',
+          borderRadius: 4,
+          bgcolor: alpha(theme.palette.background.paper, 0.88),
+          backdropFilter: 'blur(24px)',
           border: '1px solid',
-          borderColor: 'divider',
+          borderColor: theme.palette.mode === 'dark'
+            ? 'rgba(96,165,250,0.08)'
+            : 'rgba(37,99,235,0.08)',
+          boxShadow: theme.palette.mode === 'dark'
+            ? '0 8px 32px rgba(11,17,32,0.4)'
+            : '0 8px 32px rgba(37,99,235,0.08)',
+          transition: 'all 0.3s ease',
+          '&:focus-within': {
+            borderColor: theme.palette.mode === 'dark'
+              ? 'rgba(96,165,250,0.2)'
+              : 'rgba(37,99,235,0.15)',
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 8px 32px rgba(11,17,32,0.5), 0 0 0 2px rgba(59,130,246,0.1)'
+              : '0 8px 32px rgba(37,99,235,0.12), 0 0 0 2px rgba(37,99,235,0.06)',
+          },
         }}>
-          <InputAdornment position="start" sx={{ pl: 2 }}>
-            <Search sx={{ color: 'text.secondary' }} />
+          <InputAdornment position="start" sx={{ pl: 1.5 }}>
+            <Search sx={{ color: 'text.secondary', fontSize: 20 }} />
           </InputAdornment>
           <TextField
-            sx={{ ml: 1, flex: 1 }}
-            placeholder="Search Wallet Address (0x...)"
+            sx={{ ml: 0.5, flex: 1, '& input': { fontSize: '0.82rem', py: 0.8 } }}
+            placeholder="Wallet address (0x...)"
             variant="standard"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={onKeyDown}
             InputProps={{ disableUnderline: true }}
           />
-          <IconButton sx={{ p: '10px', color: 'primary.main' }} onClick={handleSearch}>
-            <YoutubeSearchedFor />
+          <IconButton
+            size="small"
+            sx={{
+              p: '8px',
+              color: 'primary.main',
+              bgcolor: alpha(theme.palette.primary.main, 0.06),
+              borderRadius: 2,
+              transition: 'all 0.2s',
+              '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.12) },
+            }}
+            onClick={handleSearch}
+            aria-label="Search address"
+          >
+            <YoutubeSearchedFor sx={{ fontSize: 20 }} />
           </IconButton>
         </Paper>
       </Box>
 
-      {/* Loading */}
+      {/* ── Loading Overlay ────────────────────────────────── */}
       {loading && (
         <Box sx={{
           position: 'absolute', inset: 0, zIndex: 10,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)',
-          backdropFilter: 'blur(4px)'
+          bgcolor: theme.palette.mode === 'dark' ? 'rgba(11,17,32,0.8)' : 'rgba(239,246,255,0.8)',
+          backdropFilter: 'blur(8px)',
         }}>
-          <CircularProgress />
-          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 2 }}>Visualizing Network...</Typography>
+          <Box sx={{
+            width: 64, height: 64, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            bgcolor: alpha(theme.palette.primary.main, 0.06),
+            border: '2px solid',
+            borderColor: alpha(theme.palette.primary.main, 0.15),
+            mb: 2,
+          }}>
+            <CircularProgress size={28} sx={{ color: 'primary.main' }} />
+          </Box>
+          <Typography variant="body2" sx={{
+            color: 'text.secondary',
+            fontWeight: 600,
+            letterSpacing: '0.02em',
+          }}>
+            Analyzing network...
+          </Typography>
         </Box>
       )}
 
-      {/* Error */}
+      {/* ── Error Chip ─────────────────────────────────────── */}
       {error && !loading && (
         <Box sx={{
-          position: 'absolute', top: 100, left: 0, right: 0, zIndex: 20,
-          display: 'flex', justifyContent: 'center'
+          position: 'absolute', top: 76, left: 0, right: 0, zIndex: 20,
+          display: 'flex', justifyContent: 'center', px: 2,
         }}>
           <Chip
             label={error}
             color="error"
             onDelete={() => setError("")}
-            sx={{ fontWeight: 'bold' }}
+            sx={{ fontWeight: 600, fontSize: '0.75rem', borderRadius: 2 }}
           />
         </Box>
       )}
 
-      {/* Graph Area */}
+      {/* ── Graph Canvas ───────────────────────────────────── */}
       <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 1 }} />
 
-      {/* Controls */}
-      <Box sx={{ position: 'absolute', bottom: 120, right: 20, display: 'flex', flexDirection: 'column', gap: 1, zIndex: 20 }}>
-        <IconButton
-          onClick={() => cyRef.current?.zoom(cyRef.current.zoom() * 1.2)}
-          sx={{ bgcolor: 'background.paper', boxShadow: 2, '&:hover': { bgcolor: 'action.hover' } }}
-        >
-          <ZoomIn color="action" />
-        </IconButton>
-        <IconButton
-          onClick={() => cyRef.current?.zoom(cyRef.current.zoom() * 0.8)}
-          sx={{ bgcolor: 'background.paper', boxShadow: 2, '&:hover': { bgcolor: 'action.hover' } }}
-        >
-          <ZoomOut color="action" />
-        </IconButton>
-        <IconButton
-          onClick={() => cyRef.current?.fit()}
-          sx={{ bgcolor: 'background.paper', boxShadow: 2, '&:hover': { bgcolor: 'action.hover' } }}
-        >
-          <Hub color="primary" />
-        </IconButton>
+      {/* ── Floating Controls ──────────────────────────────── */}
+      <Box sx={{
+        position: 'absolute',
+        bottom: 96,
+        right: 16,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0.75,
+        zIndex: 20,
+      }}>
+        {[
+          { icon: <ZoomIn sx={{ fontSize: 20 }} />, action: () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2), label: "Zoom in" },
+          { icon: <ZoomOut sx={{ fontSize: 20 }} />, action: () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8), label: "Zoom out" },
+          { icon: <Hub sx={{ fontSize: 20, color: 'primary.main' }} />, action: () => cyRef.current?.fit(), label: "Fit to view" },
+        ].map((ctrl, i) => (
+          <IconButton
+            key={i}
+            onClick={ctrl.action}
+            aria-label={ctrl.label}
+            sx={{
+              width: 40,
+              height: 40,
+              bgcolor: alpha(theme.palette.background.paper, 0.9),
+              backdropFilter: 'blur(12px)',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2.5,
+              boxShadow: theme.palette.mode === 'dark'
+                ? '0 4px 16px rgba(11,17,32,0.4)'
+                : '0 4px 16px rgba(37,99,235,0.08)',
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                transform: 'scale(1.08)',
+                bgcolor: 'background.paper',
+                boxShadow: theme.palette.mode === 'dark'
+                  ? '0 6px 20px rgba(11,17,32,0.5)'
+                  : '0 6px 20px rgba(37,99,235,0.12)',
+              },
+            }}
+          >
+            {ctrl.icon}
+          </IconButton>
+        ))}
       </Box>
 
-      {/* Legend */}
-      <Box sx={{ position: 'absolute', bottom: 120, left: 20, zIndex: 20, pointerEvents: 'none' }}>
-        <Paper elevation={3} sx={{
-          p: 2,
-          borderRadius: 4,
-          bgcolor: alpha(theme.palette.background.paper, 0.85),
+      {/* ── Legend ─────────────────────────────────────────── */}
+      <Box sx={{
+        position: 'absolute',
+        bottom: 96,
+        left: 16,
+        zIndex: 20,
+        pointerEvents: 'none',
+      }}>
+        <Paper elevation={0} sx={{
+          p: 1.5,
+          borderRadius: 3,
+          bgcolor: alpha(theme.palette.background.paper, 0.88),
           backdropFilter: 'blur(20px)',
           border: '1px solid',
           borderColor: 'divider',
-          display: { xs: 'none', md: 'block' }
+          minWidth: 110,
         }}>
-          <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mb: 1, display: 'block' }}>FLOW LEGEND</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-            <Box sx={{ w: 20, h: 4, bgcolor: '#059669', borderRadius: 2 }} />
-            <Typography variant="caption" fontWeight={600}>Inflow (Green)</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Box sx={{ w: 20, h: 4, bgcolor: '#dc2626', borderRadius: 2 }} />
-            <Typography variant="caption" fontWeight={600}>Outflow (Red)</Typography>
+          <Typography variant="caption" sx={{
+            fontWeight: 800,
+            color: 'text.secondary',
+            mb: 1,
+            display: 'block',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            fontSize: '0.6rem',
+          }}>
+            Flow Legend
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ width: 16, height: 3, bgcolor: '#059669', borderRadius: 1 }} />
+              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.65rem', color: 'text.secondary' }}>
+                Inflow
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ width: 16, height: 3, bgcolor: '#dc2626', borderRadius: 1 }} />
+              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.65rem', color: 'text.secondary' }}>
+                Outflow
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ width: 10, height: 10, bgcolor: '#2563eb', borderRadius: '50%' }} />
+              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.65rem', color: 'text.secondary' }}>
+                Target
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{
+                width: 10, height: 10,
+                bgcolor: '#ea580c',
+                borderRadius: 0.5,
+                transform: 'rotate(45deg)',
+              }} />
+              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.65rem', color: 'text.secondary' }}>
+                Exchange
+              </Typography>
+            </Box>
           </Box>
         </Paper>
       </Box>
 
-      {/* Details Panel */}
+      {/* ── Details Panel ──────────────────────────────────── */}
       <Slide direction="up" in={!!selectedNode || !!selectedEdge} mountOnEnter unmountOnExit>
         <Paper sx={{
           position: 'absolute',
-          bottom: 200, // Safe distance from bottom bar (approx 80px)
-          left: 16, // Use side margins for floating card look
-          right: 16,
-          maxHeight: '40vh', // Reduce max height to ensure it fits on small screens without pushing top
+          bottom: 96,
+          left: 12,
+          right: 12,
+          maxHeight: '38vh',
           overflowY: 'auto',
-          p: 3,
-          borderRadius: 4, // More rounded
-          boxShadow: '0 8px 32px rgba(0,0,0,0.2)', // Stronger shadow for floating effect
-          zIndex: 100, // Ensure it's above everything else
-          bgcolor: alpha(theme.palette.background.paper, 0.85),
-          backdropFilter: 'blur(20px)',
+          p: 0,
+          borderRadius: 4,
+          boxShadow: theme.palette.mode === 'dark'
+            ? '0 -4px 40px rgba(11,17,32,0.5)'
+            : '0 -4px 40px rgba(37,99,235,0.1)',
+          zIndex: 100,
+          bgcolor: alpha(theme.palette.background.paper, 0.92),
+          backdropFilter: 'blur(24px)',
           border: '1px solid',
           borderColor: 'divider',
-          backgroundImage: 'none', // Override if needed
+          backgroundImage: 'none',
         }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              {selectedNode ? <Hub color="primary" sx={{ fontSize: 32 }} /> : <SwapHoriz color="success" sx={{ fontSize: 32 }} />}
+          {/* Panel header */}
+          <Box sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            px: 2.5,
+            py: 1.5,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box sx={{
+                width: 36,
+                height: 36,
+                borderRadius: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: selectedNode
+                  ? alpha(theme.palette.primary.main, 0.08)
+                  : alpha('#059669', 0.08),
+              }}>
+                {selectedNode
+                  ? <Hub sx={{ fontSize: 20, color: 'primary.main' }} />
+                  : <SwapHoriz sx={{ fontSize: 20, color: '#059669' }} />}
+              </Box>
               <Box>
-                <Typography variant="h6" fontWeight={700} color="text.primary">
-                  {selectedNode ? "Wallet Details" : "Transaction Details"}
+                <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: '0.85rem', lineHeight: 1.2 }}>
+                  {selectedNode ? "Wallet Details" : "Transaction"}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', fontWeight: 600 }}>
                   {selectedNode ? selectedNode.type.toUpperCase() : "TRANSFER"}
                 </Typography>
               </Box>
             </Box>
-            <IconButton onClick={handleClosePanel}><Clear /></IconButton>
+            <IconButton
+              onClick={handleClosePanel}
+              size="small"
+              aria-label="Close details panel"
+              sx={{
+                bgcolor: alpha(theme.palette.text.primary, 0.04),
+                borderRadius: 1.5,
+                '&:hover': { bgcolor: alpha(theme.palette.text.primary, 0.08) },
+              }}
+            >
+              <Clear sx={{ fontSize: 18 }} />
+            </IconButton>
           </Box>
 
-          <Grid container spacing={2}>
-            {selectedNode && (
-              <>
-                <Grid item xs={12} sm={6}>
-                  <DataCard label="Address" value={selectedNode.id} copyable />
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <DataCard label="Label" value={selectedNode.label} />
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <Button
-                    variant="contained"
-                    fullWidth
-                    size="large"
-                    disableElevation
-                    onClick={() => {
-                      setTargetAddress(selectedNode.id);
-                      setSearchInput(selectedNode.id);
-                      handleClosePanel();
-                    }}
-                  >
-                    Visualize
-                  </Button>
-                </Grid>
-              </>
-            )}
+          {/* Panel body */}
+          <Box sx={{ p: 2.5 }}>
+            <Grid container spacing={1.5}>
+              {selectedNode && (
+                <>
+                  <Grid size={{ xs: 12 }}>
+                    <DataCard label="Address" value={selectedNode.id} copyable />
+                  </Grid>
+                  <Grid size={{ xs: 6 }}>
+                    <DataCard label="Label" value={selectedNode.label} />
+                  </Grid>
+                  <Grid size={{ xs: 6 }}>
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      disableElevation
+                      onClick={() => {
+                        setTargetAddress(selectedNode.id);
+                        setSearchInput(selectedNode.id);
+                        handleClosePanel();
+                      }}
+                      sx={{
+                        height: '100%',
+                        borderRadius: 2.5,
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        textTransform: 'none',
+                        background: theme.palette.mode === 'dark'
+                          ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
+                          : 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
+                        color: '#eff6ff',
+                        '&:hover': {
+                          background: theme.palette.mode === 'dark'
+                            ? 'linear-gradient(135deg, #172554 0%, #1e40af 100%)'
+                            : 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)',
+                        },
+                      }}
+                    >
+                      Visualize
+                    </Button>
+                  </Grid>
+                </>
+              )}
 
-            {selectedEdge && (
-              <>
-                <Grid item xs={12} sm={5}>
-                  <DataCard label="Tx Hash" value={selectedEdge.hash} copyable />
-                </Grid>
-                <Grid item xs={6} sm={2}>
-                  <DataCard label="Value" value={`${selectedEdge.value.toFixed(4)} ${selectedEdge.asset || 'ETH'}`} highlight />
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <DataCard label="Time" value={new Date(selectedEdge.timestamp).toLocaleDateString()} />
-                </Grid>
-                <Grid item xs={6} sm={2}>
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    sx={{ mt: 1 }}
-                    onClick={() => {
-                      let baseUrl = 'https://etherscan.io';
-                      if (net?.network_id === NetworkId.Ethereum_Sepolia) baseUrl = 'https://sepolia.etherscan.io';
-                      else if (net?.network_id === NetworkId.Arbitrum_One) baseUrl = 'https://arbiscan.io';
-                      else if (net?.network_id === NetworkId.Arbitrum_Sepolia) baseUrl = 'https://sepolia.arbiscan.io';
-                      else if (net?.network_id === NetworkId.Base_Mainnet) baseUrl = 'https://basescan.org';
-                      else if (net?.network_id === NetworkId.Base_Sepolia) baseUrl = 'https://sepolia.basescan.org';
-                      else if (net?.network_id === NetworkId.Fhenix_Sepolia) baseUrl = 'https://explorer.helium.fhenix.zone';
-                      window.open(`${baseUrl}/tx/${selectedEdge.hash}`, '_blank');
-                    }}
-                  >
-                    Open
-                  </Button>
-                </Grid>
-              </>
-            )}
-          </Grid>
+              {selectedEdge && (
+                <>
+                  <Grid size={{ xs: 12 }}>
+                    <DataCard label="Tx Hash" value={selectedEdge.hash} copyable />
+                  </Grid>
+                  <Grid size={{ xs: 4 }}>
+                    <DataCard label="Value" value={`${selectedEdge.value.toFixed(4)} ${selectedEdge.asset || 'ETH'}`} highlight />
+                  </Grid>
+                  <Grid size={{ xs: 4 }}>
+                    <DataCard label="Time" value={new Date(selectedEdge.timestamp).toLocaleDateString()} />
+                  </Grid>
+                  <Grid size={{ xs: 4 }}>
+                    <Button
+                      variant="outlined"
+                      fullWidth
+                      size="small"
+                      onClick={() => {
+                        let baseUrl = 'https://etherscan.io';
+                        if (net?.network_id === NetworkId.Ethereum_Sepolia) baseUrl = 'https://sepolia.etherscan.io';
+                        else if (net?.network_id === NetworkId.Arbitrum_One) baseUrl = 'https://arbiscan.io';
+                        else if (net?.network_id === NetworkId.Arbitrum_Sepolia) baseUrl = 'https://sepolia.arbiscan.io';
+                        else if (net?.network_id === NetworkId.Base_Mainnet) baseUrl = 'https://basescan.org';
+                        else if (net?.network_id === NetworkId.Base_Sepolia) baseUrl = 'https://sepolia.basescan.org';
+                        else if (net?.network_id === NetworkId.Fhenix_Sepolia) baseUrl = 'https://explorer.helium.fhenix.zone';
+                        window.open(`${baseUrl}/tx/${selectedEdge.hash}`, '_blank');
+                      }}
+                      sx={{
+                        height: '100%',
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.75rem',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      Explorer ↗
+                    </Button>
+                  </Grid>
+                </>
+              )}
+            </Grid>
+          </Box>
         </Paper>
       </Slide>
     </Box>
   );
 };
 
-const DataCard = ({ label, value, copyable, highlight }: any) => (
-  <Card variant="outlined" sx={{ bgcolor: 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider', borderRadius: 3 }}>
-    <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-      <Typography variant="caption" color="text.secondary">{label}</Typography>
+const DataCard = ({ label, value, copyable, highlight }: {
+  label: string;
+  value: string;
+  copyable?: boolean;
+  highlight?: boolean;
+}) => (
+  <Card variant="outlined" sx={{
+    bgcolor: 'action.hover',
+    border: '1px solid',
+    borderColor: 'divider',
+    borderRadius: 2.5,
+    transition: 'all 0.2s ease',
+  }}>
+    <CardContent sx={{ py: 1.25, px: 1.5, '&:last-child': { pb: 1.25 } }}>
+      <Typography variant="caption" color="text.secondary" sx={{
+        fontWeight: 700,
+        fontSize: '0.6rem',
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+      }}>
+        {label}
+      </Typography>
       <Typography variant="body2" fontFamily={copyable ? 'monospace' : 'inherit'} sx={{
         wordBreak: 'break-all',
         color: highlight ? 'success.main' : 'text.primary',
-        fontWeight: highlight ? 700 : 400
+        fontWeight: highlight ? 700 : 500,
+        fontSize: '0.78rem',
+        mt: 0.25,
       }}>
         {value}
       </Typography>

@@ -1,27 +1,33 @@
 {
   "manifest_version": 2,
+  "name": "Arfhe Wallet",
   "version": "1.0.0",
-  "name": "Arfhe",
+  "description": "Privacy-first FHE-powered crypto wallet with encrypted on-chain transactions",
+
   "browser_action": {
     "default_popup": "index.html",
+    "default_title": "Arfhe Wallet",
     "default_icon": {
-      "32": "icon48.png"
+      "32": "icon32.png",
+      "48": "icon48.png"
     }
   },
+
   "permissions": [
-    "activeTab",
-    "tabs"
+    "storage",
+    "notifications",
+    "alarms"
   ],
+
   "icons": {
-    "32": "icon48.png"
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "http://*/*",
-        "https://*/*"
-      ],
-      "js": []
-    }
-  ]
+
+  "background": {
+    "scripts": ["service-worker.js"]
+  },
+
+  "content_security_policy": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
 }

@@ -8,7 +8,7 @@
  * - Decrypted keys exist ONLY in memory during active session
  *
  * Crypto flow:
- *   password → PBKDF2 (100k iterations, SHA-256) → AES-GCM key
+ *   password → PBKDF2 (100,000 iterations, SHA-256) → AES-GCM key
  *   AES-GCM key + random IV → encrypt(JSON) → base64 ciphertext stored in localStorage
  */
 
@@ -138,6 +138,9 @@ class StorageManager {
   /** In-memory AES key — only exists while wallet is unlocked */
   private _cryptoKey: CryptoKey | null = null;
 
+  /** Registered cleanup callbacks — called on lock() to wipe sensitive data from other services */
+  private _lockCallbacks: (() => void)[] = [];
+
   /**
    * Retrieves a value from local storage by key (plaintext — non-sensitive)
    */
@@ -146,7 +149,6 @@ class StorageManager {
       const value = localStorage.getItem(key);
       return value ? JSON.parse(value) : null;
     } catch (error) {
-      console.error(`Error getting local storage item for key "${key}":`, error);
       return null;
     }
   }
@@ -159,7 +161,6 @@ class StorageManager {
       const value = sessionStorage.getItem(key);
       return value ? JSON.parse(value) : null;
     } catch (error) {
-      console.error(`Error getting session storage item for key "${key}":`, error);
       return null;
     }
   }
@@ -172,7 +173,6 @@ class StorageManager {
       localStorage.setItem(key, JSON.stringify(value));
       return true;
     } catch (error) {
-      console.error(`Error setting local storage item for key "${key}":`, error);
       return false;
     }
   }
@@ -185,7 +185,6 @@ class StorageManager {
       sessionStorage.setItem(key, JSON.stringify(value));
       return true;
     } catch (error) {
-      console.error(`Error setting session storage item for key "${key}":`, error);
       return false;
     }
   }
@@ -197,7 +196,6 @@ class StorageManager {
     try {
       localStorage.removeItem(key);
     } catch (error) {
-      console.error(`Error removing local storage item for key "${key}":`, error);
     }
   }
 
@@ -208,7 +206,6 @@ class StorageManager {
     try {
       sessionStorage.removeItem(key);
     } catch (error) {
-      console.error(`Error removing session storage item for key "${key}":`, error);
     }
   }
 
@@ -233,13 +230,11 @@ class StorageManager {
         const actualHash = await hashPassword(password, salt);
 
         if (actualHash !== expectedHash) {
-          console.warn("[StorageManager] ❌ Incorrect password");
           return false;
         }
 
         // Password correct — derive key
         this._cryptoKey = await deriveKey(password, salt);
-        console.log("[StorageManager] 🔓 Encryption initialized (existing wallet)");
         return true;
       } else {
         // New wallet — create salt and store hash
@@ -251,11 +246,9 @@ class StorageManager {
         localStorage.setItem(PASS_HASH_KEY, passHash);
 
         this._cryptoKey = await deriveKey(password, salt);
-        console.log("[StorageManager] 🔐 Encryption initialized (new wallet)");
         return true;
       }
     } catch (error) {
-      console.error("[StorageManager] Encryption init failed:", error);
       return false;
     }
   }
@@ -275,11 +268,28 @@ class StorageManager {
   }
 
   /**
-   * Lock the wallet: clear the AES key from memory
+   * Lock the wallet: clear AES key AND all registered sensitive data from memory.
+   * This ensures private keys, mnemonics, FHE signers, and permits are all wiped.
    */
   lock(): void {
     this._cryptoKey = null;
-    console.log("[StorageManager] 🔒 Wallet locked — encryption key cleared from memory");
+
+    // Execute all registered cleanup callbacks
+    for (const callback of this._lockCallbacks) {
+      try {
+        callback();
+      } catch (e) {
+      }
+    }
+
+  }
+
+  /**
+   * Register a callback to be called when the wallet is locked.
+   * Used by AccountManager, FheCofheService, etc. to wipe their sensitive data.
+   */
+  onLock(callback: () => void): void {
+    this._lockCallbacks.push(callback);
   }
 
   /**
@@ -298,7 +308,7 @@ class StorageManager {
     // Decrypt with old key
     const oldKey = await deriveKey(oldPassword, oldSalt);
     const sensitiveKeys = this.getSensitiveKeys();
-    const decryptedData: Record<string, any> = {};
+    const decryptedData: Record<string, unknown> = {};
 
     for (const key of sensitiveKeys) {
       const encrypted = localStorage.getItem(`enc_${key}`);
@@ -307,7 +317,6 @@ class StorageManager {
           const plaintext = await aesDecrypt(oldKey, encrypted);
           decryptedData[key] = JSON.parse(plaintext);
         } catch (e) {
-          console.error(`[StorageManager] Failed to decrypt ${key} during password change:`, e);
         }
       }
     }
@@ -328,7 +337,6 @@ class StorageManager {
       localStorage.setItem(`enc_${key}`, encrypted);
     }
 
-    console.log("[StorageManager] 🔑 Password changed — all sensitive data re-encrypted");
     return true;
   }
 
@@ -338,7 +346,6 @@ class StorageManager {
    */
   async encryptAndStore<T>(key: string, value: T): Promise<boolean> {
     if (!this._cryptoKey) {
-      console.error("[StorageManager] Cannot encrypt: wallet is locked (no key in memory)");
       return false;
     }
 
@@ -356,7 +363,6 @@ class StorageManager {
 
       return true;
     } catch (error) {
-      console.error(`[StorageManager] Encrypt failed for "${key}":`, error);
       return false;
     }
   }
@@ -367,7 +373,6 @@ class StorageManager {
    */
   async decryptAndRetrieve<T>(key: string): Promise<T | null> {
     if (!this._cryptoKey) {
-      console.error("[StorageManager] Cannot decrypt: wallet is locked (no key in memory)");
       return null;
     }
 
@@ -378,7 +383,6 @@ class StorageManager {
       const plaintext = await aesDecrypt(this._cryptoKey, encrypted);
       return JSON.parse(plaintext) as T;
     } catch (error) {
-      console.error(`[StorageManager] Decrypt failed for "${key}":`, error);
       return null;
     }
   }
@@ -448,10 +452,8 @@ class StorageManager {
       // Remove plaintext password (replaced by PBKDF2 hash)
       localStorage.removeItem("passwd");
 
-      console.log("[StorageManager] ✅ Migration complete — plaintext keys removed");
       return true;
     } catch (error) {
-      console.error("[StorageManager] Migration failed:", error);
       return false;
     }
   }

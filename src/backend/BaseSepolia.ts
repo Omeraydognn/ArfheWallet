@@ -7,7 +7,7 @@ export default class BaseSepoliaNetwork extends Network {
             NetworkId.Base_Sepolia,
             "Base Sepolia",
             "https://base-sepolia.g.alchemy.com/v2/",
-            (import.meta as any).env.VITE_ALCHEMY_BASESEPOLIA_API_KEY
+            import.meta.env.VITE_ALCHEMY_BASESEPOLIA_API_KEY
         );
     }
 }

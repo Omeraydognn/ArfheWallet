@@ -1,52 +1,58 @@
 import { Routes, Route } from "react-router"
 import AppLayout from "./AppLayout";
-import Home from "./pages/Home";
 import Splash from "./pages/Splash";
 import Auth from "./pages/Auth";
-import History from "./pages/History";
-import Privacy from "./pages/Privacy";
-import Explore from "./pages/Explore";
-import Revoke from "./pages/Revoke";
-import GraphExplorer from "./pages/GraphExplorer";
-import Settings from "./pages/Settings";
-import SettingsSecurity from "./pages/SettingsSecurity";
-import Portfolio from "./pages/Portfolio";
 import { ThemeProvider, CssBaseline, Fade } from "@mui/material";
 import { ColorModeProvider, ColorModeContext } from "./ThemeContext";
 import { getTheme } from "./components/ArfTheme";
-import React, { useContext, useMemo } from "react";
+import React, { useContext, useMemo, Suspense } from "react";
+import { PageSkeleton } from "./components/SkeletonLoaders";
+
+// Lazy-loaded pages — only downloaded when navigated to
+const Home = React.lazy(() => import("./pages/Home"));
+const Portfolio = React.lazy(() => import("./pages/Portfolio"));
+const Explore = React.lazy(() => import("./pages/Explore"));
+const History = React.lazy(() => import("./pages/History"));
+const Privacy = React.lazy(() => import("./pages/Privacy"));
+const Revoke = React.lazy(() => import("./pages/Revoke"));
+const GraphExplorer = React.lazy(() => import("./pages/GraphExplorer"));
+const Settings = React.lazy(() => import("./pages/Settings"));
+const SettingsSecurity = React.lazy(() => import("./pages/SettingsSecurity"));
+const TokenDetail = React.lazy(() => import("./pages/TokenDetail"));
+const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 // Wrap a route element in a smooth Fade transition
-function FadePage({ children }: { children: React.ReactNode }) {
+const FadePage = React.memo(function FadePage({ children }: { children: React.ReactNode }) {
   return <Fade in timeout={280}>{<div style={{ display: 'contents' }}>{children}</div>}</Fade>;
-}
+});
 
 
-// import NetworkProvider from "./backend/NetworkProvider";
-// import { WalletContext } from "./AppContext";
 import { WalletProvider } from "./WalletProvider";
-import './AppRouter.css';
 import { ActiveAccountProvider } from "./ActiveAccountProvider";
 
 function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/" element={<Splash />} />
-      <Route path="auth" element={<Auth />} />
+    <Suspense fallback={<PageSkeleton />}>
+      <Routes>
+        <Route path="/" element={<Splash />} />
+        <Route path="auth" element={<Auth />} />
 
-      <Route element={<AppLayout />}>
-        <Route path="home" element={<FadePage><Home /></FadePage>} />
-        <Route path="portfolio" element={<FadePage><Portfolio /></FadePage>} />
-        <Route path="explore" element={<FadePage><Explore /></FadePage>} />
-        <Route path="history" element={<FadePage><History /></FadePage>} />
-        <Route path="privacy" element={<FadePage><Privacy /></FadePage>} />
-        <Route path="revoke" element={<FadePage><Revoke /></FadePage>} />
-        <Route path="graphexplorer" element={<FadePage><GraphExplorer /></FadePage>} />
-        <Route path="settings" element={<FadePage><Settings /></FadePage>} />
-        <Route path="settings/security" element={<FadePage><SettingsSecurity /></FadePage>} />
-      </Route>
+        <Route element={<AppLayout />}>
+          <Route path="home" element={<FadePage><Home /></FadePage>} />
+          <Route path="portfolio" element={<FadePage><Portfolio /></FadePage>} />
+          <Route path="explore" element={<FadePage><Explore /></FadePage>} />
+          <Route path="history" element={<FadePage><History /></FadePage>} />
+          <Route path="privacy" element={<FadePage><Privacy /></FadePage>} />
+          <Route path="revoke" element={<FadePage><Revoke /></FadePage>} />
+          <Route path="graphexplorer" element={<FadePage><GraphExplorer /></FadePage>} />
+          <Route path="settings" element={<FadePage><Settings /></FadePage>} />
+          <Route path="settings/security" element={<FadePage><SettingsSecurity /></FadePage>} />
+          <Route path="token/:address" element={<FadePage><TokenDetail /></FadePage>} />
+          <Route path="*" element={<FadePage><NotFound /></FadePage>} />
+        </Route>
 
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }
 

@@ -117,7 +117,7 @@ function NftMedia({ src, name }: { src: string; name: string }) {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    background: "linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%)",
+                    background: "linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%)",
                     borderRadius: "inherit",
                 }}
             >

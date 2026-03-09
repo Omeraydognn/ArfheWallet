@@ -16,17 +16,34 @@ export default class TokenCache {
   private cache: Map<NetworkId, Map<string, TokenCacheItem>>;
   private storageManager?: StorageManager;
   private readonly STORAGE_KEY = 'arfhe_token_cache';
+  private readonly CACHE_VERSION_KEY = 'arfhe_token_cache_version';
+  private readonly CURRENT_VERSION = 2;  // Bump this to invalidate cached logos
 
   constructor(storageManager?: StorageManager) {
     this.cache = new Map();
     this.storageManager = storageManager;
+    this.migrateIfNeeded();
     this.loadFromStorage();
+  }
+
+  /**
+   * Check cache version and clear stale logo data if version changed.
+   * This ensures that when we fix logo URLs, old cached URLs get purged.
+   */
+  private migrateIfNeeded() {
+    if (!this.storageManager) return;
+    const savedVersion = this.storageManager.getLocal<number>(this.CACHE_VERSION_KEY);
+    if (savedVersion !== this.CURRENT_VERSION) {
+      // Version mismatch — clear the entire token cache so fresh data is fetched
+      this.storageManager.removeLocal(this.STORAGE_KEY);
+      this.storageManager.setLocal(this.CACHE_VERSION_KEY, this.CURRENT_VERSION);
+    }
   }
 
   private loadFromStorage() {
     if (!this.storageManager) return;
 
-    const savedData = this.storageManager.getLocal<any>(this.STORAGE_KEY);
+    const savedData = this.storageManager.getLocal<Record<string, Record<string, TokenCacheItem>>>(this.STORAGE_KEY);
     if (savedData && typeof savedData === 'object') {
       try {
         // Deserialize JSON object back into Maps
@@ -42,7 +59,6 @@ export default class TokenCache {
           this.cache.set(netId, tokenMap);
         });
       } catch (e) {
-        console.warn("Failed to parse saved token cache", e);
       }
     }
   }
@@ -52,7 +68,7 @@ export default class TokenCache {
 
     try {
       // Serialize Maps into JSON object
-      const exportObj: any = {};
+      const exportObj: Record<string, Record<string, TokenCacheItem>> = {};
       this.cache.forEach((tokenMap, netId) => {
         exportObj[netId] = {};
         tokenMap.forEach((token, contract) => {
@@ -62,7 +78,6 @@ export default class TokenCache {
 
       this.storageManager.setLocal(this.STORAGE_KEY, exportObj);
     } catch (e) {
-      console.warn("Failed to save token cache", e);
     }
   }
 

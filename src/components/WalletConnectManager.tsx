@@ -23,6 +23,9 @@ import {
 } from "@mui/material";
 import { WalletContext } from "../AppContext";
 import { formatEther, JsonRpcProvider } from "ethers";
+import type { WalletConnectRequest, WalletConnectProposal } from "../backend/WalletConnectService";
+import type { Network } from "../backend/Network";
+import type Account from "../backend/Account";
 
 // Icons
 import LinkIcon from '@mui/icons-material/Link';
@@ -97,8 +100,8 @@ export default function WalletConnectManager() {
     const account = context?.accountManager?.GetActive();
     const network = context?.networkProvider?.getActiveNetwork();
 
-    const [request, setRequest] = useState<any | null>(null);
-    const [proposal, setProposal] = useState<any | null>(null);
+    const [request, setRequest] = useState<WalletConnectRequest | null>(null);
+    const [proposal, setProposal] = useState<WalletConnectProposal | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
@@ -107,14 +110,12 @@ export default function WalletConnectManager() {
 
         service.init();
 
-        service.setOnProposal((prop: any) => {
-            console.log("[WC Manager] Received Proposal:", prop.id);
+        service.setOnProposal((prop: WalletConnectProposal) => {
             setProposal(prop);
             setError("");
         });
 
-        service.setOnRequest((req: any) => {
-            console.log("[WC Manager] Received Request:", req.id);
+        service.setOnRequest((req: WalletConnectRequest) => {
             setRequest(req);
             setError("");
         });
@@ -136,12 +137,11 @@ export default function WalletConnectManager() {
         try {
             await service.approveSession(proposal);
             setProposal(null);
-        } catch (e: any) {
-            console.error(e);
-            if (e.message === "SESSION_SYNC_FAILED") {
+        } catch (e) {
+            if (e instanceof Error && e.message === "SESSION_SYNC_FAILED") {
                 setError("Session synchronization failed. Please try again.");
             } else {
-                setError(e.message || "Connection Failed");
+                setError(e instanceof Error ? e.message : "Connection Failed");
             }
         } finally {
             setLoading(false);
@@ -153,8 +153,7 @@ export default function WalletConnectManager() {
         setLoading(true);
         try {
             await service.rejectSession(proposal);
-        } catch (e: any) {
-            console.error("[WC] Reject failed:", e);
+        } catch (e) {
         } finally {
             setProposal(null);
             setLoading(false);
@@ -230,9 +229,9 @@ export default function WalletConnectManager() {
 
             await service.approveRequest(account, request, result);
             setRequest(null);
-        } catch (e: any) {
-            console.error("[WC] Request approval error:", e);
-            setError(e.shortMessage || e.message || "Approval Failed");
+        } catch (e) {
+            const msg = e instanceof Error ? ((e as { shortMessage?: string }).shortMessage || e.message) : "Approval Failed";
+            setError(msg);
         } finally {
             setLoading(false);
         }
@@ -243,8 +242,7 @@ export default function WalletConnectManager() {
         setLoading(true);
         try {
             await service.rejectRequest(request);
-        } catch (e: any) {
-            console.error("[WC] Reject failed:", e);
+        } catch (e) {
         } finally {
             setRequest(null);
             setLoading(false);
@@ -298,22 +296,25 @@ function ProposalDialog({
     onApprove,
     onReject,
 }: {
-    proposal: any;
+    proposal: WalletConnectProposal;
     walletAddress: string;
     loading: boolean;
     error: string;
     onApprove: () => void;
     onReject: () => void;
 }) {
-    const { dApp, requiredChains = [], optionalChains = [], requiredMethods = [], unsupportedChains = [], isValid } = proposal;
+    const { dApp, requiredChains = [], optionalChains = [], requiredMethods = [], unsupportedChains = [], isValid, phishingResult } = proposal;
 
     const allChains = [...new Set([...requiredChains, ...optionalChains])];
+    const isPhishingDangerous = phishingResult?.riskLevel === "DANGEROUS";
+    const isPhishingSuspicious = phishingResult?.riskLevel === "SUSPICIOUS";
 
     return (
         <Dialog
             open={true}
             maxWidth="xs"
             fullWidth
+            aria-label={`Connection request from ${dApp.name}`}
             PaperProps={{
                 sx: {
                     borderRadius: 4,
@@ -329,7 +330,7 @@ function ProposalDialog({
                 pt: 4,
                 pb: 2,
                 px: 3,
-                background: 'linear-gradient(180deg, rgba(99, 102, 241, 0.06) 0%, transparent 100%)',
+                background: 'linear-gradient(180deg, rgba(37, 99, 235, 0.05) 0%, transparent 100%)',
             }}>
                 <Avatar
                     src={dApp.icon}
@@ -351,8 +352,12 @@ function ProposalDialog({
                     {dApp.name}
                 </Typography>
                 <Stack direction="row" alignItems="center" justifyContent="center" spacing={0.5} sx={{ mt: 0.5 }}>
-                    <LanguageIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                    <LanguageIcon sx={{ fontSize: 14, color: isPhishingDangerous ? '#dc2626' : 'text.secondary' }} />
+                    <Typography variant="caption" sx={{
+                        fontSize: '0.75rem',
+                        color: isPhishingDangerous ? '#dc2626' : isPhishingSuspicious ? '#d97706' : 'text.secondary',
+                        fontWeight: isPhishingDangerous ? 700 : 400,
+                    }}>
                         {dApp.url}
                     </Typography>
                 </Stack>
@@ -364,6 +369,53 @@ function ProposalDialog({
             </Box>
 
             <DialogContent sx={{ px: 3, pt: 1.5, pb: 2 }}>
+                {/* ── Phishing Warning Banner ── */}
+                {isPhishingDangerous && (
+                    <Paper elevation={0} sx={{
+                        mb: 2,
+                        p: 2,
+                        borderRadius: 3,
+                        bgcolor: 'rgba(220, 38, 38, 0.12)',
+                        border: '2px solid',
+                        borderColor: '#dc2626',
+                    }}>
+                        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                            <GppBadIcon sx={{ color: '#dc2626', fontSize: 22 }} />
+                            <Typography variant="subtitle2" sx={{ color: '#dc2626', fontWeight: 800, fontSize: '0.85rem' }}>
+                                🚨 PHİSHİNG TESPİT EDİLDİ
+                            </Typography>
+                        </Stack>
+                        <Stack spacing={0.5}>
+                            {phishingResult?.warnings.map((w: string, i: number) => (
+                                <Typography key={i} variant="caption" sx={{ display: 'block', lineHeight: 1.5, color: '#dc2626', fontWeight: 500 }}>
+                                    {w}
+                                </Typography>
+                            ))}
+                        </Stack>
+                        <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#dc2626', fontWeight: 700, fontSize: '0.7rem' }}>
+                            Bu bağlantıyı ONAYLAMAYIN — Fonlarınız çalınabilir!
+                        </Typography>
+                    </Paper>
+                )}
+
+                {/* ── Suspicious Domain Warning ── */}
+                {isPhishingSuspicious && !isPhishingDangerous && (
+                    <Alert
+                        severity="warning"
+                        icon={<WarningAmberIcon sx={{ fontSize: 20 }} />}
+                        sx={{ mb: 2, borderRadius: 2 }}
+                    >
+                        <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.8rem' }}>
+                            ⚠️ Şüpheli Domain Tespit Edildi
+                        </Typography>
+                        {phishingResult?.warnings.map((w: string, i: number) => (
+                            <Typography key={i} variant="caption" sx={{ display: 'block', lineHeight: 1.5, mt: 0.5 }}>
+                                {w}
+                            </Typography>
+                        ))}
+                    </Alert>
+                )}
+
                 {/* Unsupported chains warning */}
                 {unsupportedChains.length > 0 && (
                     <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
@@ -494,21 +546,36 @@ function ProposalDialog({
                     variant="contained"
                     size="large"
                     onClick={onApprove}
-                    disabled={loading}
+                    disabled={loading || isPhishingDangerous}
                     sx={{
                         borderRadius: 3,
                         py: 1.5,
                         fontWeight: 700,
                         fontSize: '0.95rem',
                         textTransform: 'none',
-                        background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                        boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+                        background: isPhishingDangerous
+                            ? 'rgba(220, 38, 38, 0.3)'
+                            : isPhishingSuspicious
+                                ? 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)'
+                                : 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
+                        boxShadow: isPhishingDangerous
+                            ? 'none'
+                            : isPhishingSuspicious
+                                ? '0 4px 14px rgba(217, 119, 6, 0.35)'
+                                : '0 4px 14px rgba(37, 99, 235, 0.3)',
                         '&:hover': {
-                            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                            background: isPhishingDangerous
+                                ? 'rgba(220, 38, 38, 0.3)'
+                                : isPhishingSuspicious
+                                    ? 'linear-gradient(135deg, #b45309 0%, #d97706 100%)'
+                                    : 'linear-gradient(135deg, #172554 0%, #1e3a8a 100%)',
                         }
                     }}
                 >
-                    {loading ? <CircularProgress size={24} color="inherit" /> : "Connect"}
+                    {loading ? <CircularProgress size={24} color="inherit" /> :
+                     isPhishingDangerous ? "🚫 Blocked — Phishing Detected" :
+                     isPhishingSuspicious ? "⚠️ Connect Anyway" :
+                     "Connect"}
                 </Button>
                 <Button
                     fullWidth
@@ -541,9 +608,9 @@ function RequestDialog({
     onApprove,
     onReject,
 }: {
-    request: any;
-    network: any;
-    account: any;
+    request: WalletConnectRequest;
+    network: Network | null | undefined;
+    account: Account | null | undefined;
     loading: boolean;
     error: string;
     onApprove: () => void;
@@ -625,14 +692,13 @@ function RequestDialog({
                 setGasEstimate(formatEther(gasCost));
 
                 // Check balance
-                const balance = await provider.getBalance(account.GetAddress());
+                const balance = await provider.getBalance(account.GetAddress() ?? "0x0");
                 setBalanceCheck({
                     sufficient: balance >= totalCost,
                     balance: formatEther(balance),
                     totalCost: formatEther(totalCost),
                 });
             } catch (e) {
-                console.warn("[WC] Gas simulation failed:", e);
             } finally {
                 setSimulating(false);
             }
@@ -654,7 +720,7 @@ function RequestDialog({
     }
 
     // Typed data preview
-    let typedDataPreview: any = null;
+    let typedDataPreview: { domain?: { name?: string }; message?: unknown; value?: unknown; [key: string]: unknown } | null = null;
     if (isTypedData && rpcReq.params?.[1]) {
         try {
             typedDataPreview = JSON.parse(rpcReq.params[1]);
@@ -666,6 +732,7 @@ function RequestDialog({
             open={true}
             maxWidth="sm"
             fullWidth
+            aria-label="Transaction approval request"
             PaperProps={{
                 sx: {
                     borderRadius: 4,
@@ -963,14 +1030,14 @@ function RequestDialog({
                                 textTransform: 'none',
                                 background: isDangerousSign
                                     ? 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)'
-                                    : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                                    : 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
                                 boxShadow: isDangerousSign
                                     ? '0 4px 14px rgba(220, 38, 38, 0.35)'
-                                    : '0 4px 14px rgba(99, 102, 241, 0.35)',
+                                    : '0 4px 14px rgba(37, 99, 235, 0.3)',
                                 '&:hover': {
                                     background: isDangerousSign
                                         ? 'linear-gradient(135deg, #b91c1c 0%, #991b1b 100%)'
-                                        : 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                                        : 'linear-gradient(135deg, #172554 0%, #1e3a8a 100%)',
                                 },
                                 '&.Mui-disabled': {
                                     background: '#e0e0e0',

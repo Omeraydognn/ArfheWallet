@@ -54,6 +54,22 @@ export default defineConfig({
           src: `public/${target}/manifest.json`,
           dest: '.'
         },
+        {
+          src: 'service-worker.js',
+          dest: '.'
+        },
+        {
+          src: 'images/icon32.png',
+          dest: '.'
+        },
+        {
+          src: 'images/icon48.png',
+          dest: '.'
+        },
+        {
+          src: 'images/icon128.png',
+          dest: '.'
+        },
       ],
     }),
   ],
@@ -106,13 +122,94 @@ export default defineConfig({
     target: 'esnext',
     outDir: 'dist',
     emptyOutDir: true,
+    minify: 'esbuild',
+    // Remove all console output and debugger in production builds
+    esbuild: {
+      drop: ['debugger'],
+      pure: [
+        'console.log',
+        'console.warn',
+        'console.error',
+        'console.info',
+        'console.debug',
+        'console.trace',
+      ],
+    },
     rollupOptions: {
       input: 'index.html',
       output: {
         dir: 'dist',
         entryFileNames: '[name].js',
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'ethers', 'antd'],
+        manualChunks(id) {
+          // ── React core (framework shared by every page) ──
+          if (id.includes('/react-dom/') || id.includes('/react/') ||
+              id.includes('/react-router/') || id.includes('/react-toastify/') ||
+              id.includes('/react-i18next/') || id.includes('/i18next/') ||
+              id.includes('/scheduler/')) {
+            return 'react-framework';
+          }
+          // ── MUI + Emotion (UI library used everywhere) ──
+          if (id.includes('/@mui/') || id.includes('/@emotion/')) {
+            return 'mui';
+          }
+          // ── ethers (blockchain core) ──
+          if (id.includes('/ethers/') || id.includes('/@noble/') || id.includes('/@adraffy/')) {
+            return 'ethers';
+          }
+          // ── WalletConnect (lazy — only when connecting dApps) ──
+          if (id.includes('/@walletconnect/') || id.includes('/@stablelib/') ||
+              id.includes('/uint8arrays/') || id.includes('/multiformats/')) {
+            return 'walletconnect';
+          }
+          // ── Charting (recharts + d3 — Portfolio & charts only) ──
+          if (id.includes('/recharts/') || id.includes('/d3-') ||
+              id.includes('/@mui/x-charts/') || id.includes('/victory-vendor/')) {
+            return 'charting';
+          }
+          // ── Cytoscape (graph explorer only) ──
+          if (id.includes('/cytoscape')) {
+            return 'cytoscape';
+          }
+          // ── Alchemy SDK ──
+          if (id.includes('/alchemy-sdk/')) {
+            return 'alchemy';
+          }
+          // ── Web3Auth (social login — Auth page only) ──
+          if (id.includes('/@web3auth/')) {
+            return 'web3auth';
+          }
+          // ── FHE / cofhejs (encryption layer) ──
+          if (id.includes('/cofhejs/') || id.includes('/tfhe/')) {
+            return 'fhe';
+          }
+          // ── Node polyfills & crypto (buffer, stream, etc.) ──
+          if (id.includes('/node_modules/buffer/') || id.includes('/node_modules/stream-') ||
+              id.includes('/node_modules/readable-stream/') || id.includes('/node_modules/events/') ||
+              id.includes('/node_modules/process/') || id.includes('/node_modules/util/') ||
+              id.includes('/node_modules/inherits/') || id.includes('/node_modules/safe-buffer/') ||
+              id.includes('/node_modules/string_decoder/') || id.includes('/node-polyfills')) {
+            return 'polyfills';
+          }
+          // ── Unstoppable Domains (lazy — domain resolution only) ──
+          if (id.includes('/@unstoppabledomains/') || id.includes('/uns-resolver/')) {
+            return 'unstoppable';
+          }
+          // ── Crypto polyfills (elliptic, bn.js, etc. — used by UD/WC) ──
+          if (id.includes('/elliptic/') || id.includes('/bn.js/') ||
+              id.includes('/hash.js/') || id.includes('/hmac-drbg/') ||
+              id.includes('/minimalistic-assert/') || id.includes('/minimalistic-crypto-utils/') ||
+              id.includes('/brorand/') || id.includes('/browserify-') ||
+              id.includes('/create-hash/') || id.includes('/create-hmac/') ||
+              id.includes('/cipher-base/') || id.includes('/md5.js/') ||
+              id.includes('/sha.js/') || id.includes('/ripemd160/') ||
+              id.includes('/des.js/') || id.includes('/diffie-hellman/') ||
+              id.includes('/public-encrypt/') || id.includes('/randomfill/') ||
+              id.includes('/randombytes/') || id.includes('/pbkdf2/') ||
+              id.includes('/parse-asn1/') || id.includes('/asn1.js/') ||
+              id.includes('/evp_bytestokey/') || id.includes('/vm-browserify/') ||
+              id.includes('/crypto-browserify/')) {
+            return 'crypto-polyfills';
+          }
         },
       },
       external: (id) => {

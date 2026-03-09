@@ -63,7 +63,7 @@ export default class Account {
     }
 
     this.private_key = this.ethers_wallet.privateKey;
-    this.public_key = this.ethers_wallet.signingKey?.publicKey || (this.ethers_wallet as any).publicKey;
+    this.public_key = this.ethers_wallet.signingKey?.publicKey || (this.ethers_wallet as unknown as { publicKey?: string }).publicKey || "";
     this.address = this.ethers_wallet.address;
   }
 
@@ -136,5 +136,18 @@ export default class Account {
 
   GetAllOwnedTokens(): Map<number, string[]> {
     return new Map(this.owned_tokens);
+  }
+
+  /**
+   * Wipe all sensitive data from memory.
+   * After calling this, the account is effectively "locked" —
+   * only address and name remain for UI display purposes.
+   * The account must be re-hydrated from encrypted storage to be usable again.
+   */
+  wipeKeys(): void {
+    this.private_key = undefined;
+    this.public_key = undefined;
+    this.mnemonic = undefined;
+    this.ethers_wallet = undefined;
   }
 }

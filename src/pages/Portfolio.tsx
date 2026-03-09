@@ -6,7 +6,8 @@ import { WalletContext } from "../AppContext";
 import { ActiveAccountContext } from "../ActiveAccountProvider";
 import PortfolioChart from "../components/PortfolioChart";
 import AssetAllocationChart from "../components/AssetAllocationChart";
-import { NetworkId, TokenBalance } from "../backend/NetworkTypes";
+import { NetworkId, TokenBalance, isFheNetwork } from "../backend/NetworkTypes";
+import { PortfolioSkeleton } from "../components/SkeletonLoaders";
 
 interface DetailedAsset {
     contractAddress: string;
@@ -19,13 +20,15 @@ interface DetailedAsset {
     color: string;
 }
 
-const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899'];
+const COLORS = ['#2563eb', '#10b981', '#f59e0b', '#3b82f6', '#1e3a8a', '#93c5fd'];
 
 export default function Portfolio() {
     const navigate = useNavigate();
     const theme = useTheme();
     const wallet_context = React.useContext(WalletContext);
     const active_context = React.useContext(ActiveAccountContext);
+    const activeNetworkId = wallet_context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Unknown;
+    const showFhe = isFheNetwork(activeNetworkId);
 
     const [isPrivacyMode, setIsPrivacyMode] = useState(false);
     const [totalBalanceUsd, setTotalBalanceUsd] = useState(0.00);
@@ -68,7 +71,7 @@ export default function Portfolio() {
             let totalUsd = 0;
             const detailedAssets: DetailedAsset[] = [];
 
-            Object.values(cached.balances).forEach((b: any, index: number) => {
+            Object.values(cached.balances).forEach((b, index: number) => {
                 const bal = parseFloat(b.tokenBalance);
 
                 if (IGNORED_CONTRACTS.includes(b.contractAddress.toLowerCase())) return;
@@ -126,12 +129,14 @@ export default function Portfolio() {
         color: a.color
     }));
 
+    if (loading) return <PortfolioSkeleton />;
+
     return (
         <Box sx={{ pb: 10, px: { xs: 2, md: 4 }, pt: 3 }}>
             {/* Header */}
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 4 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <IconButton onClick={() => navigate(-1)} sx={{ mr: 1, ml: -1 }}>
+                    <IconButton onClick={() => navigate(-1)} sx={{ mr: 1, ml: -1 }} aria-label="Go back">
                         <ArrowBack />
                     </IconButton>
                     <Typography variant="h5" fontWeight="800" sx={{ letterSpacing: '-0.02em' }}>
@@ -140,6 +145,7 @@ export default function Portfolio() {
                 </Box>
                 <IconButton
                     onClick={() => setIsPrivacyMode(!isPrivacyMode)}
+                    aria-label={isPrivacyMode ? 'Show portfolio values' : 'Hide portfolio values'}
                     sx={{
                         bgcolor: isPrivacyMode ? 'rgba(16, 185, 129, 0.1)' : 'action.hover',
                         color: isPrivacyMode ? 'success.main' : 'text.primary',
@@ -158,6 +164,7 @@ export default function Portfolio() {
                         <Typography variant="h4" fontWeight="800" sx={{ mt: 1 }}>{formatMoney(totalBalanceUsd)}</Typography>
                     </Paper>
                 </Box>
+                {showFhe && (
                 <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', sm: '1 1 calc(33.333% - 16px)' } }}>
                     <Paper elevation={0} sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', boxShadow: '0 8px 32px rgba(0,0,0,0.02)', height: '100%' }}>
                         <Typography variant="body2" color="text.secondary" fontWeight={600} gutterBottom>Privacy Ratio</Typography>
@@ -168,6 +175,7 @@ export default function Portfolio() {
                         <Typography variant="caption" color="text.secondary">Held in FHE Assets</Typography>
                     </Paper>
                 </Box>
+                )}
                 <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', sm: '1 1 calc(33.333% - 16px)' } }}>
                     <Paper elevation={0} sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', boxShadow: '0 8px 32px rgba(0,0,0,0.02)', height: '100%' }}>
                         <Typography variant="body2" color="text.secondary" fontWeight={600} gutterBottom>Top Asset</Typography>
@@ -221,7 +229,7 @@ export default function Portfolio() {
                             <Box>
                                 <Stack direction="row" alignItems="center" spacing={1}>
                                     <Typography variant="subtitle2" fontWeight={700}>{asset.symbol}</Typography>
-                                    {asset.isShielded && <Shield sx={{ fontSize: 14, color: 'secondary.main' }} />}
+                                    {showFhe && asset.isShielded && <Shield sx={{ fontSize: 14, color: 'secondary.main' }} />}
                                 </Stack>
                                 <Typography variant="caption" color="text.secondary">
                                     {isPrivacyMode ? '***' : `${asset.balance.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${asset.symbol}`}

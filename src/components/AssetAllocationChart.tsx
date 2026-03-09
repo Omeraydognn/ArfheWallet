@@ -7,17 +7,18 @@ interface AssetAllocationProps {
     isPrivacyMode: boolean;
 }
 
-export default function AssetAllocationChart({ data, isPrivacyMode }: AssetAllocationProps) {
+function AssetAllocationChart({ data, isPrivacyMode }: AssetAllocationProps) {
     // If no data or all values are 0, show a placeholder
     const totalValue = data.reduce((acc, curr) => acc + curr.value, 0);
-    const chartData = totalValue > 0 ? data : [{ name: 'No Assets', value: 1, color: '#334155' }];
+    const chartData = totalValue > 0 ? data : [{ name: 'No Assets', value: 1, color: '#1e40af' }];
 
-    const CustomTooltip = ({ active, payload }: any) => {
+    const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ value: number; name?: string; payload?: { name: string; color: string } }> }) => {
         if (active && payload && payload.length) {
-            const isPlaceholder = payload[0].payload.name === 'No Assets';
+            const item = payload[0];
+            const isPlaceholder = item.payload?.name === 'No Assets';
             if (isPlaceholder) return null;
 
-            const val = isPrivacyMode ? '***' : `$${payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const val = isPrivacyMode ? '***' : `$${item.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             return (
                 <Box sx={{
                     bgcolor: 'rgba(15, 23, 42, 0.9)',
@@ -28,8 +29,8 @@ export default function AssetAllocationChart({ data, isPrivacyMode }: AssetAlloc
                     color: 'white',
                     boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
                 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: payload[0].payload.color }}>
-                        {payload[0].name}
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: item.payload?.color }}>
+                        {item.name}
                     </Typography>
                     <Typography variant="h6" sx={{ fontWeight: 800 }}>
                         {val}
@@ -78,3 +79,5 @@ export default function AssetAllocationChart({ data, isPrivacyMode }: AssetAlloc
         </Box>
     );
 }
+
+export default React.memo(AssetAllocationChart);

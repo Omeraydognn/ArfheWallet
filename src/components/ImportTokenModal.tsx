@@ -3,6 +3,7 @@ import { Modal, Box, Typography, TextField, Button, CircularProgress, IconButton
 import { Close, Token } from '@mui/icons-material';
 import { WalletContext } from '../AppContext';
 import { ActiveAccountContext } from '../ActiveAccountProvider';
+import type { TokenCacheItem } from '../backend/TokenCache';
 
 interface ImportTokenModalProps {
     open: boolean;
@@ -13,7 +14,7 @@ interface ImportTokenModalProps {
 export default function ImportTokenModal({ open, onClose, onImportSuccess }: ImportTokenModalProps) {
     const [address, setAddress] = useState('');
     const [loading, setLoading] = useState(false);
-    const [tokenInfo, setTokenInfo] = useState<any>(null);
+    const [tokenInfo, setTokenInfo] = useState<TokenCacheItem | null>(null);
     const [error, setError] = useState('');
 
     const wallet_context = React.useContext(WalletContext);
@@ -65,7 +66,7 @@ export default function ImportTokenModal({ open, onClose, onImportSuccess }: Imp
     };
 
     return (
-        <Modal open={open} onClose={onClose} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Modal open={open} onClose={onClose} aria-labelledby="import-token-title" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Box sx={{
                 bgcolor: 'background.paper',
                 borderRadius: 4,
@@ -75,7 +76,7 @@ export default function ImportTokenModal({ open, onClose, onImportSuccess }: Imp
                 boxShadow: '0 24px 48px rgba(0,0,0,0.2)',
                 position: 'relative'
             }}>
-                <IconButton sx={{ position: 'absolute', top: 12, right: 12 }} onClick={onClose}>
+                <IconButton sx={{ position: 'absolute', top: 12, right: 12 }} onClick={onClose} aria-label="Close import token">
                     <Close />
                 </IconButton>
 
@@ -83,7 +84,7 @@ export default function ImportTokenModal({ open, onClose, onImportSuccess }: Imp
                     <Box sx={{ p: 1, bgcolor: 'primary.main', borderRadius: 2, color: 'white', display: 'flex' }}>
                         <Token />
                     </Box>
-                    <Typography variant="h6" fontWeight="700">Import Token</Typography>
+                    <Typography id="import-token-title" variant="h6" fontWeight="700">Import Token</Typography>
                 </Box>
 
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
