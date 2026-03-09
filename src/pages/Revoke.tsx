@@ -476,7 +476,7 @@ const RevokeAlchemyPage = () => {
   }, [activeAccount, network]);
 
   return (
-    <Box sx={{ pb: 12, minHeight: '100vh' }}>
+    <Box sx={{ pb: 12, minHeight: '100%' }}>
       <Container maxWidth="md" sx={{ py: 4 }}>
         {/* Header */}
         <Box sx={{ textAlign: 'center', mb: 4 }}>

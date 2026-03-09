@@ -530,10 +530,10 @@ export default function SendPanel() {
       />
 
       {/* Header row with confidential toggle */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <SendIcon sx={{ fontSize: 20, color: 'primary.main' }} />
-          <Typography variant="subtitle1" fontWeight={700}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={0.5}>
+          <SendIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+          <Typography variant="subtitle2" fontWeight={700}>
             {t("send.title")}
           </Typography>
         </Stack>
@@ -563,27 +563,41 @@ export default function SendPanel() {
         )}
       </Stack>
 
-      {/* Confidential mode hint */}
+      {/* Confidential mode hint + Shield shortcut */}
       {isConfidential && (
         <Fade in>
           <Paper elevation={0} sx={{
-            mb: 2,
-            p: 1.5,
-            borderRadius: 2.5,
+            mb: 1,
+            p: 1,
+            borderRadius: 2,
             bgcolor: 'rgba(16, 185, 129, 0.08)',
             border: '1px solid',
             borderColor: 'rgba(16, 185, 129, 0.2)',
           }}>
-            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>
-              {t("send.confidentialHint")}
-            </Typography>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4, flex: 1 }}>
+                {t("send.confidentialHint")}
+              </Typography>
+              <Button
+                size="small"
+                variant="text"
+                color="secondary"
+                onClick={() => {
+                  // Open Shield panel in a new drawer
+                  window.dispatchEvent(new CustomEvent('open-shield-panel'));
+                }}
+                sx={{ fontSize: '0.65rem', fontWeight: 700, minWidth: 'auto', ml: 1, whiteSpace: 'nowrap' }}
+              >
+                Shield →
+              </Button>
+            </Stack>
           </Paper>
         </Fade>
       )}
 
       {/* Success State */}
       {status === 'success' ? (
-        <Stack spacing={2} alignItems="center" sx={{ py: 4 }}>
+        <Stack spacing={1.5} alignItems="center" sx={{ py: 3 }}>
           <SuccessAnimation label={t("send.transferComplete")} size={80} />
           {txHash && (
             <Link
@@ -683,11 +697,11 @@ export default function SendPanel() {
           )}
 
           <Box sx={{ p: 2, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: 'block', mb: 2 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: 'block', mb: 1.5 }}>
               {t("send.transactionPreview")}
             </Typography>
 
-            <Stack spacing={2}>
+            <Stack spacing={1.5}>
               <Box>
                 <Typography variant="caption" color="text.secondary">{t("send.recipient")}</Typography>
                 <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{sendAddress}</Typography>
@@ -802,7 +816,7 @@ export default function SendPanel() {
           </Stack>
         </Stack>
       ) : (
-        <Stack spacing={2}>
+        <Stack spacing={1.5}>
           {/* Recipient */}
           <Paper elevation={0} sx={inputCardSx}>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -942,32 +956,15 @@ export default function SendPanel() {
                 disabled={isLoading}
                 InputProps={{
                   disableUnderline: true,
-                  style: { fontSize: '1.1rem', fontWeight: 700, marginTop: 4 }
+                  style: { fontSize: '1rem', fontWeight: 700, marginTop: 4 }
                 }}
               />
             </Paper>
           </Stack>
 
-          {/* Transaction Note (Optional) */}
-          <Paper elevation={0} sx={inputCardSx}>
-            <Typography variant="caption" color="text.secondary" fontWeight={600}>{t("send.noteMemo")}</Typography>
-            <TextField
-              variant="standard"
-              placeholder={t("send.notePlaceholder")}
-              fullWidth
-              value={sendMemo}
-              onChange={(e) => setSendMemo(e.target.value)}
-              disabled={isLoading}
-              InputProps={{
-                disableUnderline: true,
-                style: { fontSize: '0.95rem', fontWeight: 500, marginTop: 4 }
-              }}
-            />
-          </Paper>
-
           {/* Advanced Gas Settings Panel (EIP-1559) */}
           {!isConfidential && (
-            <Box sx={{ mt: 2, mb: 1 }}>
+            <Box sx={{ mt: 0.5 }}>
               <GasSettingsPanel
                 compact
                 initialPreset="standard"

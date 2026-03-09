@@ -86,13 +86,13 @@ export default function Settings() {
     };
 
     return (
-        <Box sx={{ pb: 10 }}>
-            <Container maxWidth="md" sx={{ py: 4 }}>
+        <Box sx={{ pb: 4 }}>
+            <Container maxWidth="md" sx={{ py: 2 }}>
                 <Typography variant="h4" fontWeight={800} gutterBottom>
                     {t('settings.title')}
                 </Typography>
 
-                <Paper elevation={0} sx={{ borderRadius: 4, overflow: 'hidden', mb: 3, border: '1px solid rgba(0,0,0,0.05)' }}>
+                <Paper elevation={0} sx={{ borderRadius: 4, overflow: 'hidden', mb: 2, border: '1px solid rgba(0,0,0,0.05)' }}>
                     <List>
                         <ListItem>
                             <ListItemIcon><DarkMode /></ListItemIcon>
@@ -126,7 +126,7 @@ export default function Settings() {
                 </Paper>
 
                 {/* Custom Networks Section */}
-                <Typography variant="h6" fontWeight={700} sx={{ mb: 2, mt: 4 }}>
+                <Typography variant="h6" fontWeight={700} sx={{ mb: 1.5, mt: 2.5 }}>
                     {t('settings.customNetworks')}
                 </Typography>
 
@@ -135,7 +135,7 @@ export default function Settings() {
                     sx={{
                         borderRadius: 4,
                         overflow: 'hidden',
-                        mb: 2,
+                        mb: 1.5,
                         border: '1px solid',
                         borderColor: alpha(theme.palette.primary.main, 0.1),
                     }}
@@ -144,7 +144,7 @@ export default function Settings() {
                     <ListItemButton
                         onClick={() => setAddNetworkOpen(true)}
                         sx={{
-                            py: 2,
+                            py: 1.5,
                             gap: 1.5,
                             borderBottom: customNetworks.length > 0 ? `1px solid ${alpha(theme.palette.divider, 0.5)}` : 'none',
                         }}
@@ -193,7 +193,7 @@ export default function Settings() {
                     ))}
 
                     {customNetworks.length === 0 && (
-                        <Box sx={{ px: 3, py: 2, textAlign: 'center' }}>
+                        <Box sx={{ px: 3, py: 1.5, textAlign: 'center' }}>
                             <Typography variant="caption" color="text.disabled">
                                 {t('settings.noCustomNetworks')}
                             </Typography>
@@ -202,7 +202,7 @@ export default function Settings() {
                 </Paper>
 
                 {/* Legal Section */}
-                <Typography variant="h6" fontWeight={700} sx={{ mb: 2, mt: 4 }}>
+                <Typography variant="h6" fontWeight={700} sx={{ mb: 1.5, mt: 2.5 }}>
                     {t('settings.legal')}
                 </Typography>
 
@@ -211,7 +211,7 @@ export default function Settings() {
                     sx={{
                         borderRadius: 4,
                         overflow: 'hidden',
-                        mb: 2,
+                        mb: 1.5,
                         border: '1px solid',
                         borderColor: alpha(theme.palette.divider, 0.5),
                     }}
@@ -242,7 +242,7 @@ export default function Settings() {
                 </Paper>
 
                 {/* Version info */}
-                <Box sx={{ textAlign: 'center', mt: 4, mb: 2 }}>
+                <Box sx={{ textAlign: 'center', mt: 2.5, mb: 1.5 }}>
                     <Typography variant="caption" color="text.disabled">
                         Arfhe Wallet {t('settings.version')} 1.0.0
                     </Typography>

@@ -25,12 +25,13 @@ import {
   TrendingDown,
   SwapVert,
 } from "@mui/icons-material";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { WalletContext } from "../AppContext.js";
 import { useActiveAccount } from "../ActiveAccountProvider.js";
 import { useToast } from "../components/ToastProvider.js";
 import { NetworkId } from "../backend/NetworkTypes.js";
+import { getCoinGeckoBase } from "../backend/Network.js";
 import { getAddress } from "ethers";
 import ArfGraph from "../components/ArfGraph.js";
 
@@ -128,6 +129,8 @@ export default function TokenDetail() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { address: contractAddr } = useParams<{ address: string }>();
+  const location = useLocation();
+  const passedLogo = (location.state as { logoSrc?: string } | null)?.logoSrc ?? "";
   const theme = useTheme();
   const { showToast } = useToast();
 
@@ -144,7 +147,7 @@ export default function TokenDetail() {
   // Token state
   const [tokenName, setTokenName] = useState("");
   const [tokenSymbol, setTokenSymbol] = useState("");
-  const [tokenLogo, setTokenLogo] = useState("");
+  const [tokenLogo, setTokenLogo] = useState(passedLogo);
   const [tokenBalance, setTokenBalance] = useState("0");
   const [tokenValueUsd, setTokenValueUsd] = useState(0);
   const [tokenPriceUsd, setTokenPriceUsd] = useState(0);
@@ -180,7 +183,7 @@ export default function TokenDetail() {
       if (token) {
         setTokenName(token.name || "");
         setTokenSymbol(token.symbol || "");
-        setTokenLogo(getTokenLogoUrl(token.contractAddress, token.logoSrc, token.symbol));
+        if (!passedLogo) setTokenLogo(getTokenLogoUrl(token.contractAddress, token.logoSrc, token.symbol));
         setIsShielded(token.isShielded ?? false);
         setDecimals(token.decimals ?? 18);
       }
@@ -210,7 +213,7 @@ export default function TokenDetail() {
       if (meta) {
         setTokenName(meta.name || "");
         setTokenSymbol(meta.symbol || "");
-        setTokenLogo(getTokenLogoUrl(contractAddr, meta.logoSrc, meta.symbol));
+        if (!passedLogo) setTokenLogo(getTokenLogoUrl(contractAddr, meta.logoSrc, meta.symbol));
         setDecimals(meta.decimals ?? 18);
       }
     }
@@ -244,7 +247,7 @@ export default function TokenDetail() {
           if (meta) {
             setTokenName(meta.name || "");
             setTokenSymbol(meta.symbol || "");
-            setTokenLogo(getTokenLogoUrl(contractAddr, meta.logoSrc, meta.symbol));
+            if (!passedLogo) setTokenLogo(getTokenLogoUrl(contractAddr, meta.logoSrc, meta.symbol));
             setDecimals(meta.decimals ?? 18);
           }
         }
@@ -278,7 +281,7 @@ export default function TokenDetail() {
     try {
       const days = RANGE_DAYS[range];
       const res = await fetch(
-        `/api/coingecko/coins/${cgId}/market_chart?vs_currency=usd&days=${days}`
+        `${getCoinGeckoBase()}/coins/${cgId}/market_chart?vs_currency=usd&days=${days}`
       );
       const json = await res.json();
 
@@ -346,7 +349,7 @@ export default function TokenDetail() {
 
   return (
     <Box sx={{
-      minHeight: '100vh',
+      minHeight: '100%',
       bgcolor: 'background.default',
       pb: 10,
     }}>

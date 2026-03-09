@@ -131,7 +131,7 @@ export default function ShieldPanel() {
         <Chip label="FHE" size="small" color="secondary" variant="outlined"
           sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700 }} />
       </Stack>
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2.5 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
         {mode === "shield"
           ? "Encrypt your tokens for confidential transfers on-chain."
           : "Decrypt your tokens back to standard ERC-20 format."
@@ -144,7 +144,7 @@ export default function ShieldPanel() {
         borderRadius: 2.5,
         p: 0.5,
         bgcolor: 'action.hover',
-        mb: 2.5
+        mb: 1.5
       }}>
         <Button
           fullWidth
@@ -196,7 +196,7 @@ export default function ShieldPanel() {
             onChange={e => setAmount(e.target.value)}
             InputProps={{
               disableUnderline: true,
-              style: { fontSize: '1.6rem', fontWeight: 700, letterSpacing: '-0.02em' }
+              style: { fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-0.02em' }
             }}
             disabled={loading}
           />
@@ -228,7 +228,7 @@ export default function ShieldPanel() {
       {status && (
         <Fade in>
           <Paper elevation={0} sx={{
-            mt: 2,
+            mt: 1.5,
             p: 1.5,
             borderRadius: 2.5,
             bgcolor: status.includes("Failed") ? 'error.main' : status.includes("successful") ? 'success.main' : 'primary.main',
@@ -266,7 +266,7 @@ export default function ShieldPanel() {
         color={mode === "shield" ? "secondary" : "warning"}
         sx={{
           ...ctaButtonSx,
-          mt: 2.5,
+          mt: 2,
           boxShadow: mode === "shield"
             ? '0 4px 14px rgba(16, 185, 129, 0.3)'
             : '0 4px 14px rgba(245, 158, 11, 0.3)',

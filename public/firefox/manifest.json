@@ -16,7 +16,31 @@
   "permissions": [
     "storage",
     "notifications",
-    "alarms"
+    "alarms",
+    "https://*.alchemy.com/*",
+    "https://*.alchemyapi.io/*",
+    "https://*.walletconnect.com/*",
+    "https://*.walletconnect.org/*",
+    "https://cloudflare-eth.com/*",
+    "https://rpc.sepolia.org/*",
+    "https://*.arbitrum.io/*",
+    "https://*.base.org/*",
+    "https://*.fhenix.zone/*",
+    "https://api.coingecko.com/*",
+    "https://min-api.cryptocompare.com/*",
+    "https://*.publicnode.com/*",
+    "https://raw.githubusercontent.com/*",
+    "https://assets.coingecko.com/*",
+    "https://coin-images.coingecko.com/*",
+    "https://*.etherscan.io/*",
+    "https://*.arbiscan.io/*",
+    "https://*.basescan.org/*",
+    "https://*.web3auth.io/*",
+    "https://buy.moonpay.com/*",
+    "https://www.moonpay.com/*",
+    "https://global.transak.com/*",
+    "https://global-stg.transak.com/*",
+    "https://app.ramp.network/*"
   ],
 
   "icons": {

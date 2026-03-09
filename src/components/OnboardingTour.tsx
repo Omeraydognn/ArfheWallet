@@ -56,7 +56,7 @@ const STEPS: OnboardingStep[] = [
     subtitle: "Gizliliğe öncelik veren Web3 cüzdanınız",
     description:
       "ArfheWallet, bakiyelerinizi tamamen gizli tutabilen ilk FHE (Fully Homomorphic Encryption) destekli tarayıcı cüzdanıdır. Ethereum, Arbitrum, Base ve özel ağları destekler.",
-    icon: <RocketLaunch sx={{ fontSize: 48 }} />,
+    icon: <RocketLaunch sx={{ fontSize: 32 }} />,
     gradient: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%)",
     badge: "v1.0",
     tips: [
@@ -70,7 +70,7 @@ const STEPS: OnboardingStep[] = [
     subtitle: "Fully Homomorphic Encryption nedir?",
     description:
       "FHE teknolojisi, token bakiyelerinizi blokzincir üzerinde şifreli tutmanızı sağlar. Kimse — madenciler, düğümler, hatta akıllı kontratlar bile — bakiyenizi göremez. Transfer ve işlemler şifreli halde gerçekleşir.",
-    icon: <Shield sx={{ fontSize: 48 }} />,
+    icon: <Shield sx={{ fontSize: 32 }} />,
     gradient: "linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%)",
     badge: "CoFHE",
     tips: [
@@ -84,7 +84,7 @@ const STEPS: OnboardingStep[] = [
     subtitle: "12 kelimeniz = tüm varlıklarınız",
     description:
       "Seed phrase (kurtarma ifadesi) cüzdanınıza erişmenin TEK yoludur. Bunu kaybederseniz varlıklarınıza bir daha erişemezsiniz. ArfheWallet dahil hiç kimse onu kurtaramaz.",
-    icon: <Key sx={{ fontSize: 48 }} />,
+    icon: <Key sx={{ fontSize: 32 }} />,
     gradient: "linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #b45309 100%)",
     badge: "Kritik",
     tips: [
@@ -99,7 +99,7 @@ const STEPS: OnboardingStep[] = [
     subtitle: "ArfheWallet'ın temel özellikleri",
     description:
       "Cüzdanınız kullanıma hazır. İşte hemen başlayabileceğiniz temel özellikler:",
-    icon: <CheckCircle sx={{ fontSize: 48 }} />,
+    icon: <CheckCircle sx={{ fontSize: 32 }} />,
     gradient: "linear-gradient(135deg, #172554 0%, #1e40af 50%, #1e3a8a 100%)",
     tips: [
       "Token gönder/al — birden fazla ağda",
@@ -190,7 +190,7 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
         sx: {
           borderRadius: 4,
           overflow: "hidden",
-          maxHeight: "90vh",
+          maxHeight: 560,
           m: 1,
         },
       }}
@@ -212,9 +212,9 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
         <Box
           sx={{
             background: step.gradient,
-            pt: 5,
-            pb: 4,
-            px: 3,
+            pt: 3,
+            pb: 2.5,
+            px: 2.5,
             textAlign: "center",
             position: "relative",
           }}
@@ -225,8 +225,8 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
               position: "absolute",
               top: -30,
               right: -30,
-              width: 120,
-              height: 120,
+              width: 80,
+              height: 80,
               borderRadius: "50%",
               bgcolor: "rgba(255,255,255,0.08)",
             }}
@@ -236,8 +236,8 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
               position: "absolute",
               bottom: -20,
               left: -20,
-              width: 80,
-              height: 80,
+              width: 60,
+              height: 60,
               borderRadius: "50%",
               bgcolor: "rgba(255,255,255,0.06)",
             }}
@@ -246,8 +246,8 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
           {/* Icon */}
           <Box
             sx={{
-              width: 80,
-              height: 80,
+              width: 56,
+              height: 56,
               borderRadius: "50%",
               bgcolor: "rgba(255,255,255,0.2)",
               display: "flex",
@@ -291,14 +291,14 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
 
       {/* Content */}
       <Fade in key={`content-${activeStep}`} timeout={400}>
-        <Box sx={{ px: 3, py: 3 }}>
+        <Box sx={{ px: 2.5, py: 2 }}>
           <Typography
             variant="body2"
             sx={{
               color: "text.secondary",
-              lineHeight: 1.7,
-              mb: 2.5,
-              fontSize: "0.88rem",
+              lineHeight: 1.6,
+              mb: 1.5,
+              fontSize: "0.8rem",
             }}
           >
             {step.description}
@@ -356,8 +356,8 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
       {/* Footer: Stepper + Buttons */}
       <Box
         sx={{
-          px: 3,
-          pb: 2.5,
+          px: 2.5,
+          pb: 2,
           pt: 0,
           display: "flex",
           alignItems: "center",

@@ -65,7 +65,8 @@
     "hideSpamTokens": "Hide spam tokens",
     "hiddenSpamCount": "{{count}} hidden/spam token(s)",
     "showBalance": "Show Balance",
-    "hideBalance": "Hide Balance"
+    "hideBalance": "Hide Balance",
+    "buy": "Buy"
   },
   "send": {
     "title": "Send",
@@ -436,7 +437,6 @@
     "passwordMismatch": "Passwords don't match.",
     "encryptionFailed": "Failed to initialize encryption.",
     "encryptAndContinue": "Encrypt & Continue",
-    "encryptionNote": "Your password encrypts your private keys using <strong>AES-256-GCM</strong> with <strong>PBKDF2</strong> key derivation (100,000 iterations). Keys are never stored in plaintext.",
     "welcomeBack": "Welcome Back",
     "welcomeBackDesc": "Enter your password to decrypt and unlock your wallet",
     "enterPasswordPrompt": "Please enter your password.",

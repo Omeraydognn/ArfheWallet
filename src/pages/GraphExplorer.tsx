@@ -284,8 +284,8 @@ const GraphExplorer = () => {
 
   return (
     <Box sx={{
-      height: '100dvh',
-      width: '100vw',
+      height: '100%',
+      width: '100%',
       overflow: 'hidden',
       bgcolor: 'background.default',
       position: 'relative',

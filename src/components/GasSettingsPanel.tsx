@@ -252,7 +252,7 @@ function GasSettingsPanel({
                 <Box sx={{ px: 2, pb: 2 }}>
                     {/* ─── Network Congestion Bar ─── */}
                     {gasInfo && (
-                        <Box sx={{ mb: 2 }}>
+                        <Box sx={{ mb: 1.5 }}>
                             <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
                                 <Typography variant="caption" color="text.secondary">
                                     {t("gas.networkLoad")}
@@ -286,7 +286,7 @@ function GasSettingsPanel({
                     )}
 
                     {/* ─── Preset Selection ─── */}
-                    <Stack direction="row" spacing={0.75} sx={{ mb: 2 }}>
+                    <Stack direction="row" spacing={0.75} sx={{ mb: 1.5 }}>
                         {(["slow", "standard", "fast", "custom"] as GasPreset[]).map((p) => {
                             const isActive = preset === p;
                             const info = p !== "custom" ? PRESET_MULTIPLIERS[p] : null;
@@ -358,7 +358,7 @@ function GasSettingsPanel({
                     <Paper
                         elevation={0}
                         sx={{
-                            mt: 2,
+                            mt: 1.5,
                             p: 1.5,
                             borderRadius: 2,
                             bgcolor: alpha(theme.palette.primary.main, 0.04),

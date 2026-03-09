@@ -65,7 +65,8 @@
     "hideSpamTokens": "Spam tokenleri gizle",
     "hiddenSpamCount": "{{count}} gizli/spam token",
     "showBalance": "Bakiyeyi Göster",
-    "hideBalance": "Bakiyeyi Gizle"
+    "hideBalance": "Bakiyeyi Gizle",
+    "buy": "Satın Al"
   },
   "send": {
     "title": "Gönder",
@@ -436,7 +437,6 @@
     "passwordMismatch": "Şifreler eşleşmiyor.",
     "encryptionFailed": "Şifreleme başlatılamadı.",
     "encryptAndContinue": "Şifrele ve Devam Et",
-    "encryptionNote": "Şifreniz, özel anahtarlarınızı <strong>AES-256-GCM</strong> ve <strong>PBKDF2</strong> anahtar türetme (100.000 iterasyon) ile şifreler. Anahtarlar asla düz metin olarak saklanmaz.",
     "welcomeBack": "Tekrar Hoş Geldiniz",
     "welcomeBackDesc": "Cüzdanınızı çözmek ve açmak için şifrenizi girin",
     "enterPasswordPrompt": "Lütfen şifrenizi girin.",

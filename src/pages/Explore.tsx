@@ -203,11 +203,11 @@ const Explore = () => {
     };
 
     return (
-        <Box sx={{ pb: 12, minHeight: '100vh' }}>
-            <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Box sx={{ pb: 6, minHeight: '100%' }}>
+            <Container maxWidth="lg" sx={{ py: 2 }}>
 
                 {/* ── Hero Header ── */}
-                <Box sx={{ textAlign: 'center', mb: 5 }}>
+                <Box sx={{ textAlign: 'center', mb: 3 }}>
                     <Typography
                         variant="h3"
                         fontWeight={900}
@@ -232,7 +232,7 @@ const Explore = () => {
                 </Box>
 
                 {/* ── Search + WalletConnect Button ── */}
-                <Box sx={{ display: 'flex', gap: 1.5, mb: 4, maxWidth: 700, mx: 'auto' }}>
+                <Box sx={{ display: 'flex', gap: 1.5, mb: 2.5, maxWidth: 700, mx: 'auto' }}>
                     <TextField
                         fullWidth
                         placeholder={t('explore.searchPlaceholder')}
@@ -280,7 +280,7 @@ const Explore = () => {
                 <Box sx={{
                     display: 'flex',
                     gap: 1,
-                    mb: 4,
+                    mb: 2.5,
                     overflowX: 'auto',
                     pb: 1,
                     justifyContent: 'center',
@@ -314,7 +314,7 @@ const Explore = () => {
 
                 {/* ── Featured Section ── */}
                 {activeCategory === 'all' && !searchQuery && (
-                    <Box sx={{ mb: 5 }}>
+                    <Box sx={{ mb: 3 }}>
                         <Typography variant="h6" fontWeight={800} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Star sx={{ color: '#f59e0b' }} /> {t('explore.featured')}
                         </Typography>
@@ -349,7 +349,7 @@ const Explore = () => {
                 </Box>
 
                 {filteredDApps.length === 0 && (
-                    <Box sx={{ textAlign: 'center', py: 8 }}>
+                    <Box sx={{ textAlign: 'center', py: 4 }}>
                         <ExploreIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
                         <Typography variant="h6" color="text.secondary" fontWeight={700}>
                             {t('explore.noResults')}

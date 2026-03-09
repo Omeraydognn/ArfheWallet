@@ -85,13 +85,13 @@ export default function ReceivePanel() {
   return (
     <Box sx={{ textAlign: 'center' }}>
       {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="center" spacing={1} sx={{ mb: 0.5 }}>
-        <CallReceived sx={{ fontSize: 20, color: 'primary.main' }} />
-        <Typography variant="subtitle1" fontWeight={700}>
+      <Stack direction="row" alignItems="center" justifyContent="center" spacing={0.5} sx={{ mb: 0.25 }}>
+        <CallReceived sx={{ fontSize: 14, color: 'primary.main' }} />
+        <Typography variant="subtitle2" fontWeight={700} sx={{ fontSize: '0.8rem' }}>
           {t("receive.title")}
         </Typography>
       </Stack>
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75, fontSize: '0.65rem' }}>
         {t("receive.description")}
       </Typography>
 
@@ -100,29 +100,29 @@ export default function ReceivePanel() {
         display: 'inline-flex',
         flexDirection: 'column',
         alignItems: 'center',
-        p: 2.5,
-        borderRadius: 4,
-        mb: 1.5,
+        p: 1,
+        borderRadius: 2.5,
+        mb: 0.5,
         border: '1px solid',
         borderColor: 'divider',
         bgcolor: '#ffffff',
       }}>
         <QRCodeSVG
           value={address || "0x"}
-          size={180}
+          size={120}
           level="M"
-          marginSize={2}
+          marginSize={1}
           imageSettings={{
             src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%236366f1'/%3E%3Ctext x='12' y='16' text-anchor='middle' fill='white' font-size='12' font-weight='bold'%3EA%3C/text%3E%3C/svg%3E",
-            width: 28,
-            height: 28,
+            width: 24,
+            height: 24,
             excavate: true,
           }}
         />
       </Paper>
 
       {/* Account Name + Network Badge */}
-      <Stack alignItems="center" spacing={0.5} sx={{ mb: 1.5 }}>
+      <Stack alignItems="center" spacing={0.25} sx={{ mb: 0.5 }}>
         {accountName && (
           <Typography variant="body2" fontWeight={700} sx={{ color: 'text.primary' }}>
             {accountName}
@@ -134,8 +134,8 @@ export default function ReceivePanel() {
           size="small"
           sx={{
             fontWeight: 600,
-            fontSize: '0.7rem',
-            height: 22,
+            fontSize: '0.65rem',
+            height: 20,
             bgcolor: 'action.hover',
             border: '1px solid',
             borderColor: 'divider',
@@ -147,17 +147,18 @@ export default function ReceivePanel() {
       {/* Address Display — chunked for readability */}
       <Paper elevation={0} sx={{
         ...inputCardSx,
+        p: 1,
         cursor: 'pointer',
         '&:active': { transform: 'scale(0.99)' },
-        mb: 2,
+        mb: 0.75,
       }} onClick={handleCopy}>
         <Typography
           variant="body2"
           sx={{
             fontFamily: 'monospace',
-            fontSize: '0.78rem',
+            fontSize: '0.72rem',
             color: 'text.secondary',
-            lineHeight: 1.8,
+            lineHeight: 1.6,
             letterSpacing: '0.5px',
             wordBreak: 'break-all',
             textAlign: 'center',
@@ -174,18 +175,18 @@ export default function ReceivePanel() {
       </Paper>
 
       {/* Action Buttons */}
-      <Stack direction="row" spacing={1.5} justifyContent="center">
+      <Stack direction="row" spacing={1} justifyContent="center">
         <Button
           variant="contained"
-          startIcon={copied ? <CheckCircle sx={{ fontSize: 16 }} /> : <ContentCopy sx={{ fontSize: 16 }} />}
+          startIcon={copied ? <CheckCircle sx={{ fontSize: 13 }} /> : <ContentCopy sx={{ fontSize: 13 }} />}
           onClick={handleCopy}
           color={copied ? "success" : "primary"}
           sx={{
             flex: 1,
-            borderRadius: 3,
-            height: 44,
+            borderRadius: 2.5,
+            height: 34,
             fontWeight: 700,
-            fontSize: '0.82rem',
+            fontSize: '0.72rem',
             textTransform: 'none',
             transition: 'all 0.2s ease',
           }}
@@ -194,14 +195,14 @@ export default function ReceivePanel() {
         </Button>
         <Button
           variant="outlined"
-          startIcon={<ShareIcon sx={{ fontSize: 16 }} />}
+          startIcon={<ShareIcon sx={{ fontSize: 13 }} />}
           onClick={handleShare}
           sx={{
             flex: 1,
-            borderRadius: 3,
-            height: 44,
+            borderRadius: 2.5,
+            height: 34,
             fontWeight: 700,
-            fontSize: '0.82rem',
+            fontSize: '0.72rem',
             textTransform: 'none',
           }}
         >
@@ -210,7 +211,7 @@ export default function ReceivePanel() {
       </Stack>
 
       {/* Warning */}
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2, fontSize: '0.65rem', opacity: 0.7 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, fontSize: '0.58rem', opacity: 0.7 }}>
         {t("receive.warning", { network: networkName })}
       </Typography>
     </Box>

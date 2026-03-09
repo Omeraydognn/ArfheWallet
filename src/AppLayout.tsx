@@ -9,7 +9,7 @@ const AppLayout: React.FC = () => {
   const [network, setNetwork] = React.useState(1);
 
   return (
-    <Box sx={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <ActiveAccountProvider>
         {/* Accessibility: skip link for keyboard users */}
         <a href="#main-content" className="skip-to-content">Skip to content</a>
@@ -18,7 +18,7 @@ const AppLayout: React.FC = () => {
           <ArfBar network={network} setNetwork={setNetwork} />
         </Box>
 
-        <Box component="main" id="main-content" tabIndex={-1} sx={{ flex: 1, mt: '5rem', mb: '5rem', overflowY: 'auto', minHeight: 0 }}>
+        <Box component="main" id="main-content" tabIndex={-1} sx={{ flex: 1, mt: '3rem', mb: '4.5rem', overflowY: 'auto', minHeight: 0 }}>
           <Outlet />
         </Box>
 

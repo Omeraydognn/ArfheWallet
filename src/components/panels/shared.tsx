@@ -15,7 +15,7 @@ export function CustomTabPanel(props: { children: React.ReactNode; index: number
       {...other}
       style={{ width: '100%' }}
     >
-      {value === index && <Box sx={{ pt: 2.5 }}>{children}</Box>}
+      {value === index && <Box sx={{ pt: 1 }}>{children}</Box>}
     </div>
   );
 }
@@ -86,7 +86,7 @@ export function getExplorerBaseForNetwork(networkId: NetworkId | undefined) {
 
 // Shared input card style
 export const inputCardSx = {
-  p: 2,
+  p: 1.5,
   borderRadius: 3,
   border: '1px solid',
   borderColor: 'divider',
@@ -98,9 +98,9 @@ export const inputCardSx = {
 // Shared CTA button sx
 export const ctaButtonSx = {
   borderRadius: 3,
-  height: 52,
+  height: 42,
   fontWeight: 700,
-  fontSize: '0.95rem',
+  fontSize: '0.82rem',
   letterSpacing: '0.02em',
   boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
   '&:hover': {

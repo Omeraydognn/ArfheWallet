@@ -10,6 +10,21 @@ import { ExplorerService } from "./ExplorerService.js";
 import { withRetry, fetchWithTimeout, classifyError, NetworkErrorType } from "./NetworkErrorHandler.js";
 import type { RetryOptions } from "./NetworkErrorHandler.js";
 
+/**
+ * Returns the correct CoinGecko API base URL.
+ * In dev (Vite proxy), returns "/api/coingecko".
+ * In Chrome extension (no proxy), returns the real CoinGecko API URL.
+ */
+export function getCoinGeckoBase(): string {
+  // Chrome extension environment detection
+  try {
+    if (typeof chrome !== "undefined" && chrome.runtime && (chrome.runtime as any).id) {
+      return "https://api.coingecko.com/api/v3";
+    }
+  } catch { /* not in extension */ }
+  // Vite dev server proxy
+  return "/api/coingecko";
+}
 class Network {
   network_id: NetworkId;
   network_name: string;
@@ -645,7 +660,7 @@ class Network {
       if (mappedIds.size > 0) {
         try {
           const idsParam = Array.from(mappedIds).join(',');
-          const res = await fetchWithTimeout(`/api/coingecko/simple/price?ids=${idsParam}&vs_currencies=usd`, {}, 10_000);
+          const res = await fetchWithTimeout(`${getCoinGeckoBase()}/simple/price?ids=${idsParam}&vs_currencies=usd`, {}, 10_000);
           const json = await res.json();
 
           // Distribute the pegged prices back to all requesting testnet/FHE addresses
@@ -669,7 +684,7 @@ class Network {
         try {
           const platform = "ethereum";
           const addrStr = addressesToFetchFromCG.join(",");
-          const url = `/api/coingecko/simple/token_price/${platform}?contract_addresses=${addrStr}&vs_currencies=usd`;
+          const url = `${getCoinGeckoBase()}/simple/token_price/${platform}?contract_addresses=${addrStr}&vs_currencies=usd`;
           const res = await fetchWithTimeout(url, {}, 10_000);
           const json = await res.json();
 

@@ -11,8 +11,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const target = process.env.TARGET || 'chrome';
-
 export default defineConfig({
   plugins: [
     react(),
@@ -51,7 +49,7 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         {
-          src: `public/${target}/manifest.json`,
+          src: 'extension/manifest.json',
           dest: '.'
         },
         {
@@ -141,16 +139,21 @@ export default defineConfig({
         dir: 'dist',
         entryFileNames: '[name].js',
         manualChunks(id) {
-          // ── React core (framework shared by every page) ──
+          // ── React + MUI + Emotion (core UI — merged to avoid circular deps) ──
           if (id.includes('/react-dom/') || id.includes('/react/') ||
               id.includes('/react-router/') || id.includes('/react-toastify/') ||
               id.includes('/react-i18next/') || id.includes('/i18next/') ||
-              id.includes('/scheduler/')) {
+              id.includes('/scheduler/') ||
+              id.includes('/@mui/material/') || id.includes('/@mui/system/') ||
+              id.includes('/@mui/utils/') || id.includes('/@mui/styled-engine/') ||
+              id.includes('/@mui/private-theming/') || id.includes('/@mui/icons-material/') ||
+              id.includes('/@emotion/')) {
             return 'react-framework';
           }
-          // ── MUI + Emotion (UI library used everywhere) ──
-          if (id.includes('/@mui/') || id.includes('/@emotion/')) {
-            return 'mui';
+          // ── Charting (recharts + d3 + MUI charts — lazy) ──
+          if (id.includes('/recharts/') || id.includes('/d3-') ||
+              id.includes('/@mui/x-charts/') || id.includes('/victory-vendor/')) {
+            return 'charting';
           }
           // ── ethers (blockchain core) ──
           if (id.includes('/ethers/') || id.includes('/@noble/') || id.includes('/@adraffy/')) {
@@ -161,41 +164,13 @@ export default defineConfig({
               id.includes('/uint8arrays/') || id.includes('/multiformats/')) {
             return 'walletconnect';
           }
-          // ── Charting (recharts + d3 — Portfolio & charts only) ──
-          if (id.includes('/recharts/') || id.includes('/d3-') ||
-              id.includes('/@mui/x-charts/') || id.includes('/victory-vendor/')) {
-            return 'charting';
-          }
           // ── Cytoscape (graph explorer only) ──
           if (id.includes('/cytoscape')) {
             return 'cytoscape';
           }
-          // ── Alchemy SDK ──
-          if (id.includes('/alchemy-sdk/')) {
-            return 'alchemy';
-          }
-          // ── Web3Auth (social login — Auth page only) ──
-          if (id.includes('/@web3auth/')) {
-            return 'web3auth';
-          }
-          // ── FHE / cofhejs (encryption layer) ──
-          if (id.includes('/cofhejs/') || id.includes('/tfhe/')) {
-            return 'fhe';
-          }
-          // ── Node polyfills & crypto (buffer, stream, etc.) ──
-          if (id.includes('/node_modules/buffer/') || id.includes('/node_modules/stream-') ||
-              id.includes('/node_modules/readable-stream/') || id.includes('/node_modules/events/') ||
-              id.includes('/node_modules/process/') || id.includes('/node_modules/util/') ||
-              id.includes('/node_modules/inherits/') || id.includes('/node_modules/safe-buffer/') ||
-              id.includes('/node_modules/string_decoder/') || id.includes('/node-polyfills')) {
-            return 'polyfills';
-          }
-          // ── Unstoppable Domains (lazy — domain resolution only) ──
-          if (id.includes('/@unstoppabledomains/') || id.includes('/uns-resolver/')) {
-            return 'unstoppable';
-          }
-          // ── Crypto polyfills (elliptic, bn.js, etc. — used by UD/WC) ──
-          if (id.includes('/elliptic/') || id.includes('/bn.js/') ||
+          // ── Alchemy SDK + Crypto polyfills + Node polyfills (merged to avoid circular deps) ──
+          if (id.includes('/alchemy-sdk/') ||
+              id.includes('/elliptic/') || id.includes('/bn.js/') ||
               id.includes('/hash.js/') || id.includes('/hmac-drbg/') ||
               id.includes('/minimalistic-assert/') || id.includes('/minimalistic-crypto-utils/') ||
               id.includes('/brorand/') || id.includes('/browserify-') ||
@@ -207,8 +182,24 @@ export default defineConfig({
               id.includes('/randombytes/') || id.includes('/pbkdf2/') ||
               id.includes('/parse-asn1/') || id.includes('/asn1.js/') ||
               id.includes('/evp_bytestokey/') || id.includes('/vm-browserify/') ||
-              id.includes('/crypto-browserify/')) {
-            return 'crypto-polyfills';
+              id.includes('/crypto-browserify/') ||
+              id.includes('/node_modules/buffer/') || id.includes('/node_modules/stream-') ||
+              id.includes('/node_modules/readable-stream/') || id.includes('/node_modules/events/') ||
+              id.includes('/node_modules/process/') || id.includes('/node_modules/util/') ||
+              id.includes('/node_modules/inherits/') || id.includes('/node_modules/safe-buffer/') ||
+              id.includes('/node_modules/string_decoder/') || id.includes('/node-polyfills')) {
+            return 'polyfills';
+          }
+          if (id.includes('/@web3auth/')) {
+            return 'web3auth';
+          }
+          // ── FHE / cofhejs (encryption layer) ──
+          if (id.includes('/cofhejs/') || id.includes('/tfhe/')) {
+            return 'fhe';
+          }
+          // ── Unstoppable Domains (lazy — domain resolution only) ──
+          if (id.includes('/@unstoppabledomains/') || id.includes('/uns-resolver/')) {
+            return 'unstoppable';
           }
         },
       },

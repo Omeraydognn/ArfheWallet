@@ -15,7 +15,8 @@ import {
   Tooltip,
   useTheme,
   alpha,
-  Divider
+  Divider,
+  Drawer,
 } from "@mui/material";
 import {
   TrendingUp,
@@ -29,10 +30,12 @@ import {
   VisibilityOff,
   WarningAmber,
   VisibilityOffOutlined,
+  ShoppingCart,
 } from "@mui/icons-material";
 import { useMatrixText } from "../hooks/useMatrixText.js";
 import ImportTokenModal from "../components/ImportTokenModal.js";
 import ImportNftModal from "../components/ImportNftModal.js";
+import BuyPanel from "../components/BuyPanel.js";
 import NftGalleryCard from "../components/NftGalleryCard.js";
 import OnboardingTour, {
   BackupReminderBanner,
@@ -51,6 +54,7 @@ import type { DisplayToken, BalanceMap, WrappedBalance, NFTDisplayItem } from ".
 import { TokenListSkeleton, NftGridSkeleton } from "../components/SkeletonLoaders.js";
 import { useToast } from "../components/ToastProvider.js";
 import { classifyError, NetworkError, NetworkErrorType, getErrorFallbackMessage } from "../backend/NetworkErrorHandler.js";
+import { getCoinGeckoBase } from "../backend/Network.js";
 import { usePersistedState } from "../hooks/usePersistedState.js";
 
 const KNOWN_LOGOS: Record<string, string> = {
@@ -186,6 +190,7 @@ function Home() {
   const [importTokenModalOpen, setImportTokenModalOpen] = useState(false);
   const [importNftModalOpen, setImportNftModalOpen] = useState(false);
   const [showHiddenTokens, setShowHiddenTokens] = useState(false);
+  const [buyDrawerOpen, setBuyDrawerOpen] = useState(false);
 
   // Onboarding tour (first-time UX)
   const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingCompleted());
@@ -467,7 +472,7 @@ function Home() {
 
           if (idsToFetch.size > 0) {
             const idsParam = Array.from(idsToFetch).join(",");
-            const ethRes = await fetch(`/api/coingecko/simple/price?ids=${idsParam}&vs_currencies=usd`);
+            const ethRes = await fetch(`${getCoinGeckoBase()}/simple/price?ids=${idsParam}&vs_currencies=usd`);
             const ethJson = await ethRes.json();
 
             // Build symbol → price map from CoinGecko response
@@ -686,10 +691,10 @@ function Home() {
   if (!active_context) return null;
 
   return (
-    <Box sx={{ pb: 10 }}>
+    <Box sx={{ pb: 2 }}>
 
       {/* Network Switcher & Header */}
-      <Box sx={{ px: 3, pt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ px: 2, pt: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Button
           onClick={handleNetworkClick}
           endIcon={<ExpandMore />}
@@ -775,7 +780,7 @@ function Home() {
       </Box>
 
       {/* 1. Main Balance Card */}
-      <Box sx={{ p: 3, pt: 2 }}>
+      <Box sx={{ p: 2, pt: 1 }}>
         <Paper elevation={0} sx={{
           p: 0,
           borderRadius: 5,
@@ -791,7 +796,7 @@ function Home() {
           alignItems: 'center',
           position: 'relative',
           overflow: 'hidden',
-          mb: 2,
+          mb: 1,
           border: 'none',
         }}>
           {/* ── Animated mesh gradient overlay ────────────────── */}
@@ -846,9 +851,9 @@ function Home() {
           }} />
 
           {/* ── Card content ─────────────────────────────────── */}
-          <Box sx={{ position: 'relative', zIndex: 2, p: 3, width: '100%', textAlign: 'center' }}>
+          <Box sx={{ position: 'relative', zIndex: 2, p: 2, pt: 1.5, pb: 1.5, width: '100%', textAlign: 'center' }}>
             {/* Total Balance label with subtle icon */}
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, mb: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, mb: 0.75 }}>
               <Box sx={{
                 width: 6,
                 height: 6,
@@ -902,8 +907,8 @@ function Home() {
 
             {/* ── Separator line ─────────────────────────────── */}
             <Box sx={{
-              mt: 2.5,
-              mb: 2,
+              mt: 1.5,
+              mb: 1.5,
               mx: 'auto',
               width: '60%',
               height: '1px',
@@ -913,11 +918,11 @@ function Home() {
             }} />
 
             {/* Action Buttons */}
-            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
               <Button
                 variant="contained"
                 onClick={() => navigate('/portfolio')}
-                startIcon={<TrendingUp sx={{ fontSize: 16 }} />}
+                startIcon={<TrendingUp sx={{ fontSize: 14 }} />}
                 sx={{
                   bgcolor: 'rgba(255, 255, 255, 0.12)',
                   color: '#eff6ff',
@@ -927,9 +932,9 @@ function Home() {
                   borderRadius: 3,
                   textTransform: 'none',
                   fontWeight: 600,
-                  fontSize: '0.8rem',
-                  px: 2.5,
-                  py: 0.8,
+                  fontSize: '0.75rem',
+                  px: 2,
+                  py: 0.5,
                   transition: 'all 0.25s ease',
                   '&:hover': {
                     bgcolor: 'rgba(255, 255, 255, 0.2)',
@@ -944,7 +949,7 @@ function Home() {
               <Button
                 variant="contained"
                 onClick={() => navigate('/revoke')}
-                startIcon={<Shield sx={{ fontSize: 16 }} />}
+                startIcon={<Shield sx={{ fontSize: 14 }} />}
                 sx={{
                   bgcolor: 'rgba(255, 255, 255, 0.12)',
                   color: '#eff6ff',
@@ -954,9 +959,9 @@ function Home() {
                   borderRadius: 3,
                   textTransform: 'none',
                   fontWeight: 600,
-                  fontSize: '0.8rem',
-                  px: 2.5,
-                  py: 0.8,
+                  fontSize: '0.75rem',
+                  px: 2,
+                  py: 0.5,
                   transition: 'all 0.25s ease',
                   '&:hover': {
                     bgcolor: 'rgba(255, 255, 255, 0.2)',
@@ -1042,16 +1047,18 @@ function Home() {
 
       {/* 3. Assets Tab List */}
       <Box sx={{ px: 2 }}>
-        <Tabs
-          value={tabIndex}
-          onChange={(e, v) => setTabIndex(v)}
-          sx={{
-            mb: 2,
-            minHeight: 36,
-            '& .MuiTabs-indicator': { backgroundColor: 'primary.main', height: 3, borderRadius: '3px 3px 0 0' },
-            '& .MuiTab-root': { minHeight: 36, textTransform: 'none', fontWeight: 700, fontSize: '0.9rem', color: 'text.secondary', '&.Mui-selected': { color: 'text.primary' } }
-          }}
-        >
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Tabs
+            value={tabIndex}
+            onChange={(e, v) => setTabIndex(v)}
+            sx={{
+              mb: 1,
+              minHeight: 32,
+              flex: 1,
+              '& .MuiTabs-indicator': { backgroundColor: 'primary.main', height: 3, borderRadius: '3px 3px 0 0' },
+              '& .MuiTab-root': { minHeight: 32, textTransform: 'none', fontWeight: 700, fontSize: '0.85rem', color: 'text.secondary', '&.Mui-selected': { color: 'text.primary' } }
+            }}
+          >
           <Tab
             label={
               <Stack direction="row" spacing={1} alignItems="center">
@@ -1068,6 +1075,28 @@ function Home() {
           />
           <Tab label={t('home.nfts')} />
         </Tabs>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<ShoppingCart sx={{ fontSize: 14 }} />}
+            onClick={() => setBuyDrawerOpen(true)}
+            sx={{
+              borderRadius: 2,
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              minWidth: 'auto',
+              px: 1.5,
+              py: 0.25,
+              mb: 1,
+              textTransform: 'none',
+              borderColor: 'divider',
+              color: 'text.secondary',
+              '&:hover': { borderColor: 'primary.main', color: 'primary.main' },
+            }}
+          >
+            {t('home.buy')}
+          </Button>
+        </Stack>
 
         {tabIndex === 0 && (
           <Box>
@@ -1099,7 +1128,9 @@ function Home() {
                         isLast={idx === displayList.length - 1}
                         isSuspicious={token.isSuspicious ?? false}
                         isSpamHidden={token.isSpam || token.isHidden}
-                        onClick={() => navigate(`/token/${encodeURIComponent(token.contractAddress)}`)}
+                        onClick={() => navigate(`/token/${encodeURIComponent(token.contractAddress)}`, {
+                          state: { logoSrc: getTokenLogoUrl(token.contractAddress, token.logoSrc, token.symbol, token.name) }
+                        })}
                         onToggleHide={() => {
                           if (!wallet_context) return;
                           const sf = wallet_context.spamFilter;
@@ -1158,17 +1189,17 @@ function Home() {
             })()}
 
             {/* Tokens Tab Footer */}
-            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
               <Button
                 variant="outlined"
                 startIcon={<Add />}
                 onClick={() => setImportTokenModalOpen(true)}
                 sx={{
                   fontWeight: 600,
-                  px: 3,
-                  py: 1,
+                  px: 2.5,
+                  py: 0.5,
                   borderRadius: 3,
-                  fontSize: '0.8rem',
+                  fontSize: '0.75rem',
                   textTransform: 'none',
                   borderColor: 'divider',
                   color: 'text.secondary',
@@ -1287,6 +1318,32 @@ function Home() {
         open={showOnboarding}
         onClose={() => setShowOnboarding(false)}
       />
+
+      {/* Buy Crypto Drawer */}
+      <Drawer
+        anchor="bottom"
+        open={buyDrawerOpen}
+        onClose={() => setBuyDrawerOpen(false)}
+        aria-label="Buy crypto"
+        PaperProps={{
+          sx: {
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            bgcolor: 'background.paper',
+            backgroundImage: 'none',
+            maxWidth: '600px',
+            mx: 'auto',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            p: 2,
+          }
+        }}
+      >
+        <Stack direction="row" justifyContent="center" sx={{ mb: 1 }}>
+          <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'divider' }} />
+        </Stack>
+        <BuyPanel />
+      </Drawer>
     </Box>
   );
 }
@@ -1315,8 +1372,8 @@ function AssetItem({ symbol, name, balance, value, icon, isShielded = false, isL
         display: 'flex',
         alignItems: 'center',
         gap: 1.5,
-        px: 2,
-        py: 1.5,
+        px: 1.5,
+        py: 1,
         borderRadius: 2.5,
         cursor: onClick ? 'pointer' : 'default',
         transition: 'background-color 0.15s ease, opacity 0.2s ease',
@@ -1336,8 +1393,8 @@ function AssetItem({ symbol, name, balance, value, icon, isShielded = false, isL
           src={!imgError ? icon : undefined}
           onError={() => setImgError(true)}
           sx={{
-            width: 40,
-            height: 40,
+            width: 36,
+            height: 36,
             bgcolor: imgError || !icon ? fallbackColor : 'transparent',
             color: '#fff',
             fontSize: '1rem',

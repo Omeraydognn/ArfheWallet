@@ -156,7 +156,7 @@ function NotificationPanel() {
                 PaperProps={{
                     sx: {
                         width: 360,
-                        maxWidth: "100vw",
+                        maxWidth: "100%",
                         bgcolor: "background.default",
                     },
                 }}
@@ -218,8 +218,8 @@ function NotificationPanel() {
 
                 {/* Notification List */}
                 {notifications.length === 0 ? (
-                    <Box sx={{ p: 4, textAlign: "center" }}>
-                        <Notifications sx={{ fontSize: 48, color: "text.disabled", mb: 1 }} />
+                    <Box sx={{ p: 3, textAlign: "center" }}>
+                        <Notifications sx={{ fontSize: 36, color: "text.disabled", mb: 1 }} />
                         <Typography variant="body2" color="text.secondary">
                             {t("notifications.noNotifications")}
                         </Typography>

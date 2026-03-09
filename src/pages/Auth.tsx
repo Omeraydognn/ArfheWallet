@@ -83,11 +83,11 @@ function CreateWallet({ accountManager, onDone }: WalletStepProps) {
 
       {isGenerated ? (
         <>
-          <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
+          <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 2 }}>
             {t('auth.writeDownWords')}
           </Typography>
 
-          <Paper elevation={0} variant="outlined" sx={{ p: 2, borderRadius: 3, bgcolor: 'grey.50' }}>
+          <Paper elevation={0} variant="outlined" sx={{ p: 1.5, borderRadius: 3, bgcolor: 'grey.50' }}>
             <Grid container spacing={1}>
               {words.map((word, index) => (
                 <Grid size={{ xs: 6, sm: 4 }} key={index}>
@@ -124,14 +124,14 @@ function CreateWallet({ accountManager, onDone }: WalletStepProps) {
             fullWidth
             onClick={onDone}
             size="large"
-            sx={{ mt: 4, borderRadius: 3, height: 48, fontSize: 16 }}
+            sx={{ mt: 3, borderRadius: 3, height: 44, fontSize: 15 }}
           >
             {t('auth.iSavedMyPhrase')}
           </Button>
         </>
       ) : (
-        <Box sx={{ textAlign: 'center', py: 4 }}>
-          <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>
+        <Box sx={{ textAlign: 'center', py: 3 }}>
+          <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
             {t('auth.generateDescription')}
           </Typography>
           <Button
@@ -140,7 +140,7 @@ function CreateWallet({ accountManager, onDone }: WalletStepProps) {
             onClick={handleGenerate}
             disabled={!accountManager}
             size="large"
-            sx={{ borderRadius: 3, height: 48 }}
+            sx={{ borderRadius: 3, height: 44 }}
           >
             {t('auth.generatePhrase')}
           </Button>
@@ -225,7 +225,7 @@ function ImportWallet({ accountManager, onDone }: WalletStepProps) {
         onClick={handleImport}
         disabled={!accountManager || isScanning}
         size="large"
-        sx={{ mt: 3, borderRadius: 3, height: 48 }}
+        sx={{ mt: 3, borderRadius: 3, height: 44 }}
       >
         {isScanning ? t('auth.scanningAccounts') : t('auth.importWallet')}
       </Button>
@@ -352,17 +352,13 @@ function SetPasswordScreen({ storageManager, accountManager, onDone }: PasswordS
         />
       </Stack>
 
-      <Paper elevation={0} sx={{ p: 2, mt: 2, borderRadius: 2, bgcolor: 'rgba(37, 99, 235, 0.04)', border: '1px solid rgba(37, 99, 235, 0.08)' }}>
-        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: t('auth.encryptionNote') }} />
-      </Paper>
-
       <Button
         variant="contained"
         fullWidth
         onClick={handleSubmit}
         disabled={isLoading}
         size="large"
-        sx={{ mt: 3, borderRadius: 3, height: 48 }}
+        sx={{ mt: 3, borderRadius: 3, height: 44 }}
       >
         {isLoading ? <CircularProgress size={24} color="inherit" /> : t('auth.encryptAndContinue')}
       </Button>
@@ -455,7 +451,7 @@ function LoginIntoWallet({ storageManager, accountManager }: LoginProps) {
       <Typography variant="h5" fontWeight={700} gutterBottom align="center" color="text.primary">
         {t('auth.welcomeBack')}
       </Typography>
-      <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 4 }}>
+      <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
         {t('auth.welcomeBackDesc')}
       </Typography>
 
@@ -494,7 +490,7 @@ function LoginIntoWallet({ storageManager, accountManager }: LoginProps) {
         onClick={handleSubmit}
         disabled={isLoading}
         size="large"
-        sx={{ mt: 3, borderRadius: 3, height: 48 }}
+        sx={{ mt: 3, borderRadius: 3, height: 44 }}
       >
         {isLoading ? <CircularProgress size={24} color="inherit" /> : t('auth.unlock')}
       </Button>
@@ -511,7 +507,7 @@ function LoginIntoWallet({ storageManager, accountManager }: LoginProps) {
           sx={{
             mt: 2,
             borderRadius: 3,
-            height: 48,
+            height: 44,
             borderColor: 'rgba(37, 99, 235, 0.25)',
             color: 'primary.main',
             '&:hover': {
@@ -572,7 +568,7 @@ export default function Auth() {
 
   return (
     <Box sx={{
-      minHeight: '100vh',
+      minHeight: '100%',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -582,7 +578,7 @@ export default function Auth() {
     }}>
       <Container maxWidth="xs">
         <Paper elevation={0} sx={{
-          p: 4,
+          p: 3,
           borderRadius: 4,
           bgcolor: 'rgba(255, 255, 255, 0.9)',
           backdropFilter: 'blur(20px)',
@@ -590,7 +586,7 @@ export default function Auth() {
           boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
         }}>
           {/* Logo Area */}
-          <Box sx={{ textAlign: 'center', mb: 4 }}>
+          <Box sx={{ textAlign: 'center', mb: 3 }}>
             <Typography variant="h5" fontWeight={800} letterSpacing={1} sx={{
               background: 'linear-gradient(90deg, #dbeafe, #2563eb, #dbeafe)',
               backgroundSize: '200% auto',
@@ -644,7 +640,7 @@ export default function Auth() {
 
                     const web3auth = new Web3Auth({
                       clientId,
-                      web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_MAINNET,
+                      web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_DEVNET,
                       privateKeyProvider,
                     });
 
@@ -686,7 +682,7 @@ export default function Auth() {
                 startIcon={<Google />}
                 sx={{
                   borderRadius: 3,
-                  height: 48,
+                  height: 44,
                   bgcolor: '#2563eb',
                   color: 'white',
                   '&:hover': { bgcolor: '#172554' }
@@ -705,7 +701,7 @@ export default function Auth() {
                 variant="outlined"
                 size="large"
                 onClick={() => setStep(AuthStep.CREATE)}
-                sx={{ borderRadius: 3, height: 48, borderColor: '#d4d4d4', color: 'text.primary' }}
+                sx={{ borderRadius: 3, height: 44, borderColor: '#d4d4d4', color: 'text.primary' }}
               >
                 {t('auth.createWallet')}
               </Button>
@@ -713,7 +709,7 @@ export default function Auth() {
                 variant="outlined"
                 size="large"
                 onClick={() => setStep(AuthStep.IMPORT)}
-                sx={{ borderRadius: 3, height: 48, borderColor: '#d4d4d4', color: 'text.primary' }}
+                sx={{ borderRadius: 3, height: 44, borderColor: '#d4d4d4', color: 'text.primary' }}
               >
                 {t('auth.iHaveAWallet')}
               </Button>

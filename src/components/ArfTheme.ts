@@ -258,16 +258,21 @@ const darkPalette = {
 // "Funnel Display" for headings, Inter/Roboto fallback for body.
 
 const typography = {
+  htmlFontSize: 18, // Scale down all rem-based sizes (default 16 → 18 = ~12% smaller)
+  fontSize: 12.25, // Base font-size (default 14 → 12.25)
   fontFamily: ['"Funnel Display"', '"Inter"', '"Roboto"', '"Helvetica"', '"Arial"', "sans-serif"].join(","),
   h1: { fontWeight: 800, letterSpacing: "-0.025em" },
   h2: { fontWeight: 700, letterSpacing: "-0.025em" },
-  h3: { fontWeight: 700, letterSpacing: "-0.02em" },
-  h4: { fontWeight: 700, letterSpacing: "-0.015em" },
-  h5: { fontWeight: 600 },
-  h6: { fontWeight: 600 },
-  subtitle1: { fontWeight: 500 },
-  subtitle2: { fontWeight: 500 },
-  button: { textTransform: "none" as const, fontWeight: 600, letterSpacing: "0.01em" },
+  h3: { fontWeight: 700, letterSpacing: "-0.02em", fontSize: "1.85rem" },
+  h4: { fontWeight: 700, letterSpacing: "-0.015em", fontSize: "1.5rem" },
+  h5: { fontWeight: 600, fontSize: "1.15rem" },
+  h6: { fontWeight: 600, fontSize: "1rem" },
+  subtitle1: { fontWeight: 500, fontSize: "0.9rem" },
+  subtitle2: { fontWeight: 500, fontSize: "0.8rem" },
+  body1: { fontSize: "0.85rem" },
+  body2: { fontSize: "0.78rem" },
+  caption: { fontSize: "0.68rem" },
+  button: { textTransform: "none" as const, fontWeight: 600, letterSpacing: "0.01em", fontSize: "0.8rem" },
 };
 
 // ─── Component overrides (shared across modes) ──────────────────
@@ -291,13 +296,23 @@ function getComponents(mode: PaletteMode) {
       },
     },
 
+    // ── Toolbar — compact for extension popup ───────────────────
+    MuiToolbar: {
+      styleOverrides: {
+        root: {
+          minHeight: "48px !important",
+          height: 48,
+        },
+      },
+    },
+
     // ── Button ──────────────────────────────────────────────────
     MuiButton: {
       styleOverrides: {
         root: {
           borderRadius: tokens.radius.pill,
           boxShadow: "none",
-          padding: "10px 24px",
+          padding: "6px 16px",
           fontWeight: 600,
           transition: tokens.transition.normal,
           "&:hover": {
@@ -458,7 +473,8 @@ function getComponents(mode: PaletteMode) {
         root: {
           textTransform: "none" as const,
           fontWeight: 600,
-          minHeight: 40,
+          minHeight: 32,
+          padding: "4px 12px",
           transition: tokens.transition.fast,
         },
       },

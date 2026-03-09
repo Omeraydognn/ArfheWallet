@@ -51,8 +51,8 @@ import type { Theme } from "@mui/material/styles";
 
 // ─── Glassmorphic Card Styles ──────────────────────────────────
 const glassCardSx = (theme: Theme) => ({
-  p: 2.5,
-  borderRadius: 4,
+  p: 1.5,
+  borderRadius: 3,
   border: "1px solid",
   borderColor: alpha(theme.palette.divider, 0.12),
   bgcolor: alpha(theme.palette.background.paper, 0.6),
@@ -319,7 +319,7 @@ export default function SwapPanel() {
   // ── Not Supported State ──
   if (!isSupported) {
     return (
-      <Box sx={{ textAlign: "center", py: 6 }}>
+      <Box sx={{ textAlign: "center", py: 3 }}>
         <Typography variant="h6" color="text.secondary" fontWeight={700}>
           🔗 {t("swap.notAvailable")}
         </Typography>
@@ -336,7 +336,7 @@ export default function SwapPanel() {
   return (
     <Box sx={{ position: "relative" }}>
       {/* ── Header: Title + Settings Gear ── */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
         <Typography
           variant="subtitle1"
           fontWeight={800}
@@ -370,8 +370,8 @@ export default function SwapPanel() {
           elevation={0}
           sx={{
             ...glassCardSx(theme),
-            mb: 2,
-            p: 2,
+            mb: 1.5,
+            p: 1.5,
           }}
         >
           <Typography
@@ -441,7 +441,7 @@ export default function SwapPanel() {
 
       {/* ── YOU PAY Card ── */}
       <Paper elevation={0} sx={glassCardSx(theme)}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
           <Typography
             variant="caption"
             fontWeight={700}
@@ -525,7 +525,7 @@ export default function SwapPanel() {
             InputProps={{
               disableUnderline: true,
               style: {
-                fontSize: "1.6rem",
+                fontSize: "1.3rem",
                 fontWeight: 700,
                 textAlign: "right",
                 color: insufficientBalance ? theme.palette.error.main : undefined,
@@ -548,8 +548,8 @@ export default function SwapPanel() {
           onClick={handleSwitchTokens}
           aria-label="Switch swap direction"
           sx={{
-            width: 44,
-            height: 44,
+            width: 36,
+            height: 36,
             borderRadius: "50%",
             bgcolor: alpha(theme.palette.primary.main, 0.12),
             border: `3px solid ${theme.palette.background.default}`,
@@ -564,13 +564,13 @@ export default function SwapPanel() {
             },
           }}
         >
-          <SwapVert sx={{ fontSize: 22 }} />
+          <SwapVert sx={{ fontSize: 18 }} />
         </IconButton>
       </Box>
 
       {/* ── YOU RECEIVE Card ── */}
       <Paper elevation={0} sx={{ ...glassCardSx(theme), mt: -0.5 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
           <Typography
             variant="caption"
             fontWeight={700}
@@ -633,7 +633,7 @@ export default function SwapPanel() {
             ) : quote ? (
               <Typography
                 sx={{
-                  fontSize: "1.6rem",
+                  fontSize: "1.3rem",
                   fontWeight: 700,
                   color: "text.primary",
                   letterSpacing: "-0.02em",
@@ -642,7 +642,7 @@ export default function SwapPanel() {
                 {parseFloat(quote.amountOut).toFixed(tokenOut?.decimals === 6 ? 2 : 6)}
               </Typography>
             ) : (
-              <Typography sx={{ fontSize: "1.6rem", fontWeight: 700, color: "text.disabled" }}>
+              <Typography sx={{ fontSize: "1.3rem", fontWeight: 700, color: "text.disabled" }}>
                 0.0
               </Typography>
             )}
@@ -653,7 +653,7 @@ export default function SwapPanel() {
       {/* ── Quote Details ── */}
       {quote && (
         <Fade in>
-          <Paper elevation={0} sx={{ ...glassCardSx(theme), mt: 2, p: 2 }}>
+          <Paper elevation={0} sx={{ ...glassCardSx(theme), mt: 1.5, p: 1.5 }}>
             <Stack spacing={1}>
               {/* Rate */}
               <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -832,7 +832,7 @@ export default function SwapPanel() {
           <Paper
             elevation={0}
             sx={{
-              mt: 2,
+              mt: 1.5,
               p: 1.5,
               borderRadius: 2.5,
               bgcolor: alpha(theme.palette.error.main, 0.08),
@@ -852,7 +852,7 @@ export default function SwapPanel() {
       )}
 
       {/* ── SWAP BUTTON ── */}
-      <Box sx={{ mt: 2.5 }}>
+      <Box sx={{ mt: 1.5 }}>
         {swapStatus === "success" ? (
           <Fade in>
             <Box>
@@ -862,7 +862,7 @@ export default function SwapPanel() {
                 disabled
                 sx={{
                   borderRadius: 3,
-                  height: 52,
+                  height: 44,
                   fontWeight: 700,
                   fontSize: "0.95rem",
                   background: "linear-gradient(135deg, #10b981, #059669)",
@@ -901,7 +901,7 @@ export default function SwapPanel() {
                 onClick={() => { setSwapStatus("idle"); setSwapError(""); }}
                 sx={{
                   borderRadius: 3,
-                  height: 52,
+                  height: 44,
                   fontWeight: 700,
                   fontSize: "0.95rem",
                   background: "linear-gradient(135deg, #ef4444, #dc2626)",
@@ -930,7 +930,7 @@ export default function SwapPanel() {
             disabled={isSwapDisabled as boolean}
             sx={{
               borderRadius: 3,
-              height: 52,
+              height: 44,
               fontWeight: 700,
               fontSize: "0.95rem",
               letterSpacing: "0.02em",

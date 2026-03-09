@@ -6,10 +6,12 @@ import {
   Drawer,
   Box,
   Paper,
+  Stack,
 } from "@mui/material";
 import type { BoxProps } from "@mui/material";
 import { History, Home, Send, Hub, Explore } from "@mui/icons-material";
 import ArfBottomMenu from "./ArfBottomMenu";
+import ShieldPanel from "./panels/ShieldPanel.js";
 import { useNavigate, useLocation } from "react-router";
 import { useTheme } from "@mui/material";
 
@@ -26,6 +28,7 @@ function ArfBottomBar() {
   const location = useLocation();
   const theme = useTheme();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [shieldDrawerOpen, setShieldDrawerOpen] = useState(false);
 
   useEffect(() => {
     const handleOpen = (e: Event) => {
@@ -34,8 +37,16 @@ function ArfBottomBar() {
         window.dispatchEvent(new CustomEvent('arf-menu-set-tab', { detail: (e as CustomEvent).detail }));
       }, 100);
     };
+    const handleShieldOpen = () => {
+      setDrawerOpen(false); // Close send menu first
+      setTimeout(() => setShieldDrawerOpen(true), 200);
+    };
     window.addEventListener('open-arf-menu', handleOpen);
-    return () => window.removeEventListener('open-arf-menu', handleOpen);
+    window.addEventListener('open-shield-panel', handleShieldOpen);
+    return () => {
+      window.removeEventListener('open-arf-menu', handleOpen);
+      window.removeEventListener('open-shield-panel', handleShieldOpen);
+    };
   }, []);
 
   // Map path to index for highlighting
@@ -52,7 +63,7 @@ function ArfBottomBar() {
   return (
     <Box sx={{
       position: 'fixed',
-      bottom: 24,
+      bottom: 12,
       left: 0,
       right: 0,
       display: 'flex',
@@ -83,29 +94,31 @@ function ArfBottomBar() {
           showLabels
           sx={{
             backgroundColor: 'transparent',
-            height: 64,
-            minWidth: 320
+            height: 52,
+            minWidth: 300,
+            '& .MuiBottomNavigationAction-root': { minWidth: 'auto', padding: '4px 0' },
+            '& .MuiBottomNavigationAction-label': { fontSize: '0.65rem' },
           }}
         >
           <BottomNavigationAction
             label="Home"
-            icon={<Home sx={{ fontSize: 28 }} />}
+            icon={<Home sx={{ fontSize: 22 }} />}
             onClick={() => navigate('home')}
           />
           <BottomNavigationAction
             label="Explore"
-            icon={<Explore sx={{ fontSize: 28 }} />}
+            icon={<Explore sx={{ fontSize: 22 }} />}
             onClick={() => navigate('explore')}
           />
 
-          <SafeBox sx={{ width: 72, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <SafeBox sx={{ width: 56, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             <Fab
               color="primary"
               aria-label="Send transaction"
               onClick={() => setDrawerOpen(true)}
               sx={{
-                width: 56,
-                height: 56,
+                width: 44,
+                height: 44,
                 boxShadow: '0 0 20px rgba(37, 99, 235, 0.4)',
                 background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
                 '&:hover': {
@@ -113,18 +126,18 @@ function ArfBottomBar() {
                   boxShadow: '0 0 30px rgba(37, 99, 235, 0.6)',
                 },
               }}>
-              <Send sx={{ fontSize: 28 }} />
+              <Send sx={{ fontSize: 22 }} />
             </Fab>
           </SafeBox>
 
           <BottomNavigationAction
             label="History"
-            icon={<History sx={{ fontSize: 28 }} />}
+            icon={<History sx={{ fontSize: 22 }} />}
             onClick={() => navigate('history')}
           />
           <BottomNavigationAction
             label="Graph"
-            icon={<Hub sx={{ fontSize: 28 }} />}
+            icon={<Hub sx={{ fontSize: 22 }} />}
             onClick={() => navigate('GraphExplorer')}
           />
         </BottomNavigation>
@@ -147,6 +160,33 @@ function ArfBottomBar() {
         }}
       >
         <ArfBottomMenu />
+      </Drawer>
+
+      {/* Shield Panel Drawer */}
+      <Drawer
+        anchor="bottom"
+        open={shieldDrawerOpen}
+        onClose={() => setShieldDrawerOpen(false)}
+        aria-label="Shield panel"
+        PaperProps={{
+          sx: {
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            bgcolor: 'background.paper',
+            backgroundImage: 'none',
+            maxWidth: '600px',
+            mx: 'auto',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+          }
+        }}
+      >
+        <Box sx={{ px: 2, pt: 1, pb: 2 }}>
+          <Stack direction="row" justifyContent="center" sx={{ mb: 1 }}>
+            <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'divider' }} />
+          </Stack>
+          <ShieldPanel />
+        </Box>
       </Drawer>
     </Box>
   );
