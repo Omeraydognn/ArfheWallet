@@ -1,24 +1,16 @@
+@import url('https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* optional: prevent scrollbars */
+}
+
 .app-container {
-    width: 325px !important;
-    height: 695px !important;
-    background-color: #F3F4F6 !important;
-    display: flex !important;
-    flex-direction: column !important; /* İçerikleri dikey hizala */
-    align-items: center !important; /* Yatayda ortala */
-    justify-content: center !important; /* Dikeyde ortala */
-    transform-origin: top center !important; /* Küçültmeyi yukarıdan başlat */
-    padding-top: 130px !important; /* Üstten boşluk ekleyerek yukarı kaymayı önle */
-    overflow: hidden !important;
-    box-sizing: border-box !important;
-    max-width: 100% !important;
-    
-       
-  }
-  #root {
-  position: fixed;
-  top:0px !important;
-  left: 0px !important;
-  width: 325px;
-  height: 695px!important;
-  
-  }
+  width: 100vw;
+  height: 100vh;
+  min-width: 380px;   /* fixed width */
+  min-height: 640px;  /* fixed height */
+  margin: 0;
+}
