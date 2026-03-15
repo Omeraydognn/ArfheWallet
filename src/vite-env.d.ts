@@ -1,8 +1,4 @@
-interface ImportMetaEnv {
-  readonly VITE_ALCHEMY_API_KEY: string;
-  // add more env vars here as you need
-}
+/// <reference types="vite/client" />
 
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
+// Full env declarations are in global.d.ts
+// This file ensures Vite's client types are loaded

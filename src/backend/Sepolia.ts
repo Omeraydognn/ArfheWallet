@@ -1,13 +1,14 @@
-import { Network, NetworkId } from "./Network.js";
+import { Network } from "./Network.js";
+import { NetworkId } from "./NetworkTypes.js";
 
-const rpc_url_prefix = "https://eth-sepolia.g.alchemy.com/v2/"
 
 export default class SepoliaNetwork extends Network {
   constructor() {
     super(
       NetworkId.Ethereum_Sepolia,
       "Sepolia",
-      "https://eth-sepolia.g.alchemy.com/v2/"
+      "https://eth-sepolia.g.alchemy.com/v2/",
+      import.meta.env.VITE_ALCHEMY_SEPOLIA_API_KEY
     );
   }
 }

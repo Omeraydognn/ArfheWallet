@@ -7,8 +7,9 @@ export default class Account {
   private_key?: string | undefined;
   public_key?: string | undefined;
   address?: string | undefined;
+  derivationPath?: string | undefined;
 
-  ethers_wallet?: HDNodeWallet | undefined;
+  ethers_wallet?: HDNodeWallet | Wallet | undefined;
 
   owned_tokens: Map<number, string[]>;
 
@@ -22,17 +23,35 @@ export default class Account {
     account.ethers_wallet = HDNodeWallet.createRandom();
     account.mnemonic = account.ethers_wallet.mnemonic!;
     account.name = name;
+    account.derivationPath = "m/44'/60'/0'/0/0";
 
     account.Init();
     return account;
   }
 
-  static FromMnemonic(phrase: string, name?: string): Account {
+  static FromMnemonic(phrase: string, name?: string, path: string = "m/44'/60'/0'/0/0"): Account {
     const account = new Account();
 
-    account.ethers_wallet = HDNodeWallet.fromPhrase(phrase);
+    account.ethers_wallet = HDNodeWallet.fromPhrase(phrase, "", path);
     account.mnemonic = account.ethers_wallet.mnemonic!;
     account.name = name ?? "";
+    account.derivationPath = path;
+
+    account.Init();
+    return account;
+  }
+
+  static FromPrivateKey(privateKey: string, name: string): Account {
+    const account = new Account();
+
+    // Ensure the private key starts with '0x'
+    const pk = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
+    account.ethers_wallet = new Wallet(pk);
+    account.name = name;
+
+    // A raw private key doesn't have a mnemonic or derivation path
+    account.mnemonic = undefined;
+    account.derivationPath = undefined;
 
     account.Init();
     return account;
@@ -44,7 +63,7 @@ export default class Account {
     }
 
     this.private_key = this.ethers_wallet.privateKey;
-    this.public_key = this.ethers_wallet.publicKey;
+    this.public_key = this.ethers_wallet.signingKey?.publicKey || (this.ethers_wallet as unknown as { publicKey?: string }).publicKey || "";
     this.address = this.ethers_wallet.address;
   }
 
@@ -117,5 +136,18 @@ export default class Account {
 
   GetAllOwnedTokens(): Map<number, string[]> {
     return new Map(this.owned_tokens);
+  }
+
+  /**
+   * Wipe all sensitive data from memory.
+   * After calling this, the account is effectively "locked" —
+   * only address and name remain for UI display purposes.
+   * The account must be re-hydrated from encrypted storage to be usable again.
+   */
+  wipeKeys(): void {
+    this.private_key = undefined;
+    this.public_key = undefined;
+    this.mnemonic = undefined;
+    this.ethers_wallet = undefined;
   }
 }
