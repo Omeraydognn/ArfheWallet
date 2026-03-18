@@ -252,7 +252,7 @@ export default function ShieldPanel() {
                   {txHash.slice(0, 10)}...{txHash.slice(-6)}
                 </Typography>
                 <Link
-                  href={`${getExplorerBaseForNetwork(network?.network_id)}/tx/${txHash}`}
+                  href={`${getExplorerBaseForNetwork(network)}/tx/${txHash}`}
                   target="_blank"
                   rel="noopener"
                   sx={{ color: '#fff', display: 'flex', alignItems: 'center' }}

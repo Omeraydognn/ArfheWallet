@@ -252,6 +252,70 @@ export async function fetchWithTimeout(
   }
 }
 
+// ─── WebSocket JSON-RPC helper ───────────────────────────────────────────────
+
+/**
+ * Make a single JSON-RPC call over a WebSocket connection (ws:// or wss://).
+ * Opens the socket, sends the request, waits for the matching response, then closes.
+ */
+export async function wssRpcCall(
+  url: string,
+  method: string,
+  params: unknown[],
+  timeoutMs: number = 15_000
+): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      reject(new Error(`WebSocket init failed: ${e instanceof Error ? e.message : String(e)}`));
+      return;
+    }
+
+    const id = Date.now();
+    const timer = setTimeout(() => {
+      ws.close();
+      reject(new Error(`WebSocket request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data as string) as { id?: number; result?: unknown; error?: { message?: string } };
+        if (data.id !== id) return; // ignore other messages
+        clearTimeout(timer);
+        ws.close();
+        if (data.error) {
+          reject(new Error(data.error.message || "RPC error"));
+        } else {
+          resolve(data.result);
+        }
+      } catch (e) {
+        clearTimeout(timer);
+        ws.close();
+        reject(e);
+      }
+    };
+
+    ws.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket connection failed"));
+    };
+
+    ws.onclose = (event) => {
+      if (!event.wasClean) {
+        clearTimeout(timer);
+        // Only reject if we haven't resolved yet — timer is already cleared on success
+      }
+    };
+  });
+}
+
+
 // ─── NetworkError class ─────────────────────────────────────────────────────
 
 /**

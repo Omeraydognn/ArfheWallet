@@ -19,7 +19,7 @@ import {
 import { ZoomIn, ZoomOut, Search, Clear, Hub, YoutubeSearchedFor, SwapHoriz } from '@mui/icons-material';
 import { WalletContext } from "../AppContext.js";
 import { ActiveAccountContext } from "../ActiveAccountProvider.js";
-import { GraphNode, GraphEdge } from "../backend/ExplorerService.js";
+import { GraphNode, GraphEdge, ExplorerService } from "../backend/ExplorerService.js";
 import { NetworkId } from "../backend/NetworkTypes.js";
 import { isAddress } from 'ethers';
 
@@ -60,13 +60,21 @@ const GraphExplorer = () => {
   // Fetch Data when Target Changes
   useEffect(() => {
     const fetchData = async () => {
-      // Basic validation before fetch
-      if (!net?.explorerService || !targetAddress || !isAddress(targetAddress)) return;
+      if (!targetAddress || !isAddress(targetAddress) || !net) return;
 
       setLoading(true);
       setError("");
       try {
-        const data = await net.explorerService.fetchGraphData(targetAddress);
+        let data: { nodes: GraphNode[], edges: GraphEdge[] };
+        if (net.explorerService) {
+          // Alchemy-backed network
+          data = await net.explorerService.fetchGraphData(targetAddress);
+        } else if (net.rpc_url) {
+          // Custom / non-Alchemy network: use eth_getLogs fallback
+          data = await ExplorerService.fetchGraphDataFromRpc(net.rpc_url, targetAddress);
+        } else {
+          data = { nodes: [], edges: [] };
+        }
         setGraphData(data);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));

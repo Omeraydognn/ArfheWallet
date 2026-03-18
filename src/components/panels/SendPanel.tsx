@@ -615,7 +615,7 @@ export default function SendPanel() {
           <SuccessAnimation label={t("send.transferComplete")} size={80} />
           {txHash && (
             <Link
-              href={`${getExplorerBaseForNetwork(network?.network_id)}/tx/${txHash}`}
+              href={`${getExplorerBaseForNetwork(network)}/tx/${txHash}`}
               target="_blank" rel="noopener"
               underline="hover"
               sx={{ fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5 }}

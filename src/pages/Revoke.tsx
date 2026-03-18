@@ -318,8 +318,18 @@ const CHAIN_LABELS: Record<string, { name: string; color: string }> = {
   "eip155:11155111": { name: "Sepolia", color: "#9B59B6" },
   "eip155:137": { name: "Polygon", color: "#8247E5" },
   "eip155:42161": { name: "Arbitrum", color: "#28A0F0" },
+  "eip155:421614": { name: "Arb Sepolia", color: "#28A0F0" },
   "eip155:10": { name: "Optimism", color: "#FF0420" },
+  "eip155:11155420": { name: "OP Sepolia", color: "#FF0420" },
   "eip155:8453": { name: "Base", color: "#0052FF" },
+  "eip155:84532": { name: "Base Sepolia", color: "#0052FF" },
+  "eip155:56": { name: "BNB Chain", color: "#F0B90B" },
+  "eip155:43114": { name: "Avalanche", color: "#E84142" },
+  "eip155:250": { name: "Fantom", color: "#1969FF" },
+  "eip155:100": { name: "Gnosis", color: "#04795B" },
+  "eip155:42220": { name: "Celo", color: "#35D07F" },
+  "eip155:130": { name: "Unichain", color: "#FF007A" },
+  "eip155:480": { name: "World Chain", color: "#1A1A1A" },
 };
 
 const RevokeAlchemyPage = () => {

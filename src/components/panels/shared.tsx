@@ -70,16 +70,34 @@ export function getContractsForNetwork(networkId: NetworkId) {
   return CONTRACTS_SEPOLIA;
 }
 
-// Get explorer URL for the active network
-export function getExplorerBaseForNetwork(networkId: NetworkId | undefined) {
-  switch (networkId) {
+// Get explorer URL for the active network — accepts the full Network object
+// so custom networks can return their own configured explorer_url.
+export function getExplorerBaseForNetwork(networkOrId: { network_id?: NetworkId; explorer_url?: string; isCustom?: boolean } | NetworkId | undefined) {
+  // If a full Network object is passed and it's a custom network with its own URL, use it
+  if (networkOrId && typeof networkOrId === 'object') {
+    if (networkOrId.isCustom && networkOrId.explorer_url) return networkOrId.explorer_url.replace(/\/+$/, '');
+    const networkId = networkOrId.network_id;
+    switch (networkId) {
+      case NetworkId.Ethereum_Mainnet: return "https://etherscan.io";
+      case NetworkId.Ethereum_Sepolia: return "https://sepolia.etherscan.io";
+      case NetworkId.Arbitrum_One: return "https://arbiscan.io";
+      case NetworkId.Arbitrum_Sepolia: return "https://sepolia.arbiscan.io";
+      case NetworkId.Base_Mainnet: return "https://basescan.org";
+      case NetworkId.Base_Sepolia: return "https://sepolia.basescan.org";
+      default:
+        // For other built-in or unknown networks, fall back to their explorer_url if set
+        if (networkOrId.explorer_url) return networkOrId.explorer_url.replace(/\/+$/, '');
+        return "https://etherscan.io";
+    }
+  }
+  // Legacy: called with just a NetworkId enum value
+  switch (networkOrId as NetworkId) {
     case NetworkId.Ethereum_Mainnet: return "https://etherscan.io";
     case NetworkId.Ethereum_Sepolia: return "https://sepolia.etherscan.io";
     case NetworkId.Arbitrum_One: return "https://arbiscan.io";
     case NetworkId.Arbitrum_Sepolia: return "https://sepolia.arbiscan.io";
     case NetworkId.Base_Mainnet: return "https://basescan.org";
     case NetworkId.Base_Sepolia: return "https://sepolia.basescan.org";
-    case NetworkId.Fhenix_Sepolia: return "https://explorer.helium.fhenix.zone";
     default: return "https://etherscan.io";
   }
 }

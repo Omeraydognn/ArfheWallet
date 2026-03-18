@@ -76,42 +76,73 @@ export default function AddNetworkModal({ open, onClose, onAdd }: AddNetworkModa
     setRpcTestError("");
     setRpcTestChainId(null);
 
+    const url = rpcUrl.trim();
+    const isWs = url.startsWith("ws://") || url.startsWith("wss://");
+
     try {
-      const response = await fetch(rpcUrl.trim(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "eth_chainId",
-          params: [],
-          id: 1,
-        }),
-      });
+      let result: string;
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (isWs) {
+        // WebSocket RPC test — works in both extension and localhost
+        result = await new Promise<string>((resolve, reject) => {
+          let ws: WebSocket;
+          try { ws = new WebSocket(url); } catch (e) { reject(e); return; }
+          const id = Date.now();
+          const timer = setTimeout(() => { ws.close(); reject(new Error("Connection timed out")); }, 10000);
+          ws.onopen = () => ws.send(JSON.stringify({ jsonrpc: "2.0", id, method: "eth_chainId", params: [] }));
+          ws.onmessage = (e) => {
+            try {
+              const d = JSON.parse(e.data as string) as { id?: number; result?: string; error?: { message?: string } };
+              if (d.id !== id) return;
+              clearTimeout(timer); ws.close();
+              d.error ? reject(new Error(d.error.message)) : resolve(d.result as string);
+            } catch (err) { clearTimeout(timer); ws.close(); reject(err); }
+          };
+          ws.onerror = () => { clearTimeout(timer); reject(new Error("WebSocket connection failed")); };
+        });
+      } else {
+        // HTTP/HTTPS — route through service worker in extension context
+        const rpcBody = JSON.stringify({ jsonrpc: "2.0", method: "eth_chainId", params: [], id: 1 });
+        const isExtension =
+          typeof window !== "undefined" &&
+          typeof (window as any).chrome !== "undefined" &&
+          !!(window as any).chrome?.runtime?.id;
+
+        let data: { result?: string; error?: { message?: string } };
+        if (isExtension) {
+          const response = await new Promise<{ success: boolean; data?: { result?: string; error?: { message?: string } }; error?: string }>((resolve) => {
+            (window as any).chrome.runtime.sendMessage({ type: "RPC_FETCH", url, body: rpcBody }, resolve);
+          });
+          if (!response?.success) throw new Error(response?.error || "Service worker fetch failed");
+          data = response.data as { result?: string; error?: { message?: string } };
+        } else {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10000);
+          const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: rpcBody, signal: controller.signal });
+          clearTimeout(timeout);
+          if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          data = await res.json();
+        }
+        if (data.error) throw new Error(data.error.message || "RPC returned an error");
+        if (!data.result) throw new Error("No chain ID returned from RPC");
+        result = data.result;
       }
 
-      const data = await response.json();
-      if (data.error) {
-        throw new Error(data.error.message || "RPC returned an error");
-      }
-
-      if (!data.result) {
-        throw new Error("No chain ID returned from RPC");
-      }
-
-      const detectedChainId = parseInt(data.result, 16);
+      const detectedChainId = parseInt(result, 16);
       setRpcTestChainId(detectedChainId);
       setRpcTestStatus("success");
+      if (!chainId) setChainId(detectedChainId.toString());
 
-      // Auto-fill chain ID if empty
-      if (!chainId) {
-        setChainId(detectedChainId.toString());
-      }
     } catch (err) {
       setRpcTestStatus("error");
-      setRpcTestError(err instanceof Error ? err.message : "Connection failed");
+      const msg = err instanceof Error ? err.message : "Connection failed";
+      if (msg.includes("abort") || msg.includes("timed out") || msg.includes("timeout")) {
+        setRpcTestError("Connection timed out. The RPC may be slow or unreachable.");
+      } else if (msg.toLowerCase().includes("failed to fetch") || msg.toLowerCase().includes("networkerror")) {
+        setRpcTestError("Could not reach the RPC URL. Check the URL and try again.");
+      } else {
+        setRpcTestError(msg);
+      }
     }
   };
 
@@ -141,14 +172,14 @@ export default function AddNetworkModal({ open, onClose, onAdd }: AddNetworkModa
       return;
     }
 
-    // Warn if RPC test hasn't been done
-    if (rpcTestStatus !== "success") {
-      setFormError("Please test the RPC connection first.");
+    // Warn if RPC test hasn't been done — but allow skipping with a warning
+    if (rpcTestStatus === "idle") {
+      setFormError("Please test the RPC connection first (or enter chain ID manually if test fails).");
       return;
     }
 
     // Warn if detected chain ID doesn't match
-    if (rpcTestChainId && rpcTestChainId !== Number(chainId)) {
+    if (rpcTestStatus === "success" && rpcTestChainId && rpcTestChainId !== Number(chainId)) {
       setFormError(`Chain ID mismatch: RPC returned ${rpcTestChainId}, but you entered ${chainId}.`);
       return;
     }
@@ -171,7 +202,7 @@ export default function AddNetworkModal({ open, onClose, onAdd }: AddNetworkModa
     }
   };
 
-  const isFormValid = networkName.trim() && rpcUrl.trim() && chainId.trim() && currencySymbol.trim() && rpcTestStatus === "success";
+  const isFormValid = networkName.trim() && rpcUrl.trim() && chainId.trim() && currencySymbol.trim() && rpcTestStatus !== "idle";
 
   return (
     <Dialog
@@ -312,8 +343,13 @@ export default function AddNetworkModal({ open, onClose, onAdd }: AddNetworkModa
               />
             )}
             {rpcTestStatus === "error" && rpcTestError && (
-              <Alert severity="error" sx={{ mt: 1, borderRadius: 2, py: 0, fontSize: 12 }}>
+              <Alert severity="error" sx={{ mt: 1, borderRadius: 2, py: 0.5, fontSize: 12 }}>
                 {rpcTestError}
+                <Box sx={{ mt: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    If test fails due to CORS, enter the Chain ID manually and click &quot;Add Network&quot; — it will still work at runtime.
+                  </Typography>
+                </Box>
               </Alert>
             )}
           </Box>

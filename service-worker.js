@@ -564,6 +564,32 @@ async function handleMessage(message) {
       return { success: true };
     }
 
+    // ── Generic RPC Proxy (popup → service worker → external RPC) ──
+    // Service workers are NOT subject to popup CSP restrictions.
+    // Use this for any external fetch from popup that fails due to CORS / CSP.
+    case "RPC_FETCH": {
+      const { url, body: rpcBody } = message;
+      if (!url) return { success: false, error: "No URL provided" };
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 12000);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: typeof rpcBody === "string" ? rpcBody : JSON.stringify(rpcBody),
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        if (!res.ok) return { success: false, error: `HTTP ${res.status}: ${res.statusText}` };
+        const json = await res.json();
+        return { success: true, data: json };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("abort")) return { success: false, error: "Connection timed out" };
+        return { success: false, error: msg };
+      }
+    }
+
     default:
       return { success: false, error: `Unknown message type: ${message.type}` };
   }

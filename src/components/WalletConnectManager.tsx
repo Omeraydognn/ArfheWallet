@@ -48,9 +48,36 @@ const CHAIN_NAMES: Record<string, { name: string; color: string }> = {
     "eip155:1": { name: "Ethereum", color: "#627EEA" },
     "eip155:11155111": { name: "Sepolia", color: "#9B59B6" },
     "eip155:137": { name: "Polygon", color: "#8247E5" },
+    "eip155:80001": { name: "Mumbai", color: "#8247E5" },
     "eip155:42161": { name: "Arbitrum", color: "#28A0F0" },
+    "eip155:421614": { name: "Arb Sepolia", color: "#28A0F0" },
     "eip155:10": { name: "Optimism", color: "#FF0420" },
+    "eip155:11155420": { name: "OP Sepolia", color: "#FF0420" },
     "eip155:8453": { name: "Base", color: "#0052FF" },
+    "eip155:84532": { name: "Base Sepolia", color: "#0052FF" },
+    "eip155:56": { name: "BNB Chain", color: "#F0B90B" },
+    "eip155:97": { name: "BNB Testnet", color: "#F0B90B" },
+    "eip155:43114": { name: "Avalanche", color: "#E84142" },
+    "eip155:43113": { name: "Fuji", color: "#E84142" },
+    "eip155:250": { name: "Fantom", color: "#1969FF" },
+    "eip155:100": { name: "Gnosis", color: "#04795B" },
+    "eip155:1101": { name: "Polygon zkEVM", color: "#8247E5" },
+    "eip155:324": { name: "zkSync Era", color: "#4E529A" },
+    "eip155:59144": { name: "Linea", color: "#121212" },
+    "eip155:534352": { name: "Scroll", color: "#FFDBB0" },
+    "eip155:81457": { name: "Blast", color: "#FCFC03" },
+    "eip155:42220": { name: "Celo", color: "#35D07F" },
+    "eip155:1284": { name: "Moonbeam", color: "#53CBC9" },
+    "eip155:1285": { name: "Moonriver", color: "#F2A007" },
+    "eip155:25": { name: "Cronos", color: "#002D74" },
+    "eip155:1666600000": { name: "Harmony", color: "#00AEE9" },
+    "eip155:1313161554": { name: "Aurora", color: "#78D64B" },
+    "eip155:7777777": { name: "Zora", color: "#A855F7" },
+    "eip155:480": { name: "World Chain", color: "#1A1A1A" },
+    "eip155:130": { name: "Unichain", color: "#FF007A" },
+    "eip155:1868": { name: "Soneium", color: "#3B82F6" },
+    "eip155:143": { name: "Unichain Sepolia", color: "#FF007A" },
+    "eip155:8008135": { name: "Fhenix", color: "#6366F1" },
 };
 
 const METHOD_INFO: Record<string, { label: string; icon: React.ReactNode; risk: "safe" | "warning" | "danger" }> = {
@@ -431,31 +458,59 @@ function ProposalDialog({
                     <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', mb: 1 }}>
                         Networks
                     </Typography>
-                    <Stack direction="row" gap={0.75} flexWrap="wrap">
-                        {allChains.map((chain: string) => {
-                            const supported = !unsupportedChains.includes(chain);
-                            return (
-                                <Chip
-                                    key={chain}
-                                    size="small"
-                                    label={getChainName(chain)}
-                                    icon={supported
-                                        ? <CheckCircleOutlineIcon sx={{ fontSize: 16 }} />
-                                        : <ErrorOutlineIcon sx={{ fontSize: 16 }} />
-                                    }
-                                    sx={{
-                                        fontWeight: 600,
-                                        fontSize: '0.75rem',
-                                        borderColor: supported ? getChainColor(chain) : '#ef4444',
-                                        color: supported ? getChainColor(chain) : '#ef4444',
-                                        bgcolor: supported ? `${getChainColor(chain)}12` : 'rgba(239,68,68,0.08)',
-                                        border: '1px solid',
-                                        '& .MuiChip-icon': { color: 'inherit' }
-                                    }}
-                                />
-                            );
-                        })}
-                    </Stack>
+                    {(() => {
+                        const requiredSet = new Set(requiredChains);
+                        // Only show chains we know the name of
+                        const knownChains = allChains.filter((c: string) => CHAIN_NAMES[c]);
+                        const unknownOptionalCount = allChains.filter(
+                            (c: string) => !CHAIN_NAMES[c] && !requiredSet.has(c)
+                        ).length;
+                        return (
+                            <Stack direction="row" gap={0.75} flexWrap="wrap" alignItems="center">
+                                {knownChains.map((chain: string) => {
+                                    const isRequired = requiredSet.has(chain);
+                                    const supported = !unsupportedChains.includes(chain);
+                                    const color = getChainColor(chain);
+                                    return (
+                                        <Chip
+                                            key={chain}
+                                            size="small"
+                                            label={getChainName(chain)}
+                                            icon={supported
+                                                ? <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />
+                                                : <ErrorOutlineIcon sx={{ fontSize: 14 }} />
+                                            }
+                                            sx={{
+                                                fontWeight: isRequired ? 700 : 500,
+                                                fontSize: '0.72rem',
+                                                opacity: isRequired ? 1 : 0.55,
+                                                borderColor: supported ? color : '#ef4444',
+                                                color: supported ? color : '#ef4444',
+                                                bgcolor: supported ? `${color}12` : 'rgba(239,68,68,0.08)',
+                                                border: '1px solid',
+                                                '& .MuiChip-icon': { color: 'inherit' }
+                                            }}
+                                        />
+                                    );
+                                })}
+                                {unknownOptionalCount > 0 && (
+                                    <Chip
+                                        size="small"
+                                        label={`+${unknownOptionalCount} more optional`}
+                                        sx={{
+                                            fontSize: '0.68rem',
+                                            fontWeight: 500,
+                                            opacity: 0.4,
+                                            border: '1px dashed',
+                                            borderColor: 'text.disabled',
+                                            color: 'text.disabled',
+                                            bgcolor: 'transparent',
+                                        }}
+                                    />
+                                )}
+                            </Stack>
+                        );
+                    })()}
                 </Box>
 
                 {/* Permissions */}
@@ -573,9 +628,9 @@ function ProposalDialog({
                     }}
                 >
                     {loading ? <CircularProgress size={24} color="inherit" /> :
-                     isPhishingDangerous ? "🚫 Blocked — Phishing Detected" :
-                     isPhishingSuspicious ? "⚠️ Connect Anyway" :
-                     "Connect"}
+                        isPhishingDangerous ? "🚫 Blocked — Phishing Detected" :
+                            isPhishingSuspicious ? "⚠️ Connect Anyway" :
+                                "Connect"}
                 </Button>
                 <Button
                     fullWidth
@@ -720,7 +775,7 @@ function RequestDialog({
     }
 
     // Typed data preview
-    let typedDataPreview: { domain?: { name?: string }; message?: unknown; value?: unknown; [key: string]: unknown } | null = null;
+    let typedDataPreview: { domain?: { name?: string }; message?: unknown; value?: unknown;[key: string]: unknown } | null = null;
     if (isTypedData && rpcReq.params?.[1]) {
         try {
             typedDataPreview = JSON.parse(rpcReq.params[1]);
