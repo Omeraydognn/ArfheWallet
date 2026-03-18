@@ -12,6 +12,7 @@ import {
   Link,
   Chip,
   Fade,
+  IconButton,
 } from "@mui/material";
 import {
   Shield,
@@ -19,6 +20,7 @@ import {
   LockOpen,
   ArrowForward,
   OpenInNew,
+  ArrowBack,
 } from "@mui/icons-material";
 import { WalletContext } from "../../AppContext.js";
 import FheEncryptingOverlay from "../FheEncryptingOverlay.js";
@@ -124,6 +126,13 @@ export default function ShieldPanel() {
 
       {/* Header */}
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+        <IconButton
+          size="small"
+          onClick={() => window.dispatchEvent(new CustomEvent('return-to-send-menu'))}
+          sx={{ mr: -0.5, color: 'text.secondary', p: 0.5 }}
+        >
+          <ArrowBack sx={{ fontSize: 20 }} />
+        </IconButton>
         <Shield sx={{ fontSize: 20, color: 'secondary.main' }} />
         <Typography variant="subtitle1" fontWeight={700}>
           Privacy Shield

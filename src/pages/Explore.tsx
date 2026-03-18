@@ -24,16 +24,12 @@ import {
     Link as LinkIcon, WifiTethering, ContentCopy, Verified
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { ethers } from 'ethers';
 import { WalletContext } from '../AppContext';
-import { ActiveAccountContext } from '../ActiveAccountProvider';
 import {
     DAPP_REGISTRY, DAPP_CATEGORIES, DApp, DAppCategory,
     getFeaturedDApps, searchDApps, getDAppsByCategory, getDAppsForChain
 } from '../backend/DAppRegistry';
 import { openDApp } from '../backend/DAppConnectionService';
-import DAppApprovalModal, { ApprovalRequest } from '../components/DAppApprovalModal';
-import { WalletConnectRequest } from '../backend/WalletConnectService';
 import type { WCSessionInfo, ImageErrorEvent } from '../types/index';
 
 // ─── Category Icon Map ──────────────────────────────────────────────
@@ -54,7 +50,7 @@ const Explore = () => {
     const theme = useTheme();
     const { t } = useTranslation();
     const walletContext = useContext(WalletContext);
-    const activeContext = useContext(ActiveAccountContext);
+
     const network = walletContext?.networkProvider?.getActiveNetwork();
 
     // State
@@ -64,8 +60,7 @@ const Explore = () => {
     const [wcUri, setWcUri] = useState('');
     const [wcLoading, setWcLoading] = useState(false);
     const [wcError, setWcError] = useState('');
-    const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
-    const [approvalLoading, setApprovalLoading] = useState(false);
+
     const [wcSessionCount, setWcSessionCount] = useState(0);
 
     // WalletConnect session count
@@ -79,21 +74,8 @@ const Explore = () => {
         wc.setOnSessionUpdate?.(updateCount);
     }, [walletContext?.walletConnectService]);
 
-    // Setup WalletConnect request handler for approval modal
-    useEffect(() => {
-        const wc = walletContext?.walletConnectService;
-        if (!wc) return;
-
-        wc.setOnRequest((req: WalletConnectRequest) => {
-            setApprovalRequest({
-                id: req.id,
-                method: req.params?.request?.method || 'unknown',
-                params: req.params,
-                dApp: req.dApp,
-                topic: req.topic,
-            });
-        });
-    }, [walletContext?.walletConnectService]);
+    // Note: WalletConnect request handling is done globally by WalletConnectManager.
+    // Do NOT call setOnRequest here — it would override the global handler.
 
     // Filter dApps
     const filteredDApps = useMemo(() => {
@@ -138,69 +120,7 @@ const Explore = () => {
         }
     };
 
-    const handleApprove = async (req: ApprovalRequest) => {
-        const wc = walletContext?.walletConnectService;
-        const account = activeContext?.activeAccount;
-        if (!wc || !account) return;
 
-        setApprovalLoading(true);
-        try {
-            const method = req.params?.request?.method || req.method;
-            let result: unknown;
-            const wallet = account.ethers_wallet;
-            if (!wallet) throw new Error('Wallet not available');
-
-            if (method === 'personal_sign') {
-                const message = req.params?.request?.params?.[0];
-                // Decode hex message to string if needed
-                const msgBytes = message?.startsWith('0x')
-                    ? new Uint8Array(Buffer.from(message.slice(2), 'hex'))
-                    : message;
-                result = await wallet.signMessage(msgBytes);
-            } else if (method === 'eth_sendTransaction') {
-                const txParams = req.params?.request?.params?.[0];
-                const rpcUrl = network?.rpc_url;
-                if (!rpcUrl) throw new Error('No RPC URL available');
-                const provider = new ethers.JsonRpcProvider(rpcUrl);
-                const connectedWallet = wallet.connect(provider);
-                const txResponse = await connectedWallet.sendTransaction(txParams);
-                result = txResponse.hash;
-            } else if (method.includes('signTypedData')) {
-                // For typed data, use raw signMessage as fallback
-                const rawData = req.params?.request?.params?.[1];
-                const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-                const { domain, types, message: msg } = parsed;
-                // Remove EIP712Domain from types if present
-                const cleanTypes = { ...types };
-                delete cleanTypes.EIP712Domain;
-                result = await wallet.signTypedData(domain, cleanTypes, msg);
-            }
-
-            await wc.approveRequest(account, {
-                id: req.id,
-                topic: req.topic!,
-                params: req.params,
-                dApp: req.dApp,
-            }, result);
-        } catch (e) {
-        } finally {
-            setApprovalLoading(false);
-            setApprovalRequest(null);
-        }
-    };
-
-    const handleReject = async (req: ApprovalRequest) => {
-        const wc = walletContext?.walletConnectService;
-        if (!wc) return;
-
-        await wc.rejectRequest({
-            id: req.id,
-            topic: req.topic!,
-            params: req.params,
-            dApp: req.dApp,
-        });
-        setApprovalRequest(null);
-    };
 
     return (
         <Box sx={{ pb: 6, minHeight: '100%' }}>
@@ -491,14 +411,7 @@ const Explore = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* ── DApp Approval Modal (FHE Security Guard) ── */}
-            <DAppApprovalModal
-                open={!!approvalRequest}
-                request={approvalRequest}
-                onApprove={handleApprove}
-                onReject={handleReject}
-                loading={approvalLoading}
-            />
+
         </Box>
     );
 };

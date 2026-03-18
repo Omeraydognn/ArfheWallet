@@ -118,7 +118,10 @@ export default function Settings() {
                                 <Switch checked={biometricEnabled} onChange={handleBiometricToggle} />
                             </ListItem>
                         )}
-                        <ListItemButton onClick={() => navigate('/auth')}>
+                        <ListItemButton onClick={() => {
+                            walletContext?.storageManager?.lock();
+                            navigate('/auth');
+                        }}>
                             <ListItemIcon><Lock /></ListItemIcon>
                             <ListItemText primary={t('settings.lockWallet')} secondary={t('settings.secureLogout')} />
                         </ListItemButton>

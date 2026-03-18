@@ -171,16 +171,30 @@ export default function SendPanel() {
           return;
         }
 
-        // Fetch history using Graph logic (same as GraphExplorer) for more reliable interaction data
-        if (network.explorerService) {
+        // 1. Check local contacts & recent addresses
+        const contacts = context?.contactManager?.getContacts() || [];
+        const recents = context?.contactManager?.getRecentAddresses() || [];
+
+        const isKnownLocally = contacts.some(c => c.address.toLowerCase() === targetAddress) ||
+          recents.some(r => r.address.toLowerCase() === targetAddress);
+
+        if (isKnownLocally) {
+          setIsNewAddress(false);
+          setIsCheckingAddress(false);
+          return;
+        }
+
+        // 2. Check absolute history directly via ExplorerService
+        if (network.explorerService && typeof (network.explorerService as any).checkInteraction === 'function') {
+          const hasInteracted = await (network.explorerService as any).checkInteraction(myAddress!, targetAddress);
+          setIsNewAddress(!hasInteracted);
+        } else if (network.explorerService) {
+          // Fallback to recent graph logic
           const graphData = await network.explorerService.fetchGraphData(myAddress!);
-
-          // Check if the target address exists as a node in the user's interaction graph
           const hasInteracted = graphData.nodes.some(node => node.id.toLowerCase() === targetAddress);
-
           setIsNewAddress(!hasInteracted);
         } else {
-          // Fallback if explorerService is missing (mostly for local dev without Alchemy)
+          // Fallback if explorerService is missing
           setIsNewAddress(false);
         }
       } catch (e) {
@@ -538,28 +552,28 @@ export default function SendPanel() {
           </Typography>
         </Stack>
         {showFhe && (
-        <Tooltip title={isConfidential ? t("send.encryptedViaFhe") : t("send.enableEncrypted")} arrow>
-          <Button
-            size="small"
-            variant={isConfidential ? "contained" : "outlined"}
-            color={isConfidential ? "secondary" : "inherit"}
-            onClick={() => setIsConfidential(!isConfidential)}
-            startIcon={isConfidential ? <VisibilityOff sx={{ fontSize: 16 }} /> : <Visibility sx={{ fontSize: 16 }} />}
-            sx={{
-              borderRadius: 2,
-              px: 1.5,
-              py: 0.5,
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              minWidth: 'auto',
-              ...(isConfidential && {
-                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
-              })
-            }}
-          >
-            {isConfidential ? t("send.confidential") : t("send.public")}
-          </Button>
-        </Tooltip>
+          <Tooltip title={isConfidential ? t("send.encryptedViaFhe") : t("send.enableEncrypted")} arrow>
+            <Button
+              size="small"
+              variant={isConfidential ? "contained" : "outlined"}
+              color={isConfidential ? "secondary" : "inherit"}
+              onClick={() => setIsConfidential(!isConfidential)}
+              startIcon={isConfidential ? <VisibilityOff sx={{ fontSize: 16 }} /> : <Visibility sx={{ fontSize: 16 }} />}
+              sx={{
+                borderRadius: 2,
+                px: 1.5,
+                py: 0.5,
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                minWidth: 'auto',
+                ...(isConfidential && {
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+                })
+              }}
+            >
+              {isConfidential ? t("send.confidential") : t("send.public")}
+            </Button>
+          </Tooltip>
         )}
       </Stack>
 
@@ -626,11 +640,11 @@ export default function SendPanel() {
                 p: 2, borderRadius: 3,
                 bgcolor: simResult.riskLevel === "CRITICAL" ? 'rgba(220, 38, 38, 0.12)'
                   : simResult.riskLevel === "HIGH" ? 'rgba(245, 158, 11, 0.12)'
-                  : 'rgba(59, 130, 246, 0.08)',
+                    : 'rgba(59, 130, 246, 0.08)',
                 border: '1px solid',
                 borderColor: simResult.riskLevel === "CRITICAL" ? 'error.main'
                   : simResult.riskLevel === "HIGH" ? 'warning.main'
-                  : 'info.main',
+                    : 'info.main',
               }}>
                 <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                   {simResult.riskLevel === "CRITICAL" ? (
@@ -643,7 +657,7 @@ export default function SendPanel() {
                   <Chip
                     label={
                       simResult.riskLevel === "CRITICAL" ? t("send.riskCritical") :
-                      simResult.riskLevel === "HIGH" ? t("send.riskHigh") : t("send.riskMedium")
+                        simResult.riskLevel === "HIGH" ? t("send.riskHigh") : t("send.riskMedium")
                     }
                     size="small"
                     sx={{
@@ -652,7 +666,7 @@ export default function SendPanel() {
                       height: 22,
                       bgcolor: simResult.riskLevel === "CRITICAL" ? 'error.main'
                         : simResult.riskLevel === "HIGH" ? 'warning.main'
-                        : 'info.main',
+                          : 'info.main',
                       color: '#fff',
                     }}
                   />
@@ -664,7 +678,7 @@ export default function SendPanel() {
                       lineHeight: 1.5,
                       color: simResult.riskLevel === "CRITICAL" ? 'error.main'
                         : simResult.riskLevel === "HIGH" ? 'warning.dark'
-                        : 'text.secondary',
+                          : 'text.secondary',
                       fontWeight: 500,
                     }}>
                       {w}
@@ -809,9 +823,9 @@ export default function SendPanel() {
               endIcon={isLoading ? <CircularProgress size={18} color="inherit" /> : <ArrowForward />}
             >
               {isLoading ? t("send.sending") :
-               simResult?.riskLevel === "CRITICAL" ? t("send.blockedCritical") :
-               simResult?.riskLevel === "HIGH" ? t("send.confirmAnyway") :
-               t("send.confirmSend")}
+                simResult?.riskLevel === "CRITICAL" ? t("send.blockedCritical") :
+                  simResult?.riskLevel === "HIGH" ? t("send.confirmAnyway") :
+                    t("send.confirmSend")}
             </Button>
           </Stack>
         </Stack>

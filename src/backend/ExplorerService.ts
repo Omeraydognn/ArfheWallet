@@ -233,6 +233,39 @@ export class ExplorerService {
         };
     }
 
+    /**
+     * Check if two addresses have ever interacted (direct connection)
+     */
+    async checkInteraction(addressA: string, addressB: string): Promise<boolean> {
+        if (!this.alchemy) return false;
+        try {
+            // Check if A sent to B
+            const sent = await this.alchemy.core.getAssetTransfers({
+                fromBlock: "0x0",
+                toBlock: "latest",
+                fromAddress: addressA,
+                toAddress: addressB,
+                category: [AssetTransfersCategory.EXTERNAL, AssetTransfersCategory.ERC20],
+                maxCount: 1,
+            });
+            if (sent.transfers.length > 0) return true;
+
+            // Check if B sent to A
+            const received = await this.alchemy.core.getAssetTransfers({
+                fromBlock: "0x0",
+                toBlock: "latest",
+                fromAddress: addressB,
+                toAddress: addressA,
+                category: [AssetTransfersCategory.EXTERNAL, AssetTransfersCategory.ERC20],
+                maxCount: 1,
+            });
+            return received.transfers.length > 0;
+        } catch (e) {
+            console.error("Failed to map interaction:", e);
+            return false; // Fallback to safe default
+        }
+    }
+
     private mapTransferToTracked(tx: AssetTransfersWithMetadataResult, ownerAddress: string): TrackedTransaction {
         const isSent = tx.from.toLowerCase() === ownerAddress.toLowerCase();
 

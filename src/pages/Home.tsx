@@ -35,7 +35,6 @@ import {
 import { useMatrixText } from "../hooks/useMatrixText.js";
 import ImportTokenModal from "../components/ImportTokenModal.js";
 import ImportNftModal from "../components/ImportNftModal.js";
-import BuyPanel from "../components/BuyPanel.js";
 import NftGalleryCard from "../components/NftGalleryCard.js";
 import OnboardingTour, {
   BackupReminderBanner,
@@ -190,7 +189,6 @@ function Home() {
   const [importTokenModalOpen, setImportTokenModalOpen] = useState(false);
   const [importNftModalOpen, setImportNftModalOpen] = useState(false);
   const [showHiddenTokens, setShowHiddenTokens] = useState(false);
-  const [buyDrawerOpen, setBuyDrawerOpen] = useState(false);
 
   // Onboarding tour (first-time UX)
   const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingCompleted());
@@ -1059,43 +1057,22 @@ function Home() {
               '& .MuiTab-root': { minHeight: 32, textTransform: 'none', fontWeight: 700, fontSize: '0.85rem', color: 'text.secondary', '&.Mui-selected': { color: 'text.primary' } }
             }}
           >
-          <Tab
-            label={
-              <Stack direction="row" spacing={1} alignItems="center">
-                <span>{t('home.tokens')}</span>
-                {tokens.filter((t) => !t.isSpam && !t.isHidden).length > 0 && (
-                  <Chip
-                    label={tokens.filter((t) => !t.isSpam && !t.isHidden).length}
-                    size="small"
-                    sx={{ height: 18, fontSize: '0.65rem', fontWeight: 800, bgcolor: 'action.hover', color: 'text.secondary' }}
-                  />
-                )}
-              </Stack>
-            }
-          />
-          <Tab label={t('home.nfts')} />
-        </Tabs>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<ShoppingCart sx={{ fontSize: 14 }} />}
-            onClick={() => setBuyDrawerOpen(true)}
-            sx={{
-              borderRadius: 2,
-              fontSize: '0.72rem',
-              fontWeight: 700,
-              minWidth: 'auto',
-              px: 1.5,
-              py: 0.25,
-              mb: 1,
-              textTransform: 'none',
-              borderColor: 'divider',
-              color: 'text.secondary',
-              '&:hover': { borderColor: 'primary.main', color: 'primary.main' },
-            }}
-          >
-            {t('home.buy')}
-          </Button>
+            <Tab
+              label={
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <span>{t('home.tokens')}</span>
+                  {tokens.filter((t) => !t.isSpam && !t.isHidden).length > 0 && (
+                    <Chip
+                      label={tokens.filter((t) => !t.isSpam && !t.isHidden).length}
+                      size="small"
+                      sx={{ height: 18, fontSize: '0.65rem', fontWeight: 800, bgcolor: 'action.hover', color: 'text.secondary' }}
+                    />
+                  )}
+                </Stack>
+              }
+            />
+            <Tab label={t('home.nfts')} />
+          </Tabs>
         </Stack>
 
         {tabIndex === 0 && (
@@ -1319,31 +1296,6 @@ function Home() {
         onClose={() => setShowOnboarding(false)}
       />
 
-      {/* Buy Crypto Drawer */}
-      <Drawer
-        anchor="bottom"
-        open={buyDrawerOpen}
-        onClose={() => setBuyDrawerOpen(false)}
-        aria-label="Buy crypto"
-        PaperProps={{
-          sx: {
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            bgcolor: 'background.paper',
-            backgroundImage: 'none',
-            maxWidth: '600px',
-            mx: 'auto',
-            maxHeight: '80vh',
-            overflowY: 'auto',
-            p: 2,
-          }
-        }}
-      >
-        <Stack direction="row" justifyContent="center" sx={{ mb: 1 }}>
-          <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'divider' }} />
-        </Stack>
-        <BuyPanel />
-      </Drawer>
     </Box>
   );
 }

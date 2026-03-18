@@ -53,6 +53,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const resetTimer = () => {
       clearTimeout(timeoutId);
       const currentTimeout = getTimeout();
+      localStorage.setItem('arfhe_last_active', Date.now().toString());
+
       if (currentTimeout <= 0) return; // 0 or negative means never lock
 
       // Only lock if we are NOT already on the auth or splash screens
@@ -98,14 +100,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // ── Before Unload ──
-    // Wipe sensitive data from memory when tab/browser is closing
-    const handleBeforeUnload = () => {
-      // Fire-and-forget lock on page close
-      // This clears AES key + all registered sensitive data from memory
-      appContext.storageManager.lock();
-    };
-
     // Listeners for user activity
     window.addEventListener('mousemove', resetTimer);
     window.addEventListener('keydown', resetTimer);
@@ -114,7 +108,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('touchstart', resetTimer);
     window.addEventListener('autolock_updated', handleStorageUpdate);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', handleBeforeUnload);
 
     // Initial set
     resetTimer();
@@ -129,7 +122,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('touchstart', resetTimer);
       window.removeEventListener('autolock_updated', handleStorageUpdate);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [navigate, location.pathname, appContext.storageManager]);
 

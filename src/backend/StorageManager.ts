@@ -13,6 +13,8 @@
  */
 
 // --- Crypto Helpers (Web Crypto API) ---
+declare var chrome: any;
+
 
 const PBKDF2_ITERATIONS = 100_000;
 const SALT_KEY = "arfhe_salt";
@@ -48,7 +50,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     },
     keyMaterial,
     { name: "AES-GCM", length: 256 },
-    false,
+    true,
     ["encrypt", "decrypt"]
   );
 }
@@ -140,6 +142,85 @@ class StorageManager {
 
   /** Registered cleanup callbacks — called on lock() to wipe sensitive data from other services */
   private _lockCallbacks: (() => void)[] = [];
+
+  /**
+   * Export the current _cryptoKey and store it in session storage to survive extension popup closes.
+   */
+  async exportSession(): Promise<void> {
+    if (!this._cryptoKey) return;
+    try {
+      const rawKey = await crypto.subtle.exportKey("raw", this._cryptoKey);
+      const base64Key = arrayBufferToBase64(rawKey);
+
+      // Try chrome.storage.session first (Extension MV3)
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session) {
+        await chrome.storage.session.set({ arfhe_session_key: base64Key });
+      } else {
+        // Fallback to web sessionStorage
+        sessionStorage.setItem('arfhe_session_key', base64Key);
+      }
+      localStorage.setItem('arfhe_last_active', Date.now().toString());
+    } catch (e) {
+      console.warn("Could not export session key", e);
+    }
+  }
+
+  /**
+   * Attempt to restore the _cryptoKey from session storage if within the autoLockTimeout.
+   */
+  async restoreSession(timeoutMs: number): Promise<boolean> {
+    if (this._cryptoKey) return true; // Already unlocked
+
+    try {
+      const lastActiveStr = localStorage.getItem('arfhe_last_active');
+      if (!lastActiveStr) return false;
+
+      const lastActive = parseInt(lastActiveStr, 10);
+      if (timeoutMs > 0 && Date.now() - lastActive > timeoutMs) {
+        // Session expired
+        await this.clearSession();
+        return false;
+      }
+
+      let base64Key: string | null = null;
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session) {
+        const result = await chrome.storage.session.get('arfhe_session_key');
+        base64Key = result.arfhe_session_key;
+      } else {
+        base64Key = sessionStorage.getItem('arfhe_session_key');
+      }
+
+      if (!base64Key) return false;
+
+      // Import the key back
+      const rawKey = base64ToUint8Array(base64Key);
+      this._cryptoKey = await crypto.subtle.importKey(
+        "raw",
+        rawKey as BufferSource,
+        { name: "AES-GCM", length: 256 },
+        true, // Keep extractable so we can re-export if needed
+        ["encrypt", "decrypt"]
+      );
+
+      // Update last active
+      localStorage.setItem('arfhe_last_active', Date.now().toString());
+      return true;
+    } catch (e) {
+      console.warn("Could not restore session key", e);
+      return false;
+    }
+  }
+
+  /**
+   * Clears the exported session key
+   */
+  async clearSession(): Promise<void> {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session) {
+      await chrome.storage.session.remove('arfhe_session_key');
+    }
+    sessionStorage.removeItem('arfhe_session_key');
+    localStorage.removeItem('arfhe_last_active');
+  }
 
   /**
    * Retrieves a value from local storage by key (plaintext — non-sensitive)
@@ -235,6 +316,7 @@ class StorageManager {
 
         // Password correct — derive key
         this._cryptoKey = await deriveKey(password, salt);
+        await this.exportSession();
         return true;
       } else {
         // New wallet — create salt and store hash
@@ -246,6 +328,7 @@ class StorageManager {
         localStorage.setItem(PASS_HASH_KEY, passHash);
 
         this._cryptoKey = await deriveKey(password, salt);
+        await this.exportSession();
         return true;
       }
     } catch (error) {
@@ -273,6 +356,7 @@ class StorageManager {
    */
   lock(): void {
     this._cryptoKey = null;
+    this.clearSession().catch(() => { });
 
     // Execute all registered cleanup callbacks
     for (const callback of this._lockCallbacks) {
@@ -331,6 +415,7 @@ class StorageManager {
 
     const newKey = await deriveKey(newPassword, newSalt);
     this._cryptoKey = newKey;
+    await this.exportSession();
 
     for (const [key, value] of Object.entries(decryptedData)) {
       const encrypted = await aesEncrypt(newKey, JSON.stringify(value));

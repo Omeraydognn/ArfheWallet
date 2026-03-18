@@ -41,11 +41,17 @@ function ArfBottomBar() {
       setDrawerOpen(false); // Close send menu first
       setTimeout(() => setShieldDrawerOpen(true), 200);
     };
+    const handleReturnToSend = () => {
+      setShieldDrawerOpen(false);
+      setTimeout(() => setDrawerOpen(true), 200);
+    };
     window.addEventListener('open-arf-menu', handleOpen);
     window.addEventListener('open-shield-panel', handleShieldOpen);
+    window.addEventListener('return-to-send-menu', handleReturnToSend);
     return () => {
       window.removeEventListener('open-arf-menu', handleOpen);
       window.removeEventListener('open-shield-panel', handleShieldOpen);
+      window.removeEventListener('return-to-send-menu', handleReturnToSend);
     };
   }, []);
 
