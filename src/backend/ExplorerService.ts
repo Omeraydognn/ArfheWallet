@@ -233,6 +233,39 @@ export class ExplorerService {
         };
     }
 
+    /**
+     * Check if two addresses have ever interacted (direct connection)
+     */
+    async checkInteraction(addressA: string, addressB: string): Promise<boolean> {
+        if (!this.alchemy) return false;
+        try {
+            // Check if A sent to B
+            const sent = await this.alchemy.core.getAssetTransfers({
+                fromBlock: "0x0",
+                toBlock: "latest",
+                fromAddress: addressA,
+                toAddress: addressB,
+                category: [AssetTransfersCategory.EXTERNAL, AssetTransfersCategory.ERC20],
+                maxCount: 1,
+            });
+            if (sent.transfers.length > 0) return true;
+
+            // Check if B sent to A
+            const received = await this.alchemy.core.getAssetTransfers({
+                fromBlock: "0x0",
+                toBlock: "latest",
+                fromAddress: addressB,
+                toAddress: addressA,
+                category: [AssetTransfersCategory.EXTERNAL, AssetTransfersCategory.ERC20],
+                maxCount: 1,
+            });
+            return received.transfers.length > 0;
+        } catch (e) {
+            console.error("Failed to map interaction:", e);
+            return false; // Fallback to safe default
+        }
+    }
+
     private mapTransferToTracked(tx: AssetTransfersWithMetadataResult, ownerAddress: string): TrackedTransaction {
         const isSent = tx.from.toLowerCase() === ownerAddress.toLowerCase();
 
@@ -292,5 +325,126 @@ export class ExplorerService {
 
     async getTransactionDetails(hash: string) {
         return this.alchemy.core.getTransaction(hash);
+    }
+
+    /**
+     * RPC-only graph data fetcher — works without Alchemy.
+     * Used for custom networks and any network without an ExplorerService.
+     * Scans recent blocks via eth_getLogs for ERC20 Transfers,
+     * then fetches the last 20 blocks for native ETH transactions.
+     */
+    static async fetchGraphDataFromRpc(
+        rpcUrl: string,
+        address: string
+    ): Promise<GraphData> {
+        const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+        async function rpcCall(method: string, params: unknown[]): Promise<unknown> {
+            const res = await fetch(rpcUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+            });
+            const json = await res.json() as { result?: unknown; error?: { message?: string } };
+            if (json.error) throw new Error(json.error.message || "RPC error");
+            return json.result;
+        }
+
+        const currentBlockHex = await rpcCall("eth_blockNumber", []) as string;
+        const currentBlock = parseInt(currentBlockHex, 16);
+        const SCAN_DEPTH = 10000;
+        const fromBlock = Math.max(0, currentBlock - SCAN_DEPTH);
+        const fromHex = "0x" + fromBlock.toString(16);
+        const paddedAddress = "0x000000000000000000000000" + address.toLowerCase().replace("0x", "");
+
+        const [logsIn, logsOut] = await Promise.all([
+            rpcCall("eth_getLogs", [{
+                fromBlock: fromHex, toBlock: "latest",
+                topics: [TRANSFER_TOPIC, null, paddedAddress]
+            }]).catch(() => []),
+            rpcCall("eth_getLogs", [{
+                fromBlock: fromHex, toBlock: "latest",
+                topics: [TRANSFER_TOPIC, paddedAddress, null]
+            }]).catch(() => []),
+        ]) as [any[], any[]];
+
+        const uniqueNodes = new Map<string, GraphNode>();
+        const edges: GraphEdge[] = [];
+        const seenHashes = new Set<string>();
+
+        const ensureNode = (addr: string) => {
+            const a = addr.toLowerCase();
+            if (!uniqueNodes.has(a)) {
+                const name = KNOWN_EXCHANGES[getAddress(a)] || KNOWN_EXCHANGES[a];
+                uniqueNodes.set(a, {
+                    id: a,
+                    label: name || `${a.slice(0, 6)}...`,
+                    type: name ? 'exchange' : 'wallet',
+                    value: 10,
+                });
+            }
+        };
+
+        // ERC20 logs
+        const allLogs = [...(logsIn || []), ...(logsOut || [])];
+        for (const log of allLogs) {
+            if (!log.transactionHash || seenHashes.has(log.transactionHash)) continue;
+            seenHashes.add(log.transactionHash);
+
+            const from = ("0x" + (log.topics[1] || "").slice(26)).toLowerCase();
+            const to = ("0x" + (log.topics[2] || "").slice(26)).toLowerCase();
+            let val = 0;
+            try { val = Number(BigInt(log.data)) / 1e18; } catch { /* ignore */ }
+
+            let timestamp = new Date().toISOString();
+            try {
+                const blk = await rpcCall("eth_getBlockByNumber", [log.blockNumber, false]) as any;
+                if (blk?.timestamp) timestamp = new Date(parseInt(blk.timestamp, 16) * 1000).toISOString();
+            } catch { /* skip */ }
+
+            ensureNode(from);
+            ensureNode(to);
+            edges.push({
+                source: from,
+                target: to,
+                value: val,
+                asset: "TOKEN",
+                hash: log.transactionHash,
+                direction: to.toLowerCase() === address.toLowerCase() ? 'IN' : 'OUT',
+                timestamp,
+            });
+        }
+
+        // Native ETH — scan last 20 blocks
+        const nativeEnd = currentBlock;
+        const nativeStart = Math.max(0, currentBlock - 20);
+        for (let b = nativeEnd; b >= nativeStart; b--) {
+            try {
+                const block = await rpcCall("eth_getBlockByNumber", ["0x" + b.toString(16), true]) as any;
+                if (!block || !Array.isArray(block.transactions)) continue;
+                const timestamp = new Date(parseInt(block.timestamp, 16) * 1000).toISOString();
+                for (const tx of block.transactions) {
+                    const txFrom = (tx.from || "").toLowerCase();
+                    const txTo = (tx.to || "").toLowerCase();
+                    if (txFrom !== address.toLowerCase() && txTo !== address.toLowerCase()) continue;
+                    if (seenHashes.has(tx.hash)) continue;
+                    seenHashes.add(tx.hash);
+                    const val = Number(BigInt(tx.value || "0x0")) / 1e18;
+                    ensureNode(txFrom);
+                    ensureNode(txTo);
+                    edges.push({
+                        source: txFrom,
+                        target: txTo,
+                        value: val,
+                        asset: "ETH",
+                        hash: tx.hash,
+                        direction: txTo === address.toLowerCase() ? 'IN' : 'OUT',
+                        timestamp,
+                    });
+                }
+            } catch { /* skip bad block */ }
+        }
+
+        return { nodes: Array.from(uniqueNodes.values()), edges };
     }
 }

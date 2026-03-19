@@ -6,7 +6,7 @@ import type AccountManager from "./AccountManager";
 import { PhishingDetector, PhishingCheckResult } from "./PhishingDetector";
 
 // --- CONFIGURATION ---
-const PROJECT_ID = "eb563a65765dfb07525fc699292aad02";
+const PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "eb563a65765dfb07525fc699292aad02";
 
 const METADATA = {
     name: "Arfhe Wallet",
@@ -16,7 +16,21 @@ const METADATA = {
 };
 
 // Supported EIP-155 chains
-const SUPPORTED_CHAINS = ["eip155:1", "eip155:11155111"];
+const SUPPORTED_CHAINS = [
+    "eip155:1",       // Ethereum Mainnet
+    "eip155:11155111", // Ethereum Sepolia
+    "eip155:42161",   // Arbitrum One
+    "eip155:421614",  // Arbitrum Sepolia
+    "eip155:8453",    // Base Mainnet
+    "eip155:84532",   // Base Sepolia
+    "eip155:10",      // Optimism
+    "eip155:11155420", // Optimism Sepolia
+    "eip155:137",     // Polygon
+    "eip155:43114",   // Avalanche C-Chain
+    "eip155:56",      // BNB Smart Chain
+    "eip155:59144",   // Linea
+    "eip155:1329",    // Sei
+];
 
 const SUPPORTED_METHODS = [
     "eth_sendTransaction",
@@ -84,11 +98,11 @@ export class WalletConnectService {
         this.isInitializing = true;
 
         try {
-            const metadata = { ...METADATA, url: window.location.origin };
-
+            // Use the declared production URL — window.location.origin returns
+            // "chrome-extension://..." in extension context which WalletConnect rejects.
             this.client = await SignClient.init({
                 projectId: PROJECT_ID,
-                metadata: metadata,
+                metadata: METADATA,
                 logger: "error",
             });
 
@@ -99,6 +113,8 @@ export class WalletConnectService {
                 this.session = this.client.session.values[this.client.session.length - 1];
             }
         } catch (e) {
+            // Re-throw so callers (pair / handleWcConnect) can surface the error
+            throw e;
         } finally {
             this.isInitializing = false;
         }

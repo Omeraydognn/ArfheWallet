@@ -133,9 +133,9 @@ function calculateApprovalRisk(
 // Risk level → visual config
 const RISK_CONFIG = {
   critical: { color: '#dc2626', bg: '#dc262615', label: 'Critical', icon: GppBadRounded },
-  high:     { color: '#ef4444', bg: '#ef444412', label: 'High Risk', icon: WarningAmberRounded },
-  medium:   { color: '#f59e0b', bg: '#f59e0b10', label: 'Medium', icon: ShieldRounded },
-  low:      { color: '#22c55e', bg: '#22c55e10', label: 'Low Risk', icon: GppGoodRounded },
+  high: { color: '#ef4444', bg: '#ef444412', label: 'High Risk', icon: WarningAmberRounded },
+  medium: { color: '#f59e0b', bg: '#f59e0b10', label: 'Medium', icon: ShieldRounded },
+  low: { color: '#22c55e', bg: '#22c55e10', label: 'Low Risk', icon: GppGoodRounded },
 };
 
 // ============================================
@@ -192,7 +192,7 @@ class RevokeService {
 
         // 🔥 Gerçek zamanlı progress güncelle!
         const progressPercent = Math.round((processedChunks / totalChunks) * 70); // 0-70% (STEP 1)
-        const progressMessage = `🔎 Scanning blocks... ${processedChunks}/${totalChunks} chunks`;
+        const progressMessage = `Scanning blocks... ${processedChunks}/${totalChunks} chunks`;
 
         if (onProgress) {
           onProgress(30 + progressPercent, progressMessage); // 30-100% aralığı
@@ -318,8 +318,21 @@ const CHAIN_LABELS: Record<string, { name: string; color: string }> = {
   "eip155:11155111": { name: "Sepolia", color: "#9B59B6" },
   "eip155:137": { name: "Polygon", color: "#8247E5" },
   "eip155:42161": { name: "Arbitrum", color: "#28A0F0" },
+  "eip155:421614": { name: "Arb Sepolia", color: "#28A0F0" },
   "eip155:10": { name: "Optimism", color: "#FF0420" },
+  "eip155:11155420": { name: "OP Sepolia", color: "#FF0420" },
   "eip155:8453": { name: "Base", color: "#0052FF" },
+  "eip155:84532": { name: "Base Sepolia", color: "#0052FF" },
+  "eip155:56": { name: "BNB Chain", color: "#F0B90B" },
+  "eip155:43114": { name: "Avalanche", color: "#E84142" },
+  "eip155:250": { name: "Fantom", color: "#1969FF" },
+  "eip155:100": { name: "Gnosis", color: "#04795B" },
+  "eip155:42220": { name: "Celo", color: "#35D07F" },
+  "eip155:130": { name: "Unichain", color: "#FF007A" },
+  "eip155:480": { name: "World Chain", color: "#1A1A1A" },
+  "eip155:59144": { name: "Linea", color: "#61DFFF" },
+  "eip155:1329": { name: "Sei", color: "#9B1C1C" },
+  "eip155:10143": { name: "Monad Testnet", color: "#836EF9" },
 };
 
 const RevokeAlchemyPage = () => {
@@ -398,7 +411,7 @@ const RevokeAlchemyPage = () => {
     setLoading(true);
     setError(null);
     setScanProgress(0);
-    setScanMessage('� Initializing scanner...');
+    setScanMessage('Initializing scanner...');
 
     try {
       const ownerAddress = activeAccount.GetAddress();
@@ -407,33 +420,28 @@ const RevokeAlchemyPage = () => {
         throw new Error('No wallet address found');
       }
 
-      // RevokeService instance oluştur
-      setScanMessage('📡 Connecting to blockchain...');
+      setScanMessage('Connecting to blockchain...');
       setScanProgress(10);
       const scanner = new RevokeService(network.rpc_url);
 
-      // ⚠️ Alchemy Free tier: max 10 blok per request
-      // 10,000 blok = 1,000 request → TOO SLOW!
-      // Bunun yerine 500 blok tarayalım (50 request = ~10 saniye)
-      setScanMessage('🔎 Scanning last 500 blocks for approvals...');
+      setScanMessage('Scanning recent blocks for approvals...');
       setScanProgress(30);
 
-      // 🔥 Progress callback ile gerçek zamanlı güncelleme!
       const results = await scanner.scanApprovals(ownerAddress, 500, (progress, message) => {
         setScanProgress(progress);
-        setScanMessage(message);
+        // Strip emojis from the scanner callback
+        setScanMessage(message.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim());
       });
 
       setScanProgress(100);
-      setScanMessage(' Scan complete!');
+      setScanMessage('Scan complete');
       setApprovals(results);
 
-      // Success mesajı
       if (results.length === 0) {
-        setSuccess(' No active approvals found in last 500 blocks (~2 hours)');
+        setSuccess('No active approvals found in last 500 blocks');
       } else {
         const unlimitedCount = results.filter(a => a.isUnlimited).length;
-        setSuccess(`Found ${results.length} approval(s)${unlimitedCount > 0 ? ` (${unlimitedCount} unlimited!)` : ''}`);
+        setSuccess(`Found ${results.length} approval(s)${unlimitedCount > 0 ? ` — ${unlimitedCount} unlimited` : ''}`);
       }
 
     } catch (err) {
@@ -460,7 +468,7 @@ const RevokeAlchemyPage = () => {
         gasLimit: 100000n
       });
 
-      setSuccess(`Revoked! Tx: ${txHash.slice(0, 10)}...`);
+      setSuccess(`Revoked — tx: ${txHash.slice(0, 10)}...`);
       setTimeout(fetchApprovals, 3000);
 
     } catch (e) {
@@ -475,89 +483,142 @@ const RevokeAlchemyPage = () => {
     }
   }, [activeAccount, network]);
 
+  // ─── Derived values ───
+  const isDark = theme.palette.mode === 'dark';
+  const cardBg = isDark ? 'rgba(30, 41, 59, 0.65)' : 'rgba(255, 255, 255, 0.75)';
+  const cardBorder = isDark ? 'rgba(96, 165, 250, 0.08)' : 'rgba(0, 0, 0, 0.06)';
+
   return (
     <Box sx={{ pb: 12, minHeight: '100%' }}>
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        {/* Header */}
-        <Box sx={{ textAlign: 'center', mb: 4 }}>
-          <Typography variant="h4" fontWeight={800} gutterBottom
-            sx={{ background: 'linear-gradient(90deg, #dbeafe, #2563eb, #dbeafe', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Revoke
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Review and revoke your ERC20 token permissions granted to dApps and smart contracts.
-          </Typography>
+      <Container maxWidth="md" sx={{ px: { xs: 2, sm: 3 }, py: 3 }}>
 
+        {/* ─── Header ─── */}
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.5 }}>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <SecurityRounded sx={{ fontSize: 22, color: 'primary.main' }} />
+            <Typography variant="subtitle1" fontWeight={800} letterSpacing="-0.01em">
+              Permissions & Sessions
+            </Typography>
+          </Stack>
           <Button
-            startIcon={loading ? <CircularProgress size={16} /> : <RefreshRounded />}
+            size="small"
+            startIcon={loading ? <CircularProgress size={14} color="inherit" /> : <RefreshRounded sx={{ fontSize: 16 }} />}
             onClick={() => { fetchApprovals(); fetchSessions(); }}
             disabled={loading}
-            sx={{ mt: 2 }}
-            variant="contained"
+            variant="outlined"
+            sx={{
+              borderRadius: 2.5,
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              textTransform: 'none',
+              px: 2,
+              borderColor: cardBorder,
+            }}
           >
-            {loading ? 'Scanning...' : 'Refresh Approvals'}
+            {loading ? 'Scanning...' : 'Scan'}
           </Button>
-        </Box>
+        </Stack>
 
-        {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
-
-        {/* 🎨 ŞIKALI LOADING SCREEN */}
-        {loading && (
-          <Paper sx={{
-            p: 6,
-            mb: 4,
-            textAlign: 'center',
-            borderRadius: 4,
-            background: 'linear-gradient(135deg, rgba(37,99,235,0.04) 0%, rgba(59,130,246,0.04) 100%)',
-            border: '1px solid',
-            borderColor: 'divider',
-            backdropFilter: 'blur(10px)'
+        {/* ─── Error ─── */}
+        {error && (
+          <Paper elevation={0} sx={{
+            mb: 2, p: 1.5, borderRadius: 2.5,
+            bgcolor: 'rgba(220, 38, 38, 0.08)',
+            border: '1px solid rgba(220, 38, 38, 0.2)',
           }}>
-            <SearchRounded sx={{ fontSize: 60, color: 'primary.main', mb: 2, opacity: 0.8 }} />
-            <Typography variant="h6" fontWeight={700} gutterBottom>
-              {scanMessage || 'Scanning past permissions...'}
-            </Typography>
-            <Box sx={{ width: '80%', maxWidth: 400, mx: 'auto', mt: 3 }}>
-              <LinearProgress
-                variant="determinate"
-                value={scanProgress}
-                sx={{
-                  height: 6,
-                  borderRadius: 3,
-                  bgcolor: 'action.hover',
-                  '& .MuiLinearProgress-bar': {
-                    background: 'linear-gradient(90deg, #2563eb 0%, #1e40af 100%)',
-                  }
-                }}
-              />
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: 'block', fontWeight: 600 }}>
-                {scanProgress}% complete
-              </Typography>
-            </Box>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <GppBadRounded sx={{ fontSize: 18, color: '#dc2626' }} />
+              <Typography variant="caption" fontWeight={600} color="error.main" sx={{ flex: 1 }}>{error}</Typography>
+              <Button size="small" onClick={() => setError(null)} sx={{ minWidth: 'auto', fontSize: '0.65rem', fontWeight: 700 }}>
+                Dismiss
+              </Button>
+            </Stack>
           </Paper>
         )}
 
-        {/* WalletConnect Sessions */}
+        {/* ─── Compact Loading Scanner ─── */}
+        {loading && (
+          <Paper elevation={0} sx={{
+            mb: 2.5, p: 2, borderRadius: 3,
+            bgcolor: cardBg,
+            backdropFilter: 'blur(16px)',
+            border: '1px solid',
+            borderColor: cardBorder,
+          }}>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+                <CircularProgress
+                  variant="determinate"
+                  value={scanProgress}
+                  size={44}
+                  thickness={4}
+                  sx={{
+                    color: 'primary.main',
+                    '& .MuiCircularProgress-circle': {
+                      strokeLinecap: 'round',
+                    },
+                  }}
+                />
+                <Box
+                  sx={{
+                    top: 0, left: 0, bottom: 0, right: 0,
+                    position: 'absolute',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <Typography variant="caption" fontWeight={800} color="primary.main" sx={{ fontSize: '0.6rem' }}>
+                    {scanProgress}%
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
+                  Scanning Permissions
+                </Typography>
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {scanMessage || 'Analyzing blockchain data...'}
+                </Typography>
+                <LinearProgress
+                  variant="determinate"
+                  value={scanProgress}
+                  sx={{
+                    mt: 1,
+                    height: 3,
+                    borderRadius: 2,
+                    bgcolor: isDark ? 'rgba(96, 165, 250, 0.08)' : 'rgba(37, 99, 235, 0.06)',
+                    '& .MuiLinearProgress-bar': {
+                      borderRadius: 2,
+                      background: 'linear-gradient(90deg, #2563eb 0%, #3b82f6 100%)',
+                    }
+                  }}
+                />
+              </Box>
+            </Stack>
+          </Paper>
+        )}
+
+        {/* ─── Connected dApps ─── */}
         {sessions.length > 0 && (
-          <Box sx={{ mb: 4 }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-              <Typography variant="h6" fontWeight={700}>
+          <Box sx={{ mb: 2.5 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+              <Typography variant="body2" fontWeight={700} color="text.secondary" letterSpacing="0.03em" sx={{ textTransform: 'uppercase', fontSize: '0.7rem' }}>
                 Connected dApps ({sessions.length})
               </Typography>
               {sessions.length > 1 && (
                 <Button
                   size="small"
-                  variant="outlined"
                   color="error"
-                  startIcon={disconnectingAll ? <CircularProgress size={14} /> : <LinkOffRounded />}
+                  startIcon={disconnectingAll ? <CircularProgress size={12} /> : <LinkOffRounded sx={{ fontSize: 14 }} />}
                   onClick={handleDisconnectAll}
                   disabled={disconnectingAll}
-                  sx={{ borderRadius: 2, fontWeight: 600, textTransform: 'none' }}
+                  sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', fontSize: '0.7rem' }}
                 >
                   Disconnect All
                 </Button>
               )}
             </Stack>
+
             {sessions.map((s: WCSessionInfo) => {
               const peerMeta = s.peer?.metadata || {};
               const chains = Object.values(s.namespaces || {}).flatMap((ns: WCNamespace) => ns.chains || ns.accounts?.map((a: string) => a.split(':').slice(0, 2).join(':')) || []);
@@ -570,36 +631,43 @@ const RevokeAlchemyPage = () => {
                   key={s.topic}
                   elevation={0}
                   sx={{
-                    p: 2.5,
-                    mb: 1.5,
-                    borderRadius: 4,
+                    p: 2,
+                    mb: 1,
+                    borderRadius: 3,
                     border: '1px solid',
-                    borderColor: isExpired ? 'error.light' : 'rgba(0,0,0,0.05)',
-                    bgcolor: isExpired ? 'rgba(239,68,68,0.04)' : alpha(theme.palette.background.paper, 0.85),
-                    backdropFilter: 'blur(20px)',
-                    boxShadow: '0 8px 32px -8px rgba(0,0,0,0.08)',
-                    transition: 'all 0.2s',
-                    '&:hover': { borderColor: 'primary.main', boxShadow: '0 8px 32px 0px rgba(37,99,235,0.15)', transform: 'translateY(-2px)' },
+                    borderColor: isExpired ? 'rgba(239, 68, 68, 0.3)' : cardBorder,
+                    bgcolor: cardBg,
+                    backdropFilter: 'blur(16px)',
+                    transition: 'all 0.15s ease',
+                    '&:hover': { borderColor: 'primary.main' },
                   }}
                 >
-                  <Stack direction="row" alignItems="center" spacing={2}>
+                  <Stack direction="row" alignItems="center" spacing={1.5}>
                     <Avatar
                       src={peerMeta.icons?.[0]}
-                      sx={{ width: 44, height: 44, bgcolor: 'primary.main', border: '2px solid', borderColor: 'divider' }}
+                      sx={{
+                        width: 36, height: 36,
+                        bgcolor: isDark ? 'rgba(37, 99, 235, 0.15)' : 'rgba(37, 99, 235, 0.08)',
+                        color: 'primary.main',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        border: '1px solid',
+                        borderColor: cardBorder,
+                      }}
                     >
                       {peerMeta.name?.[0]?.toUpperCase() || '?'}
                     </Avatar>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography fontWeight={700} sx={{ fontSize: '0.95rem' }}>
+                      <Typography variant="body2" fontWeight={700} noWrap>
                         {peerMeta.name || 'Unknown dApp'}
                       </Typography>
                       <Stack direction="row" alignItems="center" spacing={0.5}>
-                        <LanguageRounded sx={{ fontSize: 12, color: 'text.secondary' }} />
-                        <Typography variant="caption" color="text.secondary" noWrap>
+                        <LanguageRounded sx={{ fontSize: 11, color: 'text.secondary' }} />
+                        <Typography variant="caption" color="text.secondary" noWrap sx={{ fontSize: '0.65rem' }}>
                           {peerMeta.url || 'No URL'}
                         </Typography>
                       </Stack>
-                      <Stack direction="row" gap={0.5} sx={{ mt: 0.75 }} flexWrap="wrap">
+                      <Stack direction="row" gap={0.5} sx={{ mt: 0.5 }} flexWrap="wrap">
                         {uniqueChains.map((chain: string) => {
                           const label = CHAIN_LABELS[chain];
                           return (
@@ -608,13 +676,10 @@ const RevokeAlchemyPage = () => {
                               size="small"
                               label={label?.name || chain}
                               sx={{
-                                fontSize: '0.65rem',
-                                height: 20,
-                                fontWeight: 600,
-                                bgcolor: label ? `${label.color}15` : '#88888815',
-                                color: label?.color || '#888',
-                                border: '1px solid',
-                                borderColor: label ? `${label.color}30` : '#88888830',
+                                fontSize: '0.6rem', height: 18, fontWeight: 700,
+                                bgcolor: label ? `${label.color}12` : 'action.hover',
+                                color: label?.color || 'text.secondary',
+                                border: 'none',
                               }}
                             />
                           );
@@ -623,16 +688,14 @@ const RevokeAlchemyPage = () => {
                           <Tooltip title={`Expires: ${expiryDate.toLocaleString()}`} arrow>
                             <Chip
                               size="small"
-                              icon={<AccessTimeRounded sx={{ fontSize: 12 }} />}
+                              icon={<AccessTimeRounded sx={{ fontSize: 10 }} />}
                               label={isExpired ? 'Expired' : expiryDate.toLocaleDateString()}
                               sx={{
-                                fontSize: '0.65rem',
-                                height: 20,
-                                fontWeight: 600,
+                                fontSize: '0.6rem', height: 18, fontWeight: 600,
                                 color: isExpired ? '#ef4444' : 'text.secondary',
                                 '& .MuiChip-icon': { color: 'inherit' },
+                                border: 'none',
                               }}
-                              variant="outlined"
                             />
                           </Tooltip>
                         )}
@@ -643,8 +706,12 @@ const RevokeAlchemyPage = () => {
                       variant="outlined"
                       color="error"
                       onClick={() => handleDisconnectSession(s.topic)}
-                      startIcon={<LinkOffRounded sx={{ fontSize: 16 }} />}
-                      sx={{ borderRadius: 2, fontWeight: 600, textTransform: 'none', minWidth: 110 }}
+                      sx={{
+                        borderRadius: 2, fontWeight: 700, textTransform: 'none',
+                        fontSize: '0.7rem', minWidth: 88, py: 0.5,
+                        borderColor: 'rgba(239, 68, 68, 0.3)',
+                        '&:hover': { borderColor: 'error.main', bgcolor: 'rgba(239, 68, 68, 0.06)' },
+                      }}
                     >
                       Disconnect
                     </Button>
@@ -655,218 +722,192 @@ const RevokeAlchemyPage = () => {
           </Box>
         )}
 
-        {/* ─── Risk Summary Dashboard ─── */}
-        {!loading && approvals.length > 0 && (
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              mb: 3,
-              borderRadius: 4,
-              bgcolor: alpha(theme.palette.background.paper, 0.85),
-              backdropFilter: 'blur(20px)',
+        {/* ─── Risk Overview (compact) ─── */}
+        {!loading && approvals.length > 0 && (() => {
+          const avgScore = Math.round(approvals.reduce((s, a) => s + a.riskScore, 0) / approvals.length);
+          const overallLevel = avgScore >= 75 ? 'critical' : avgScore >= 50 ? 'high' : avgScore >= 30 ? 'medium' : 'low';
+          const cfg = RISK_CONFIG[overallLevel];
+          const OverallIcon = cfg.icon;
+          const unlimitedCount = approvals.filter(a => a.isUnlimited).length;
+          const highRiskCount = approvals.filter(a => a.riskLevel === 'critical' || a.riskLevel === 'high').length;
+
+          return (
+            <Paper elevation={0} sx={{
+              p: 2, mb: 2.5, borderRadius: 3,
+              bgcolor: cardBg,
+              backdropFilter: 'blur(16px)',
               border: '1px solid',
-              borderColor: 'divider',
-              boxShadow: '0 8px 32px -8px rgba(0,0,0,0.08)',
-            }}
-          >
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-              <SecurityRounded sx={{ fontSize: 22, color: 'primary.main' }} />
-              <Typography variant="subtitle1" fontWeight={800}>
-                Approval Risk Overview
-              </Typography>
-            </Stack>
+              borderColor: `${cfg.color}20`,
+            }}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                {/* Score circle */}
+                <Box sx={{
+                  width: 52, height: 52, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
+                  bgcolor: `${cfg.color}10`,
+                  border: '2px solid',
+                  borderColor: `${cfg.color}30`,
+                  flexShrink: 0,
+                }}>
+                  <Typography variant="subtitle2" fontWeight={900} sx={{ color: cfg.color, lineHeight: 1 }}>{avgScore}</Typography>
+                  <Typography sx={{ fontSize: '0.5rem', color: cfg.color, fontWeight: 700, lineHeight: 1 }}>RISK</Typography>
+                </Box>
 
-            <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
-              {/* Overall Risk Score */}
-              {(() => {
-                const avgScore = Math.round(approvals.reduce((s, a) => s + a.riskScore, 0) / approvals.length);
-                const overallLevel = avgScore >= 75 ? 'critical' : avgScore >= 50 ? 'high' : avgScore >= 30 ? 'medium' : 'low';
-                const cfg = RISK_CONFIG[overallLevel];
-                return (
-                  <Paper elevation={0} sx={{ p: 2, borderRadius: 3, border: '1px solid', borderColor: `${cfg.color}30`, bgcolor: cfg.bg, flex: '1 1 140px', textAlign: 'center' }}>
-                    <cfg.icon sx={{ fontSize: 28, color: cfg.color, mb: 0.5 }} />
-                    <Typography variant="h5" fontWeight={800} sx={{ color: cfg.color }}>{avgScore}</Typography>
-                    <Typography variant="caption" fontWeight={700} sx={{ color: cfg.color }}>{cfg.label}</Typography>
-                    <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 0.5 }}>Avg. Risk Score</Typography>
-                  </Paper>
-                );
-              })()}
-
-              {/* Stat Cards */}
-              <Paper elevation={0} sx={{ p: 2, borderRadius: 3, border: '1px solid', borderColor: 'divider', flex: '1 1 100px', textAlign: 'center' }}>
-                <Typography variant="h5" fontWeight={800} color="text.primary">{approvals.length}</Typography>
-                <Typography variant="caption" color="text.secondary" fontWeight={600}>Active Approvals</Typography>
-              </Paper>
-
-              <Paper elevation={0} sx={{ p: 2, borderRadius: 3, border: '1px solid', borderColor: '#dc262630', bgcolor: '#dc262608', flex: '1 1 100px', textAlign: 'center' }}>
-                <Typography variant="h5" fontWeight={800} sx={{ color: '#dc2626' }}>{approvals.filter(a => a.isUnlimited).length}</Typography>
-                <Typography variant="caption" sx={{ color: '#dc2626' }} fontWeight={600}>Unlimited</Typography>
-              </Paper>
-
-              <Paper elevation={0} sx={{ p: 2, borderRadius: 3, border: '1px solid', borderColor: '#ef444430', bgcolor: '#ef444408', flex: '1 1 100px', textAlign: 'center' }}>
-                <Typography variant="h5" fontWeight={800} sx={{ color: '#ef4444' }}>{approvals.filter(a => a.riskLevel === 'critical' || a.riskLevel === 'high').length}</Typography>
-                <Typography variant="caption" sx={{ color: '#ef4444' }} fontWeight={600}>High Risk</Typography>
-              </Paper>
-
-              <Paper elevation={0} sx={{ p: 2, borderRadius: 3, border: '1px solid', borderColor: '#f59e0b30', bgcolor: '#f59e0b08', flex: '1 1 100px', textAlign: 'center' }}>
-                <Typography variant="h5" fontWeight={800} sx={{ color: '#f59e0b' }}>{approvals.filter(a => !COMMON_SPENDERS.some(s => s.address.toLowerCase() === a.spenderAddress.toLowerCase())).length}</Typography>
-                <Typography variant="caption" sx={{ color: '#f59e0b' }} fontWeight={600}>Unknown Spenders</Typography>
-              </Paper>
-            </Stack>
-          </Paper>
-        )}
+                {/* Stats row */}
+                <Stack direction="row" spacing={2} sx={{ flex: 1 }} divider={<Divider orientation="vertical" flexItem />}>
+                  <Box sx={{ textAlign: 'center', flex: 1 }}>
+                    <Typography variant="subtitle2" fontWeight={800}>{approvals.length}</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>Approvals</Typography>
+                  </Box>
+                  {unlimitedCount > 0 && (
+                    <Box sx={{ textAlign: 'center', flex: 1 }}>
+                      <Typography variant="subtitle2" fontWeight={800} color="error.main">{unlimitedCount}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>Unlimited</Typography>
+                    </Box>
+                  )}
+                  {highRiskCount > 0 && (
+                    <Box sx={{ textAlign: 'center', flex: 1 }}>
+                      <Typography variant="subtitle2" fontWeight={800} sx={{ color: '#ef4444' }}>{highRiskCount}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>High Risk</Typography>
+                    </Box>
+                  )}
+                </Stack>
+              </Stack>
+            </Paper>
+          );
+        })()}
 
         {/* ─── Approval Cards ─── */}
         {approvals.length > 0 && (
-          <Box>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-              <Typography variant="h6" fontWeight={700}>
-                Token Permissions ({approvals.length})
-              </Typography>
-            </Stack>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" fontWeight={700} color="text.secondary" letterSpacing="0.03em" sx={{ textTransform: 'uppercase', fontSize: '0.7rem', mb: 1.5 }}>
+              Token Permissions ({approvals.length})
+            </Typography>
+
             {[...approvals].sort((a, b) => b.riskScore - a.riskScore).map((a, i) => {
               const riskCfg = RISK_CONFIG[a.riskLevel];
               const RiskIcon = riskCfg.icon;
 
               return (
                 <Paper key={i} elevation={0} sx={{
-                  p: 0,
-                  mb: 2,
-                  borderRadius: 4,
-                  bgcolor: alpha(theme.palette.background.paper, 0.85),
-                  backdropFilter: 'blur(20px)',
-                  boxShadow: '0 8px 32px -8px rgba(0,0,0,0.08)',
+                  mb: 1.5,
+                  borderRadius: 3,
+                  bgcolor: cardBg,
+                  backdropFilter: 'blur(16px)',
                   border: '1px solid',
-                  borderColor: `${riskCfg.color}30`,
+                  borderColor: `${riskCfg.color}18`,
                   overflow: 'hidden',
-                  transition: 'transform 0.2s ease-in-out',
-                  '&:hover': {
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 12px 48px -12px rgba(0,0,0,0.12)',
-                  }
+                  transition: 'all 0.15s ease',
+                  '&:hover': { borderColor: `${riskCfg.color}40` },
                 }}>
-                  {/* Risk Score Bar (top) */}
-                  <Box sx={{ position: 'relative', height: 4 }}>
-                    <LinearProgress
-                      variant="determinate"
-                      value={a.riskScore}
-                      sx={{
-                        height: 4,
-                        bgcolor: `${riskCfg.color}15`,
-                        '& .MuiLinearProgress-bar': {
-                          bgcolor: riskCfg.color,
-                          borderRadius: 0,
-                        },
-                      }}
-                    />
-                  </Box>
+                  {/* Subtle risk bar */}
+                  <LinearProgress
+                    variant="determinate"
+                    value={a.riskScore}
+                    sx={{
+                      height: 2,
+                      bgcolor: 'transparent',
+                      '& .MuiLinearProgress-bar': { bgcolor: riskCfg.color, borderRadius: 0 },
+                    }}
+                  />
 
-                  <Box sx={{ p: 3 }}>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2}>
-                      <Box sx={{ flex: 1 }}>
-                        {/* Token Name + Risk Badge */}
-                        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
-                          <Typography variant="h6" fontWeight={800}>{a.tokenSymbol}</Typography>
-                          <Typography variant="body2" color="text.secondary" fontWeight={500}>({a.tokenName})</Typography>
-
-                          {/* Risk Level Badge */}
+                  <Box sx={{ p: 2 }}>
+                    {/* Top row: token + risk badge */}
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                      <Stack direction="row" alignItems="center" spacing={1}>
+                        <Typography variant="body2" fontWeight={800}>{a.tokenSymbol}</Typography>
+                        <Typography variant="caption" color="text.secondary">{a.tokenName}</Typography>
+                        <Chip
+                          icon={<RiskIcon sx={{ fontSize: 12 }} />}
+                          label={riskCfg.label}
+                          size="small"
+                          sx={{
+                            height: 20, fontSize: '0.6rem', fontWeight: 800,
+                            bgcolor: `${riskCfg.color}10`,
+                            color: riskCfg.color,
+                            border: 'none',
+                            '& .MuiChip-icon': { color: riskCfg.color },
+                          }}
+                        />
+                        {a.isUnlimited && (
                           <Chip
-                            icon={<RiskIcon sx={{ fontSize: 14 }} />}
-                            label={`${riskCfg.label} (${a.riskScore})`}
+                            label="UNLIMITED"
                             size="small"
                             sx={{
-                              ml: 1,
-                              height: 24,
-                              fontSize: '0.7rem',
-                              fontWeight: 800,
-                              bgcolor: riskCfg.bg,
-                              color: riskCfg.color,
-                              border: '1px solid',
-                              borderColor: `${riskCfg.color}40`,
-                              '& .MuiChip-icon': { color: riskCfg.color },
+                              height: 18, fontSize: '0.55rem', fontWeight: 800,
+                              bgcolor: 'rgba(220, 38, 38, 0.10)',
+                              color: '#dc2626',
+                              border: 'none',
                             }}
                           />
+                        )}
+                      </Stack>
+                    </Stack>
 
-                          {a.isUnlimited && (
-                            <Tooltip title="Unlimited allowance gives the spender full access to drain all your tokens of this type!" arrow>
-                              <Chip
-                                label="∞ UNLIMITED"
-                                size="small"
-                                sx={{
-                                  height: 22,
-                                  fontSize: '0.65rem',
-                                  fontWeight: 800,
-                                  bgcolor: '#dc262618',
-                                  color: '#dc2626',
-                                  border: '1px solid #dc262640',
-                                  animation: 'pulse 2s infinite',
-                                  '@keyframes pulse': {
-                                    '0%, 100%': { opacity: 1 },
-                                    '50%': { opacity: 0.7 },
-                                  },
-                                }}
-                              />
-                            </Tooltip>
-                          )}
-                        </Stack>
+                    {/* Details grid */}
+                    <Box sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'auto 1fr',
+                      gap: '2px 12px',
+                      mb: 1.5,
+                    }}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>Spender</Typography>
+                      <Typography variant="caption" fontWeight={700}>{a.spenderName}</Typography>
 
-                        {/* Spender Info */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                          <Typography variant="body2" sx={{ width: 80, fontWeight: 600, color: 'text.secondary' }}>Spender:</Typography>
-                          <Typography variant="body2" fontWeight={700}>{a.spenderName}</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                          <Typography variant="body2" sx={{ width: 80, fontWeight: 600, color: 'text.secondary' }}>Address:</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.1), px: 1, py: 0.2, borderRadius: 1 }}>
-                            {a.spenderAddress}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-                          <Typography variant="body2" sx={{ width: 80, fontWeight: 600, color: 'text.secondary' }}>Limit:</Typography>
-                          <Typography variant="body2" fontWeight={600} color={a.isUnlimited ? 'error.main' : 'text.primary'}>
-                            {a.allowance}
-                          </Typography>
-                        </Box>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>Address</Typography>
+                      <Typography variant="caption" sx={{
+                        fontFamily: 'monospace', fontSize: '0.65rem',
+                        color: 'primary.main',
+                        overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
+                        {a.spenderAddress.slice(0, 6)}...{a.spenderAddress.slice(-4)}
+                      </Typography>
 
-                        {/* Risk Reasons */}
-                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                          {a.riskReasons.map((reason, ri) => (
-                            <Chip
-                              key={ri}
-                              label={reason}
-                              size="small"
-                              variant="outlined"
-                              sx={{
-                                height: 22,
-                                fontSize: '0.65rem',
-                                fontWeight: 600,
-                                color: 'text.secondary',
-                                borderColor: `${riskCfg.color}30`,
-                              }}
-                            />
-                          ))}
-                        </Stack>
-                      </Box>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>Allowance</Typography>
+                      <Typography variant="caption" fontWeight={700} color={a.isUnlimited ? 'error.main' : 'text.primary'}>
+                        {a.isUnlimited ? '∞ Unlimited' : a.allowance}
+                      </Typography>
+                    </Box>
 
-                      {/* Action Buttons */}
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: { xs: '100%', sm: '140px' } }}>
-                        <Button
-                          variant="contained"
-                          color={a.riskLevel === 'critical' || a.riskLevel === 'high' ? "error" : "primary"}
-                          onClick={() => handleRevoke(a)}
-                          startIcon={<LinkOffRounded />}
+                    {/* Risk reasons as inline tags */}
+                    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+                      {a.riskReasons.map((reason, ri) => (
+                        <Typography
+                          key={ri}
+                          variant="caption"
                           sx={{
-                            borderRadius: 3,
-                            fontWeight: 700,
-                            py: 1,
-                            boxShadow: a.riskLevel === 'critical' ? '0 4px 14px rgba(220, 38, 38, 0.35)' : 'none',
+                            fontSize: '0.6rem', fontWeight: 600,
+                            color: 'text.secondary',
+                            bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                            px: 1, py: 0.25, borderRadius: 1,
                           }}
                         >
-                          Revoke
-                        </Button>
-                      </Box>
+                          {reason}
+                        </Typography>
+                      ))}
                     </Stack>
+
+                    {/* Revoke button */}
+                    <Button
+                      fullWidth
+                      size="small"
+                      variant="contained"
+                      color={a.riskLevel === 'critical' || a.riskLevel === 'high' ? "error" : "primary"}
+                      onClick={() => handleRevoke(a)}
+                      startIcon={<LinkOffRounded sx={{ fontSize: 16 }} />}
+                      sx={{
+                        borderRadius: 2.5,
+                        fontWeight: 700,
+                        fontSize: '0.75rem',
+                        py: 0.75,
+                        textTransform: 'none',
+                        boxShadow: a.riskLevel === 'critical'
+                          ? '0 2px 10px rgba(220, 38, 38, 0.25)'
+                          : '0 2px 10px rgba(37, 99, 235, 0.2)',
+                      }}
+                    >
+                      Revoke Permission
+                    </Button>
                   </Box>
                 </Paper>
               );
@@ -874,24 +915,52 @@ const RevokeAlchemyPage = () => {
           </Box>
         )}
 
+        {/* ─── Secure State ─── */}
         {!loading && approvals.length === 0 && sessions.length === 0 && (
-          <Paper sx={{
-            p: 8,
+          <Paper elevation={0} sx={{
+            p: 4,
             textAlign: 'center',
-            bgcolor: alpha(theme.palette.success.main, 0.05),
-            backdropFilter: 'blur(20px)',
+            bgcolor: cardBg,
+            backdropFilter: 'blur(16px)',
             border: '1px solid',
-            borderColor: alpha(theme.palette.success.main, 0.2),
-            borderRadius: 4,
-            boxShadow: '0 10px 40px -10px rgba(34,197,94,0.1)'
+            borderColor: isDark ? 'rgba(34, 197, 94, 0.12)' : 'rgba(34, 197, 94, 0.15)',
+            borderRadius: 3,
           }}>
-            <VerifiedUserRounded sx={{ fontSize: 72, color: theme.palette.success.main, mb: 3 }} />
-            <Typography variant="h5" fontWeight={800} gutterBottom>All Clear!</Typography>
-            <Typography variant="body1" color="text.secondary" fontWeight={500}>Your wallet is secure. No active approvals or connections.</Typography>
+            <Box sx={{
+              width: 56, height: 56, borderRadius: '50%', mx: 'auto', mb: 2,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              bgcolor: isDark ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.08)',
+              border: '2px solid',
+              borderColor: isDark ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.15)',
+            }}>
+              <CheckCircleOutlineRounded sx={{ fontSize: 28, color: '#22c55e' }} />
+            </Box>
+            <Typography variant="subtitle1" fontWeight={800} sx={{ mb: 0.5 }}>
+              Wallet Secure
+            </Typography>
+            <Typography variant="caption" color="text.secondary" fontWeight={500}>
+              No active token approvals or dApp connections found.
+            </Typography>
           </Paper>
         )}
 
-        <Snackbar open={!!success} autoHideDuration={6000} onClose={() => setSuccess(null)} message={success} />
+        <Snackbar
+          open={!!success}
+          autoHideDuration={4000}
+          onClose={() => setSuccess(null)}
+          message={success}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          sx={{
+            mb: 8,
+            '& .MuiSnackbarContent-root': {
+              borderRadius: 3,
+              fontWeight: 600,
+              fontSize: '0.8rem',
+              bgcolor: isDark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(15, 23, 42, 0.9)',
+              backdropFilter: 'blur(12px)',
+            }
+          }}
+        />
       </Container>
     </Box>
   );

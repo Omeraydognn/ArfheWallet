@@ -3,14 +3,20 @@ export enum NetworkId {
     Unknown = -1,
     Ethereum_Mainnet = 1,
     Zama = 2,
-    Fhenix = 3,
     Ethereum_Sepolia = 4,
     Ethereum_Hoodi = 5,
-    Fhenix_Sepolia = 8008135, // Fhenix Sepolia Testnet
+    Optimism = 10,
+    BNB_Chain = 56,
+    Polygon = 137,
+    Sei = 1329,
+    Monad_Testnet = 10143,
     Arbitrum_One = 42161,
     Arbitrum_Sepolia = 421614,
     Base_Mainnet = 8453,
     Base_Sepolia = 84532,
+    Avalanche = 43114,
+    Avalanche_Fuji = 43113,
+    Linea = 59144,
 }
 
 export type TokenBalance = {
@@ -67,7 +73,6 @@ export const FHE_NETWORK_IDS = new Set<NetworkId>([
     NetworkId.Ethereum_Sepolia,
     NetworkId.Arbitrum_Sepolia,
     NetworkId.Base_Sepolia,
-    NetworkId.Fhenix_Sepolia,
 ]);
 
 /** Check whether a given network supports FHE operations */
@@ -78,9 +83,10 @@ export function isFheNetwork(networkId: NetworkId): boolean {
 /** Set of testnet network IDs */
 export const TESTNET_IDS = new Set<NetworkId>([
     NetworkId.Ethereum_Sepolia,
-    NetworkId.Fhenix_Sepolia,
     NetworkId.Arbitrum_Sepolia,
     NetworkId.Base_Sepolia,
+    NetworkId.Monad_Testnet,
+    NetworkId.Avalanche_Fuji,
 ]);
 
 /** Check whether a given network is a testnet */

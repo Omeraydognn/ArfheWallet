@@ -87,7 +87,7 @@ function CreateWallet({ accountManager, onDone }: WalletStepProps) {
             {t('auth.writeDownWords')}
           </Typography>
 
-          <Paper elevation={0} variant="outlined" sx={{ p: 1.5, borderRadius: 3, bgcolor: 'grey.50' }}>
+          <Paper elevation={0} variant="outlined" sx={{ p: 1.5, borderRadius: 3, bgcolor: 'background.default' }}>
             <Grid container spacing={1}>
               {words.map((word, index) => (
                 <Grid size={{ xs: 6, sm: 4 }} key={index}>
@@ -95,7 +95,7 @@ function CreateWallet({ accountManager, onDone }: WalletStepProps) {
                     display: 'flex',
                     borderRadius: 2,
                     overflow: 'hidden',
-                    bgcolor: 'white',
+                    bgcolor: 'background.paper',
                     boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                   }}>
                     <Box sx={{
@@ -103,10 +103,10 @@ function CreateWallet({ accountManager, onDone }: WalletStepProps) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      bgcolor: 'grey.100',
+                      bgcolor: 'action.hover',
                       fontSize: 12,
                       color: 'text.secondary',
-                      borderRight: '1px solid #e5e5e5'
+                      borderRight: 1, borderColor: 'divider'
                     }}>
                       {index + 1}
                     </Box>
@@ -213,7 +213,7 @@ function ImportWallet({ accountManager, onDone }: WalletStepProps) {
         sx={{
           '& .MuiOutlinedInput-root': {
             borderRadius: 3,
-            bgcolor: 'grey.50',
+            bgcolor: 'background.default',
             fontFamily: 'monospace'
           }
         }}
@@ -315,7 +315,7 @@ function SetPasswordScreen({ storageManager, accountManager, onDone }: PasswordS
               </InputAdornment>
             ),
           }}
-          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3, bgcolor: 'white' } }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3, bgcolor: 'background.paper' } }}
         />
 
         {/* Password Strength Meter */}
@@ -327,7 +327,7 @@ function SetPasswordScreen({ storageManager, accountManager, onDone }: PasswordS
               sx={{
                 height: 6,
                 borderRadius: 3,
-                bgcolor: 'grey.200',
+                bgcolor: 'action.disabledBackground',
                 '& .MuiLinearProgress-bar': {
                   bgcolor: strength.color,
                   borderRadius: 3,
@@ -348,7 +348,7 @@ function SetPasswordScreen({ storageManager, accountManager, onDone }: PasswordS
           value={confirmPassword}
           onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3, bgcolor: 'white' } }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3, bgcolor: 'background.paper' } }}
         />
       </Stack>
 
@@ -479,7 +479,7 @@ function LoginIntoWallet({ storageManager, accountManager }: LoginProps) {
         sx={{
           '& .MuiOutlinedInput-root': {
             borderRadius: 3,
-            bgcolor: 'white'
+            bgcolor: 'background.paper'
           }
         }}
       />
@@ -537,18 +537,37 @@ export default function Auth() {
   React.useEffect(() => {
     if (!storageManager) return;
 
-    // Determine initial step based on existing state
-    if (storageManager.hasPassword()) {
-      // Existing encrypted wallet — go to login
-      setStep(AuthStep.LOGIN);
-    } else if (storageManager.hasUnencryptedAccounts()) {
-      // Legacy plaintext wallet — need to set password first, then migrate
-      setStep(AuthStep.SET_PASSWORD);
-    } else {
-      // No wallet exists — show choice screen
-      setStep(AuthStep.CHOICE);
-    }
-  }, [storageManager]);
+    const initAuth = async () => {
+      // Attempt to auto-restore session from background/sessionStorage
+      const timeoutMs = storageManager.getLocal<number>('autoLockTimeout') ?? (5 * 60 * 1000);
+      const restored = await storageManager.restoreSession(timeoutMs);
+
+      if (restored) {
+        try {
+          // Load accounts and proceed immediately without showing login screen
+          await accountManager?.loadFromEncryptedStorage();
+          window.location.hash = "#/home";
+          return;
+        } catch (e) {
+          console.error("Failed to load accounts after session restore", e);
+        }
+      }
+
+      // Determine initial step based on existing state
+      if (storageManager.hasPassword()) {
+        // Existing encrypted wallet — go to login
+        setStep(AuthStep.LOGIN);
+      } else if (storageManager.hasUnencryptedAccounts()) {
+        // Legacy plaintext wallet — need to set password first, then migrate
+        setStep(AuthStep.SET_PASSWORD);
+      } else {
+        // No wallet exists — show choice screen
+        setStep(AuthStep.CHOICE);
+      }
+    };
+
+    initAuth();
+  }, [storageManager, accountManager]);
 
   const handleWalletCreated = () => {
     // After create/import, go to set password step
@@ -572,18 +591,20 @@ export default function Auth() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      bgcolor: '#f7f7f8',
-      background: 'radial-gradient(circle at 50% 10%, #fff 0%, #f7f7f8 100%)',
+      bgcolor: 'background.default',
+      background: (theme) => theme.palette.mode === 'dark'
+        ? 'radial-gradient(circle at 50% 10%, #1e1e1e 0%, #121212 100%)'
+        : 'radial-gradient(circle at 50% 10%, #fff 0%, #f7f7f8 100%)',
       p: 2
     }}>
       <Container maxWidth="xs">
         <Paper elevation={0} sx={{
           p: 3,
           borderRadius: 4,
-          bgcolor: 'rgba(255, 255, 255, 0.9)',
+          bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)',
           backdropFilter: 'blur(20px)',
-          border: '1px solid #d4d4d4',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          border: 1, borderColor: 'divider',
+          boxShadow: (theme) => theme.palette.mode === 'dark' ? '0 20px 25px -5px rgba(0, 0, 0, 0.5)' : '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
         }}>
           {/* Logo Area */}
           <Box sx={{ textAlign: 'center', mb: 3 }}>
@@ -692,16 +713,16 @@ export default function Auth() {
               </Button>
 
               <Box sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
-                <Box sx={{ flex: 1, height: '1px', bgcolor: 'grey.300' }} />
+                <Box sx={{ flex: 1, height: '1px', bgcolor: 'divider' }} />
                 <Typography variant="caption" sx={{ px: 2, color: 'text.secondary', fontWeight: 600 }}>{t('auth.or')}</Typography>
-                <Box sx={{ flex: 1, height: '1px', bgcolor: 'grey.300' }} />
+                <Box sx={{ flex: 1, height: '1px', bgcolor: 'divider' }} />
               </Box>
 
               <Button
                 variant="outlined"
                 size="large"
                 onClick={() => setStep(AuthStep.CREATE)}
-                sx={{ borderRadius: 3, height: 44, borderColor: '#d4d4d4', color: 'text.primary' }}
+                sx={{ borderRadius: 3, height: 44, borderColor: 'divider', color: 'text.primary' }}
               >
                 {t('auth.createWallet')}
               </Button>
@@ -709,7 +730,7 @@ export default function Auth() {
                 variant="outlined"
                 size="large"
                 onClick={() => setStep(AuthStep.IMPORT)}
-                sx={{ borderRadius: 3, height: 44, borderColor: '#d4d4d4', color: 'text.primary' }}
+                sx={{ borderRadius: 3, height: 44, borderColor: 'divider', color: 'text.primary' }}
               >
                 {t('auth.iHaveAWallet')}
               </Button>

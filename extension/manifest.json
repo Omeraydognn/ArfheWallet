@@ -3,16 +3,13 @@
     "name": "Arfhe Wallet",
     "version": "1.0.0",
     "description": "Privacy-first FHE-powered crypto wallet with encrypted on-chain transactions",
-
     "background": {
         "service_worker": "service-worker.js",
         "type": "module"
     },
-
     "content_security_policy": {
-        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https: http: wss: ws: data: blob:"
     },
-
     "action": {
         "default_popup": "index.html",
         "default_title": "Arfhe Wallet",
@@ -22,40 +19,30 @@
             "128": "icon128.png"
         }
     },
-
     "permissions": [
         "storage",
         "notifications",
         "alarms"
     ],
-
-    "host_permissions": [
-        "https://*.alchemy.com/*",
-        "https://*.alchemyapi.io/*",
-        "https://*.walletconnect.com/*",
-        "https://*.walletconnect.org/*",
-        "https://cloudflare-eth.com/*",
-        "https://rpc.sepolia.org/*",
-        "https://*.arbitrum.io/*",
-        "https://*.base.org/*",
-        "https://*.fhenix.zone/*",
-        "https://api.coingecko.com/*",
-        "https://min-api.cryptocompare.com/*",
-        "https://*.publicnode.com/*",
-        "https://raw.githubusercontent.com/*",
-        "https://assets.coingecko.com/*",
-        "https://coin-images.coingecko.com/*",
-        "https://*.etherscan.io/*",
-        "https://*.arbiscan.io/*",
-        "https://*.basescan.org/*",
-        "https://*.web3auth.io/*",
-        "https://buy.moonpay.com/*",
-        "https://www.moonpay.com/*",
-        "https://global.transak.com/*",
-        "https://global-stg.transak.com/*",
-        "https://app.ramp.network/*"
+    "content_scripts": [
+        {
+            "matches": ["http://*/*", "https://*/*"],
+            "js": ["content-script.js"],
+            "run_at": "document_start"
+        }
     ],
-
+    "host_permissions": [
+        "https://*/*",
+        "http://*/*",
+        "ws://*/*",
+        "wss://*/*"
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": ["inpage.js"],
+            "matches": ["http://*/*", "https://*/*"]
+        }
+    ],
     "icons": {
         "32": "icon32.png",
         "48": "icon48.png",

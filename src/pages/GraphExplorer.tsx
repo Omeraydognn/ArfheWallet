@@ -10,8 +10,6 @@ import {
   CircularProgress,
   TextField,
   InputAdornment,
-  Card,
-  CardContent,
   Chip,
   Grid,
   Button,
@@ -21,7 +19,7 @@ import {
 import { ZoomIn, ZoomOut, Search, Clear, Hub, YoutubeSearchedFor, SwapHoriz } from '@mui/icons-material';
 import { WalletContext } from "../AppContext.js";
 import { ActiveAccountContext } from "../ActiveAccountProvider.js";
-import { GraphNode, GraphEdge } from "../backend/ExplorerService.js";
+import { GraphNode, GraphEdge, ExplorerService } from "../backend/ExplorerService.js";
 import { NetworkId } from "../backend/NetworkTypes.js";
 import { isAddress } from 'ethers';
 
@@ -32,6 +30,7 @@ const GraphExplorer = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
   const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
 
   const wallet_context = useContext(WalletContext);
   const active_context = useContext(ActiveAccountContext);
@@ -61,13 +60,21 @@ const GraphExplorer = () => {
   // Fetch Data when Target Changes
   useEffect(() => {
     const fetchData = async () => {
-      // Basic validation before fetch
-      if (!net?.explorerService || !targetAddress || !isAddress(targetAddress)) return;
+      if (!targetAddress || !isAddress(targetAddress) || !net) return;
 
       setLoading(true);
       setError("");
       try {
-        const data = await net.explorerService.fetchGraphData(targetAddress);
+        let data: { nodes: GraphNode[], edges: GraphEdge[] };
+        if (net.explorerService) {
+          // Alchemy-backed network
+          data = await net.explorerService.fetchGraphData(targetAddress);
+        } else if (net.rpc_url) {
+          // Custom / non-Alchemy network: use eth_getLogs fallback
+          data = await ExplorerService.fetchGraphDataFromRpc(net.rpc_url, targetAddress);
+        } else {
+          data = { nodes: [], edges: [] };
+        }
         setGraphData(data);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -418,132 +425,107 @@ const GraphExplorer = () => {
       {/* ── Graph Canvas ───────────────────────────────────── */}
       <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 1 }} />
 
-      {/* ── Floating Controls ──────────────────────────────── */}
+      {/* ── Bottom Bar: Legend + Zoom Controls ─────────── */}
       <Box sx={{
         position: 'absolute',
-        bottom: 96,
-        right: 16,
+        bottom: 8,
+        left: 12,
+        right: 12,
+        zIndex: 20,
         display: 'flex',
-        flexDirection: 'column',
-        gap: 0.75,
-        zIndex: 20,
-      }}>
-        {[
-          { icon: <ZoomIn sx={{ fontSize: 20 }} />, action: () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2), label: "Zoom in" },
-          { icon: <ZoomOut sx={{ fontSize: 20 }} />, action: () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8), label: "Zoom out" },
-          { icon: <Hub sx={{ fontSize: 20, color: 'primary.main' }} />, action: () => cyRef.current?.fit(), label: "Fit to view" },
-        ].map((ctrl, i) => (
-          <IconButton
-            key={i}
-            onClick={ctrl.action}
-            aria-label={ctrl.label}
-            sx={{
-              width: 40,
-              height: 40,
-              bgcolor: alpha(theme.palette.background.paper, 0.9),
-              backdropFilter: 'blur(12px)',
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 2.5,
-              boxShadow: theme.palette.mode === 'dark'
-                ? '0 4px 16px rgba(11,17,32,0.4)'
-                : '0 4px 16px rgba(37,99,235,0.08)',
-              transition: 'all 0.2s ease',
-              '&:hover': {
-                transform: 'scale(1.08)',
-                bgcolor: 'background.paper',
-                boxShadow: theme.palette.mode === 'dark'
-                  ? '0 6px 20px rgba(11,17,32,0.5)'
-                  : '0 6px 20px rgba(37,99,235,0.12)',
-              },
-            }}
-          >
-            {ctrl.icon}
-          </IconButton>
-        ))}
-      </Box>
-
-      {/* ── Legend ─────────────────────────────────────────── */}
-      <Box sx={{
-        position: 'absolute',
-        bottom: 96,
-        left: 16,
-        zIndex: 20,
+        justifyContent: 'space-between',
+        alignItems: 'center',
         pointerEvents: 'none',
       }}>
+        {/* Mini Legend (inline row) */}
         <Paper elevation={0} sx={{
-          p: 1.5,
-          borderRadius: 3,
+          px: 1.5, py: 0.75,
+          borderRadius: 2.5,
           bgcolor: alpha(theme.palette.background.paper, 0.88),
-          backdropFilter: 'blur(20px)',
+          backdropFilter: 'blur(16px)',
           border: '1px solid',
-          borderColor: 'divider',
-          minWidth: 110,
+          borderColor: isDark ? 'rgba(96,165,250,0.08)' : 'rgba(0,0,0,0.06)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          pointerEvents: 'auto',
         }}>
-          <Typography variant="caption" sx={{
-            fontWeight: 800,
-            color: 'text.secondary',
-            mb: 1,
-            display: 'block',
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            fontSize: '0.6rem',
-          }}>
-            Flow Legend
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ width: 16, height: 3, bgcolor: '#059669', borderRadius: 1 }} />
-              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.65rem', color: 'text.secondary' }}>
-                Inflow
+          {[
+            { color: '#059669', shape: 'line', label: 'In' },
+            { color: '#dc2626', shape: 'line', label: 'Out' },
+            { color: '#2563eb', shape: 'circle', label: 'Center' },
+            { color: '#ea580c', shape: 'diamond', label: 'Exchange' },
+          ].map((item) => (
+            <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              {item.shape === 'line' ? (
+                <Box sx={{ width: 12, height: 2, bgcolor: item.color, borderRadius: 1 }} />
+              ) : item.shape === 'circle' ? (
+                <Box sx={{ width: 8, height: 8, bgcolor: item.color, borderRadius: '50%' }} />
+              ) : (
+                <Box sx={{ width: 7, height: 7, bgcolor: item.color, transform: 'rotate(45deg)', borderRadius: 0.5 }} />
+              )}
+              <Typography sx={{ fontSize: '0.58rem', fontWeight: 700, color: 'text.secondary', letterSpacing: '0.02em' }}>
+                {item.label}
               </Typography>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ width: 16, height: 3, bgcolor: '#dc2626', borderRadius: 1 }} />
-              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.65rem', color: 'text.secondary' }}>
-                Outflow
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ width: 10, height: 10, bgcolor: '#2563eb', borderRadius: '50%' }} />
-              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.65rem', color: 'text.secondary' }}>
-                Target
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{
-                width: 10, height: 10,
-                bgcolor: '#ea580c',
-                borderRadius: 0.5,
-                transform: 'rotate(45deg)',
-              }} />
-              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.65rem', color: 'text.secondary' }}>
-                Exchange
-              </Typography>
-            </Box>
-          </Box>
+          ))}
+        </Paper>
+
+        {/* Zoom Controls (horizontal) */}
+        <Paper elevation={0} sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.25,
+          borderRadius: 2.5,
+          bgcolor: alpha(theme.palette.background.paper, 0.88),
+          backdropFilter: 'blur(16px)',
+          border: '1px solid',
+          borderColor: isDark ? 'rgba(96,165,250,0.08)' : 'rgba(0,0,0,0.06)',
+          p: 0.25,
+          pointerEvents: 'auto',
+        }}>
+          {[
+            { icon: <ZoomOut sx={{ fontSize: 18 }} />, action: () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8), label: "Zoom out" },
+            { icon: <Hub sx={{ fontSize: 16, color: 'primary.main' }} />, action: () => cyRef.current?.fit(), label: "Fit" },
+            { icon: <ZoomIn sx={{ fontSize: 18 }} />, action: () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2), label: "Zoom in" },
+          ].map((ctrl, i) => (
+            <IconButton
+              key={i}
+              onClick={ctrl.action}
+              aria-label={ctrl.label}
+              sx={{
+                width: 32, height: 32,
+                borderRadius: 1.5,
+                transition: 'all 0.15s ease',
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.08),
+                },
+              }}
+            >
+              {ctrl.icon}
+            </IconButton>
+          ))}
         </Paper>
       </Box>
 
       {/* ── Details Panel ──────────────────────────────────── */}
       <Slide direction="up" in={!!selectedNode || !!selectedEdge} mountOnEnter unmountOnExit>
-        <Paper sx={{
+        <Paper elevation={0} sx={{
           position: 'absolute',
-          bottom: 96,
-          left: 12,
-          right: 12,
-          maxHeight: '38vh',
+          bottom: 8,
+          left: 8,
+          right: 8,
+          maxHeight: '35vh',
           overflowY: 'auto',
-          p: 0,
-          borderRadius: 4,
-          boxShadow: theme.palette.mode === 'dark'
-            ? '0 -4px 40px rgba(11,17,32,0.5)'
-            : '0 -4px 40px rgba(37,99,235,0.1)',
+          borderRadius: 3,
           zIndex: 100,
           bgcolor: alpha(theme.palette.background.paper, 0.92),
-          backdropFilter: 'blur(24px)',
+          backdropFilter: 'blur(20px)',
           border: '1px solid',
-          borderColor: 'divider',
+          borderColor: isDark ? 'rgba(96,165,250,0.1)' : 'rgba(0,0,0,0.08)',
+          boxShadow: isDark
+            ? '0 -4px 32px rgba(11,17,32,0.5)'
+            : '0 -4px 32px rgba(37,99,235,0.08)',
           backgroundImage: 'none',
         }}>
           {/* Panel header */}
@@ -551,33 +533,29 @@ const GraphExplorer = () => {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            px: 2.5,
-            py: 1.5,
+            px: 2, py: 1.25,
             borderBottom: '1px solid',
             borderColor: 'divider',
           }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Box sx={{
-                width: 36,
-                height: 36,
+                width: 30, height: 30,
                 borderRadius: 2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
                 bgcolor: selectedNode
                   ? alpha(theme.palette.primary.main, 0.08)
                   : alpha('#059669', 0.08),
               }}>
                 {selectedNode
-                  ? <Hub sx={{ fontSize: 20, color: 'primary.main' }} />
-                  : <SwapHoriz sx={{ fontSize: 20, color: '#059669' }} />}
+                  ? <Hub sx={{ fontSize: 16, color: 'primary.main' }} />
+                  : <SwapHoriz sx={{ fontSize: 16, color: '#059669' }} />}
               </Box>
               <Box>
-                <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: '0.85rem', lineHeight: 1.2 }}>
-                  {selectedNode ? "Wallet Details" : "Transaction"}
+                <Typography variant="caption" fontWeight={800} sx={{ fontSize: '0.75rem', lineHeight: 1.2, display: 'block' }}>
+                  {selectedNode ? "Wallet" : "Transaction"}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', fontWeight: 600 }}>
-                  {selectedNode ? selectedNode.type.toUpperCase() : "TRANSFER"}
+                <Typography sx={{ fontSize: '0.55rem', fontWeight: 600, color: 'text.secondary', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  {selectedNode ? selectedNode.type : "TRANSFER"}
                 </Typography>
               </Box>
             </Box>
@@ -586,18 +564,19 @@ const GraphExplorer = () => {
               size="small"
               aria-label="Close details panel"
               sx={{
+                width: 28, height: 28,
                 bgcolor: alpha(theme.palette.text.primary, 0.04),
                 borderRadius: 1.5,
                 '&:hover': { bgcolor: alpha(theme.palette.text.primary, 0.08) },
               }}
             >
-              <Clear sx={{ fontSize: 18 }} />
+              <Clear sx={{ fontSize: 16 }} />
             </IconButton>
           </Box>
 
           {/* Panel body */}
-          <Box sx={{ p: 2.5 }}>
-            <Grid container spacing={1.5}>
+          <Box sx={{ p: 1.5 }}>
+            <Grid container spacing={1}>
               {selectedNode && (
                 <>
                   <Grid size={{ xs: 12 }}>
@@ -618,18 +597,14 @@ const GraphExplorer = () => {
                       }}
                       sx={{
                         height: '100%',
-                        borderRadius: 2.5,
+                        borderRadius: 2,
                         fontWeight: 700,
-                        fontSize: '0.8rem',
+                        fontSize: '0.72rem',
                         textTransform: 'none',
-                        background: theme.palette.mode === 'dark'
-                          ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
-                          : 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
+                        background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
                         color: '#eff6ff',
                         '&:hover': {
-                          background: theme.palette.mode === 'dark'
-                            ? 'linear-gradient(135deg, #172554 0%, #1e40af 100%)'
-                            : 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)',
+                          background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)',
                         },
                       }}
                     >
@@ -662,16 +637,16 @@ const GraphExplorer = () => {
                         else if (net?.network_id === NetworkId.Arbitrum_Sepolia) baseUrl = 'https://sepolia.arbiscan.io';
                         else if (net?.network_id === NetworkId.Base_Mainnet) baseUrl = 'https://basescan.org';
                         else if (net?.network_id === NetworkId.Base_Sepolia) baseUrl = 'https://sepolia.basescan.org';
-                        else if (net?.network_id === NetworkId.Fhenix_Sepolia) baseUrl = 'https://explorer.helium.fhenix.zone';
+                        // Explorer URL is handled by getExplorerBaseForNetwork in shared.tsx
                         window.open(`${baseUrl}/tx/${selectedEdge.hash}`, '_blank');
                       }}
                       sx={{
                         height: '100%',
                         borderRadius: 2,
                         textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '0.75rem',
-                        borderColor: 'divider',
+                        fontWeight: 700,
+                        fontSize: '0.65rem',
+                        borderColor: isDark ? 'rgba(96,165,250,0.15)' : 'divider',
                       }}
                     >
                       Explorer ↗
@@ -692,34 +667,43 @@ const DataCard = ({ label, value, copyable, highlight }: {
   value: string;
   copyable?: boolean;
   highlight?: boolean;
-}) => (
-  <Card variant="outlined" sx={{
-    bgcolor: 'action.hover',
-    border: '1px solid',
-    borderColor: 'divider',
-    borderRadius: 2.5,
-    transition: 'all 0.2s ease',
-  }}>
-    <CardContent sx={{ py: 1.25, px: 1.5, '&:last-child': { pb: 1.25 } }}>
-      <Typography variant="caption" color="text.secondary" sx={{
+}) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
+  return (
+    <Box sx={{
+      bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+      border: '1px solid',
+      borderColor: isDark ? 'rgba(96,165,250,0.06)' : 'rgba(0,0,0,0.05)',
+      borderRadius: 2,
+      px: 1.25,
+      py: 0.75,
+    }}>
+      <Typography sx={{
+        fontSize: '0.55rem',
         fontWeight: 700,
-        fontSize: '0.6rem',
+        color: 'text.secondary',
         letterSpacing: '0.04em',
         textTransform: 'uppercase',
+        lineHeight: 1,
+        mb: 0.25,
       }}>
         {label}
       </Typography>
-      <Typography variant="body2" fontFamily={copyable ? 'monospace' : 'inherit'} sx={{
+      <Typography variant="caption" sx={{
         wordBreak: 'break-all',
         color: highlight ? 'success.main' : 'text.primary',
-        fontWeight: highlight ? 700 : 500,
-        fontSize: '0.78rem',
-        mt: 0.25,
+        fontWeight: highlight ? 700 : 600,
+        fontFamily: copyable ? 'monospace' : 'inherit',
+        fontSize: '0.7rem',
+        lineHeight: 1.4,
       }}>
         {value}
       </Typography>
-    </CardContent>
-  </Card>
-);
+    </Box>
+  );
+};
 
 export default GraphExplorer;
+

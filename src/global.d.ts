@@ -1,6 +1,7 @@
 declare module "*.css";
 declare module "*.scss";
 declare module "*.sass";
+declare module "cytoscape-fcose";
 
 // Chrome Extension API types (minimal declarations for extension context)
 declare namespace chrome {

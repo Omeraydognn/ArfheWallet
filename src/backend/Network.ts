@@ -7,7 +7,7 @@ import type { NFTCacheItem } from "./NFTCache.js";
 
 import { NetworkId, TokenBalance, TransactionHistory, PendingTransaction, CustomNetworkConfig } from "./NetworkTypes.js";
 import { ExplorerService } from "./ExplorerService.js";
-import { withRetry, fetchWithTimeout, classifyError, NetworkErrorType } from "./NetworkErrorHandler.js";
+import { withRetry, fetchWithTimeout, wssRpcCall, classifyError, NetworkErrorType } from "./NetworkErrorHandler.js";
 import type { RetryOptions } from "./NetworkErrorHandler.js";
 
 /**
@@ -69,8 +69,9 @@ class Network {
       }
     }
 
-    // Alchemy only for Ethereum networks, not Fhenix
-    if (this.isAlchemyConfigured() && network_id !== NetworkId.Fhenix_Sepolia) {
+    // Alchemy only for networks that have Alchemy support
+    const noAlchemyNetworks = new Set([NetworkId.Sei, NetworkId.Monad_Testnet]);
+    if (this.isAlchemyConfigured() && !noAlchemyNetworks.has(network_id)) {
       let sdkNetwork = AlchemyNetwork.ETH_MAINNET;
       switch (network_id) {
         case NetworkId.Ethereum_Sepolia:
@@ -91,6 +92,24 @@ class Network {
         case NetworkId.Base_Sepolia:
           sdkNetwork = AlchemyNetwork.BASE_SEPOLIA;
           break;
+        case NetworkId.Polygon:
+          sdkNetwork = AlchemyNetwork.MATIC_MAINNET;
+          break;
+        case NetworkId.Optimism:
+          sdkNetwork = AlchemyNetwork.OPT_MAINNET;
+          break;
+        case NetworkId.Avalanche:
+          sdkNetwork = AlchemyNetwork.AVAX_MAINNET;
+          break;
+        case NetworkId.BNB_Chain:
+          sdkNetwork = AlchemyNetwork.BNB_MAINNET;
+          break;
+        case NetworkId.Linea:
+          sdkNetwork = AlchemyNetwork.LINEA_MAINNET;
+          break;
+        case NetworkId.Avalanche_Fuji:
+          sdkNetwork = AlchemyNetwork.AVAX_FUJI;
+          break;
       }
 
       const config = {
@@ -109,9 +128,6 @@ class Network {
           case NetworkId.Ethereum_Sepolia:
             this.rpc_url = "https://ethereum-sepolia.publicnode.com";
             break;
-          case NetworkId.Fhenix_Sepolia:
-            this.rpc_url = "https://api.helium.fhenix.zone";
-            break;
           case NetworkId.Arbitrum_One:
             this.rpc_url = "https://arbitrum.publicnode.com";
             break;
@@ -123,6 +139,30 @@ class Network {
             break;
           case NetworkId.Base_Sepolia:
             this.rpc_url = "https://base-sepolia.publicnode.com";
+            break;
+          case NetworkId.Polygon:
+            this.rpc_url = "https://polygon-bor-rpc.publicnode.com";
+            break;
+          case NetworkId.Optimism:
+            this.rpc_url = "https://optimism.publicnode.com";
+            break;
+          case NetworkId.Avalanche:
+            this.rpc_url = "https://avalanche-c-chain-rpc.publicnode.com";
+            break;
+          case NetworkId.BNB_Chain:
+            this.rpc_url = "https://bsc-rpc.publicnode.com";
+            break;
+          case NetworkId.Linea:
+            this.rpc_url = "https://rpc.linea.build";
+            break;
+          case NetworkId.Sei:
+            this.rpc_url = "https://evm-rpc.sei-apis.com";
+            break;
+          case NetworkId.Monad_Testnet:
+            this.rpc_url = "https://testnet-rpc.monad.xyz";
+            break;
+          case NetworkId.Avalanche_Fuji:
+            this.rpc_url = "https://avalanche-fuji-c-chain-rpc.publicnode.com";
             break;
           default:
             this.rpc_url = "";
@@ -161,38 +201,40 @@ class Network {
       throw new Error("RPC URL not set");
     }
 
-    const body = JSON.stringify({
-      id: 1,
-      jsonrpc: "2.0",
-      method,
-      params,
-    });
-
     const rpcUrl = this.rpc_url;
+    const isWs = rpcUrl.startsWith("ws://") || rpcUrl.startsWith("wss://");
+
+    if (isWs) {
+      // WebSocket JSON-RPC — used for ws:// and wss:// endpoints
+      return withRetry(
+        () => wssRpcCall(rpcUrl, method, params, 15_000),
+        {
+          maxRetries: 2,
+          initialDelayMs: 800,
+          shouldRetry: (err) => {
+            if (err.type === NetworkErrorType.RpcError || err.type === NetworkErrorType.UserError) return false;
+            return err.retryable;
+          },
+        }
+      );
+    }
+
+    // HTTP / HTTPS — use fetch
+    const body = JSON.stringify({ id: 1, jsonrpc: "2.0", method, params });
     const headers = this.FETCH_HEADERS;
 
     return withRetry(
       async () => {
-        const response = await fetchWithTimeout(rpcUrl, {
-          method: "POST",
-          headers,
-          body,
-        }, 15_000);
-
+        const response = await fetchWithTimeout(rpcUrl, { method: "POST", headers, body }, 15_000);
         const json = await response.json();
-        if (json.error) {
-          throw new Error(json.error.message);
-        }
-
+        if (json.error) throw new Error(json.error.message);
         return json.result;
       },
       {
         maxRetries: 2,
         initialDelayMs: 800,
-        onRetry: (attempt, max, err) => {
-        },
+        onRetry: (_attempt, _max, _err) => { },
         shouldRetry: (err) => {
-          // Don't retry RPC-level errors (revert, invalid method)
           if (err.type === NetworkErrorType.RpcError || err.type === NetworkErrorType.UserError) return false;
           return err.retryable;
         },
@@ -449,14 +491,26 @@ class Network {
 
     const activeTokensRaw = [...tokenBalancesRaw];
 
-    // Some custom testnet tokens or user-added tokens might be missed by Alchemy's indexer.
     // Ensure all known tokens in the local cache are queried directly if not natively returned.
     const rawSet = new Set(activeTokensRaw.map(t => (t.contractAddress || "").toLowerCase()));
     const cachedTokens = tokenCacheObj.getAllTokens(this.network_id) || [];
 
+    const shieldedAddresses = [
+      (import.meta.env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase(),
+      (import.meta.env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase(),
+      (import.meta.env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase(),
+      (import.meta.env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase(),
+      (import.meta.env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase(),
+      (import.meta.env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase(),
+    ].filter(Boolean);
+
     for (const cached of cachedTokens) {
       if (cached.contractAddress === "ETH") continue;
       const lowerAddr = cached.contractAddress.toLowerCase();
+
+      // Skip shielded FHE tokens — their transparent balanceOf throws "execution reverted"
+      // and their encrypted balances are handled separately in Home.tsx UI.
+      if (shieldedAddresses.includes(lowerAddr)) continue;
 
       if (!rawSet.has(lowerAddr)) {
         try {
@@ -709,7 +763,119 @@ class Network {
   async getHistory(address: string, tokenCacheObj: TokenCache | undefined, toBlock: string = "latest"): Promise<{ history: TransactionHistory[], nextBlock?: string }> {
     if (!tokenCacheObj) return { history: [] };
     if (!this.alchemy && !this.isAlchemyConfigured()) {
-      return { history: [] };
+      // ── Custom RPC / Non-Alchemy Fallback ──────────────────────────────────────
+      // Scan last N blocks via eth_getLogs for ERC20 Transfer events and
+      // eth_getBlockByNumber for native ETH transactions.
+      try {
+        const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+        const currentBlockHex = await this.call("eth_blockNumber", []);
+        const currentBlock = parseInt(currentBlockHex, 16);
+        const SCAN_DEPTH = 10000;
+        const fromBlock = Math.max(0, currentBlock - SCAN_DEPTH);
+        const fromHex = "0x" + fromBlock.toString(16);
+
+        const paddedAddress = "0x000000000000000000000000" + address.toLowerCase().replace("0x", "");
+
+        // Fetch incoming and outgoing ERC20 Transfer events
+        const [logsIn, logsOut] = await Promise.all([
+          this.call("eth_getLogs", [{
+            fromBlock: fromHex, toBlock: "latest",
+            topics: [TRANSFER_TOPIC, null, paddedAddress]
+          }]).catch(() => [] as any[]),
+          this.call("eth_getLogs", [{
+            fromBlock: fromHex, toBlock: "latest",
+            topics: [TRANSFER_TOPIC, paddedAddress, null]
+          }]).catch(() => [] as any[]),
+        ]);
+
+        const explorerBase = (this.explorer_url || "").replace(/\/+$/, "") || "https://etherscan.io";
+        const history: TransactionHistory[] = [];
+        const seenHashes = new Set<string>();
+
+        // Also get a small sample of native ETH txs from recent blocks
+        // We scan a subset (last 20 blocks) to avoid huge payloads
+        const nativeScanEnd = currentBlock;
+        const nativeScanStart = Math.max(0, currentBlock - 20);
+        for (let b = nativeScanEnd; b >= nativeScanStart; b--) {
+          try {
+            const block = await this.call("eth_getBlockByNumber", ["0x" + b.toString(16), true]);
+            if (!block || !Array.isArray(block.transactions)) continue;
+            const timestamp = new Date(parseInt(block.timestamp, 16) * 1000).toISOString();
+            for (const tx of block.transactions) {
+              const txFrom = (tx.from || "").toLowerCase();
+              const txTo = (tx.to || "").toLowerCase();
+              if (txFrom !== address.toLowerCase() && txTo !== address.toLowerCase()) continue;
+              if (seenHashes.has(tx.hash)) continue;
+              seenHashes.add(tx.hash);
+              const valueWei = BigInt(tx.value || "0x0");
+              const valueFmt = this.formatTokenAmount(valueWei, 18);
+              history.push({
+                hash: tx.hash,
+                from: tx.from || "",
+                to: tx.to || "",
+                contractAddress: "ETH",
+                value: valueFmt,
+                timestamp,
+                blockNum: "0x" + b.toString(16),
+                isNative: true,
+                status: "Success",
+                explorerUrl: `${explorerBase}/tx/${tx.hash}`,
+                isShielded: false,
+                methodLabel: txTo === address.toLowerCase() ? "Receive" : "Transfer",
+              });
+            }
+          } catch { /* skip bad block */ }
+        }
+
+        // Process ERC20 logs
+        const allErcLogs = [...(logsIn || []), ...(logsOut || [])];
+        for (const log of allErcLogs) {
+          if (!log.transactionHash || seenHashes.has(log.transactionHash)) continue;
+          seenHashes.add(log.transactionHash);
+
+          const fromAddr = log.topics[1] ? "0x" + log.topics[1].slice(26) : "0x";
+          const toAddr = log.topics[2] ? "0x" + log.topics[2].slice(26) : "0x";
+          let valueStr = "0";
+          try {
+            const raw = BigInt(log.data);
+            // Try to get decimals from tokenCache
+            const contractLower = (log.address || "").toLowerCase();
+            let decimals = 18;
+            if (tokenCacheObj?.hasToken(this.network_id, contractLower)) {
+              decimals = tokenCacheObj.getToken(this.network_id, contractLower)?.decimals ?? 18;
+            }
+            valueStr = this.formatTokenAmount(raw, decimals);
+          } catch { /* leave 0 */ }
+
+          // Get block timestamp
+          let timestamp = new Date().toISOString();
+          try {
+            const blk = await this.call("eth_getBlockByNumber", [log.blockNumber, false]);
+            if (blk?.timestamp) timestamp = new Date(parseInt(blk.timestamp, 16) * 1000).toISOString();
+          } catch { /* skip */ }
+
+          history.push({
+            hash: log.transactionHash,
+            from: fromAddr,
+            to: toAddr,
+            contractAddress: (log.address || "").toLowerCase(),
+            value: valueStr,
+            timestamp,
+            blockNum: log.blockNumber || "0x0",
+            isNative: false,
+            status: "Success",
+            explorerUrl: `${explorerBase}/tx/${log.transactionHash}`,
+            isShielded: false,
+            methodLabel: toAddr.toLowerCase() === address.toLowerCase() ? "Receive" : "Transfer",
+          });
+        }
+
+        // Sort descending by timestamp and return
+        history.sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0));
+        return { history: history.slice(0, 50) };
+      } catch (err) {
+        return { history: [] };
+      }
     }
 
     try {

@@ -292,13 +292,13 @@ export default function History() {
 
   const filters: { key: FilterType; label: string; icon: React.ReactElement }[] = showFhe
     ? [
-        { key: "all", label: "All", icon: <FilterList sx={{ fontSize: 16 }} /> },
-        { key: "confidential", label: "Confidential", icon: <Lock sx={{ fontSize: 16 }} /> },
-        { key: "public", label: "Public", icon: <LockOpen sx={{ fontSize: 16 }} /> },
-      ]
+      { key: "all", label: "All", icon: <FilterList sx={{ fontSize: 16 }} /> },
+      { key: "confidential", label: "Confidential", icon: <Lock sx={{ fontSize: 16 }} /> },
+      { key: "public", label: "Public", icon: <LockOpen sx={{ fontSize: 16 }} /> },
+    ]
     : [
-        { key: "all", label: "All", icon: <FilterList sx={{ fontSize: 16 }} /> },
-      ];
+      { key: "all", label: "All", icon: <FilterList sx={{ fontSize: 16 }} /> },
+    ];
 
   return (
     <Box sx={{ pb: 12 }}>
@@ -533,11 +533,11 @@ export default function History() {
           elevation={0}
           sx={{
             borderRadius: 4,
-            bgcolor: "rgba(255, 255, 255, 0.85)",
+            bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(30, 30, 30, 0.85)' : 'rgba(255, 255, 255, 0.85)',
             backdropFilter: "blur(20px)",
             border: "1px solid",
-            borderColor: "rgba(0,0,0,0.05)",
-            boxShadow: "0 10px 40px -10px rgba(0,0,0,0.05)",
+            borderColor: "divider",
+            boxShadow: (theme) => theme.palette.mode === 'dark' ? '0 10px 40px -10px rgba(0,0,0,0.5)' : '0 10px 40px -10px rgba(0,0,0,0.05)',
             overflow: "hidden",
             mb: 4
           }}
@@ -604,7 +604,7 @@ export default function History() {
                   disablePadding
                   sx={{
                     borderBottom: index < filteredTransactions.length - 1 ? "1px solid" : "none",
-                    borderColor: "rgba(0,0,0,0.04)",
+                    borderColor: "divider",
                   }}
                 >
                   <ListItemButton
@@ -804,7 +804,7 @@ export default function History() {
               overflow: "hidden",
               backgroundImage: "none",
               bgcolor: "background.paper",
-              boxShadow: "0 24px 48px rgba(0,0,0,0.15)",
+              boxShadow: (theme) => theme.palette.mode === 'dark' ? "0 24px 48px rgba(0,0,0,0.5)" : "0 24px 48px rgba(0,0,0,0.15)",
             },
           }}
         >

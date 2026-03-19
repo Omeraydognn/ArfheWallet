@@ -38,9 +38,10 @@ export interface UseNetworkReturn {
 
 const TESTNET_IDS = new Set<NetworkId>([
   NetworkId.Ethereum_Sepolia,
-  NetworkId.Fhenix_Sepolia,
   NetworkId.Arbitrum_Sepolia,
   NetworkId.Base_Sepolia,
+  NetworkId.Monad_Testnet,
+  NetworkId.Avalanche_Fuji,
 ]);
 
 export function useNetwork(): UseNetworkReturn {

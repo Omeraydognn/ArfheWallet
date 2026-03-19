@@ -423,9 +423,37 @@ async function getUnreadNotificationCount() {
   }
 }
 
-// ─── Message Handler (popup ↔ SW) ───────────────────────────────────
+// ─── Message Handler (popup ↔ SW & content script ↔ SW) ────────────────
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // 1. Content Script'ten gelen mesajları yönet (DApp etkileşimi için)
+  if (sender.tab && message.method) {
+    if (message.method === "eth_requestAccounts") {
+      // TODO: Gerçek bir bağlantı onay penceresi aç
+      // Şimdilik, kullanıcının siteye bağlanma isteğini aldığımızı bildirelim.
+      // Bu, siteye "bağlandım" cevabı dönmez, ancak en azından iletişim kurulduğunu gösterir.
+      console.log(`Connection request from ${sender.tab.title} (${sender.tab.url})`);
+      
+      // Basit bir notification göster
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icon128.png',
+        title: 'Connection Request',
+        message: `${sender.tab.title} wants to connect to your wallet.`,
+        requireInteraction: true
+      });
+
+      // Şimdilik connection UI olmadığı için bu isteği reddet (veya beklemeye al)
+      // Ancak "connected" olmadığı sürece dApp çalışmayacaktır.
+      // Basit bir mock cevap dönelim (test amaçlı):
+      // sendResponse({ result: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"] });
+      // return true;
+    }
+    // Diğer RPC çağrıları için...
+    return true;
+  }
+
+  // 2. Popup'tan gelen internal mesajları yönet
   handleMessage(message).then(sendResponse).catch((e) => {
     sendResponse({ success: false, error: e.message });
   });
@@ -562,6 +590,32 @@ async function handleMessage(message) {
     case "POPUP_CLOSED": {
       // Nothing special needed — alarms continue running
       return { success: true };
+    }
+
+    // ── Generic RPC Proxy (popup → service worker → external RPC) ──
+    // Service workers are NOT subject to popup CSP restrictions.
+    // Use this for any external fetch from popup that fails due to CORS / CSP.
+    case "RPC_FETCH": {
+      const { url, body: rpcBody } = message;
+      if (!url) return { success: false, error: "No URL provided" };
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 12000);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: typeof rpcBody === "string" ? rpcBody : JSON.stringify(rpcBody),
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        if (!res.ok) return { success: false, error: `HTTP ${res.status}: ${res.statusText}` };
+        const json = await res.json();
+        return { success: true, data: json };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("abort")) return { success: false, error: "Connection timed out" };
+        return { success: false, error: msg };
+      }
     }
 
     default:

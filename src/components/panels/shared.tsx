@@ -70,16 +70,50 @@ export function getContractsForNetwork(networkId: NetworkId) {
   return CONTRACTS_SEPOLIA;
 }
 
-// Get explorer URL for the active network
-export function getExplorerBaseForNetwork(networkId: NetworkId | undefined) {
-  switch (networkId) {
+// Get explorer URL for the active network — accepts the full Network object
+// so custom networks can return their own configured explorer_url.
+export function getExplorerBaseForNetwork(networkOrId: { network_id?: NetworkId; explorer_url?: string; isCustom?: boolean } | NetworkId | undefined) {
+  // If a full Network object is passed and it's a custom network with its own URL, use it
+  if (networkOrId && typeof networkOrId === 'object') {
+    if (networkOrId.isCustom && networkOrId.explorer_url) return networkOrId.explorer_url.replace(/\/+$/, '');
+    const networkId = networkOrId.network_id;
+    switch (networkId) {
+      case NetworkId.Ethereum_Mainnet: return "https://etherscan.io";
+      case NetworkId.Ethereum_Sepolia: return "https://sepolia.etherscan.io";
+      case NetworkId.Arbitrum_One: return "https://arbiscan.io";
+      case NetworkId.Arbitrum_Sepolia: return "https://sepolia.arbiscan.io";
+      case NetworkId.Base_Mainnet: return "https://basescan.org";
+      case NetworkId.Base_Sepolia: return "https://sepolia.basescan.org";
+      case NetworkId.Polygon: return "https://polygonscan.com";
+      case NetworkId.Optimism: return "https://optimistic.etherscan.io";
+      case NetworkId.Avalanche: return "https://snowtrace.io";
+      case NetworkId.BNB_Chain: return "https://bscscan.com";
+      case NetworkId.Linea: return "https://lineascan.build";
+      case NetworkId.Sei: return "https://seitrace.com";
+      case NetworkId.Monad_Testnet: return "https://testnet.monadexplorer.com";
+      case NetworkId.Avalanche_Fuji: return "https://testnet.snowtrace.io";
+      default:
+        // For other built-in or unknown networks, fall back to their explorer_url if set
+        if (networkOrId.explorer_url) return networkOrId.explorer_url.replace(/\/+$/, '');
+        return "https://etherscan.io";
+    }
+  }
+  // Legacy: called with just a NetworkId enum value
+  switch (networkOrId as NetworkId) {
     case NetworkId.Ethereum_Mainnet: return "https://etherscan.io";
     case NetworkId.Ethereum_Sepolia: return "https://sepolia.etherscan.io";
     case NetworkId.Arbitrum_One: return "https://arbiscan.io";
     case NetworkId.Arbitrum_Sepolia: return "https://sepolia.arbiscan.io";
     case NetworkId.Base_Mainnet: return "https://basescan.org";
     case NetworkId.Base_Sepolia: return "https://sepolia.basescan.org";
-    case NetworkId.Fhenix_Sepolia: return "https://explorer.helium.fhenix.zone";
+    case NetworkId.Polygon: return "https://polygonscan.com";
+    case NetworkId.Optimism: return "https://optimistic.etherscan.io";
+    case NetworkId.Avalanche: return "https://snowtrace.io";
+    case NetworkId.BNB_Chain: return "https://bscscan.com";
+    case NetworkId.Linea: return "https://lineascan.build";
+    case NetworkId.Sei: return "https://seitrace.com";
+    case NetworkId.Monad_Testnet: return "https://testnet.monadexplorer.com";
+    case NetworkId.Avalanche_Fuji: return "https://testnet.snowtrace.io";
     default: return "https://etherscan.io";
   }
 }

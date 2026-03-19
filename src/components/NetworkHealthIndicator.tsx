@@ -55,33 +55,62 @@ function NetworkHealthIndicator() {
 
     const checkHealth = useCallback(async () => {
         const network = context?.networkProvider?.getActiveNetwork();
-        if (!network) {
+        if (!network || !network.rpc_url) {
             setHealth({
                 status: "disconnected",
                 latencyMs: 0,
                 blockNumber: 0,
                 gasPrice: "—",
                 lastChecked: Date.now(),
-                networkName: "No Network",
+                networkName: network?.network_name || "No Network",
             });
             return;
         }
 
-        try {
-            const { JsonRpcProvider } = await import("ethers");
-            const provider = new JsonRpcProvider(network.rpc_url);
+        const rpcUrl = network.rpc_url;
+        const isWs = rpcUrl.startsWith("ws://") || rpcUrl.startsWith("wss://");
 
+        async function rpcCall(method: string, params: unknown[]): Promise<unknown> {
+            if (isWs) {
+                return new Promise((resolve, reject) => {
+                    const ws = new WebSocket(rpcUrl);
+                    const id = Date.now();
+                    const timer = setTimeout(() => { ws.close(); reject(new Error("WS timeout")); }, 10000);
+                    ws.onopen = () => ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+                    ws.onmessage = (e) => {
+                        try {
+                            const d = JSON.parse(e.data as string) as { id?: number; result?: unknown; error?: { message?: string } };
+                            if (d.id !== id) return;
+                            clearTimeout(timer); ws.close();
+                            d.error ? reject(new Error(d.error.message)) : resolve(d.result);
+                        } catch (err) { clearTimeout(timer); ws.close(); reject(err); }
+                    };
+                    ws.onerror = () => { clearTimeout(timer); reject(new Error("WebSocket error")); };
+                });
+            }
+            const res = await fetch(rpcUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+            });
+            const json = await res.json() as { result?: unknown; error?: { message?: string } };
+            if (json.error) throw new Error(json.error.message || "RPC error");
+            return json.result;
+        }
+
+        try {
             const startTime = performance.now();
 
-            const [blockNumber, feeData] = await Promise.all([
-                provider.getBlockNumber(),
-                provider.getFeeData(),
+            const [blockHex, feeHex] = await Promise.all([
+                rpcCall("eth_blockNumber", []),
+                rpcCall("eth_gasPrice", []).catch(() => null),
             ]);
 
             const latencyMs = Math.round(performance.now() - startTime);
-
-            const gasPriceWei = feeData.gasPrice || feeData.maxFeePerGas || 0n;
-            const gasPriceGwei = (Number(gasPriceWei) / 1e9).toFixed(2);
+            const blockNumber = parseInt(blockHex as string, 16);
+            const gasPriceGwei = feeHex
+                ? (Number(BigInt(feeHex as string)) / 1e9).toFixed(2)
+                : "—";
 
             let status: NetworkHealth["status"] = "connected";
             if (latencyMs > 3000) status = "slow";
