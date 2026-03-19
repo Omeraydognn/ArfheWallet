@@ -69,8 +69,9 @@ class Network {
       }
     }
 
-    // Alchemy only for Ethereum networks, not Fhenix
-    if (this.isAlchemyConfigured() && network_id !== NetworkId.Fhenix_Sepolia) {
+    // Alchemy only for networks that have Alchemy support
+    const noAlchemyNetworks = new Set([NetworkId.Sei, NetworkId.Monad_Testnet]);
+    if (this.isAlchemyConfigured() && !noAlchemyNetworks.has(network_id)) {
       let sdkNetwork = AlchemyNetwork.ETH_MAINNET;
       switch (network_id) {
         case NetworkId.Ethereum_Sepolia:
@@ -91,6 +92,24 @@ class Network {
         case NetworkId.Base_Sepolia:
           sdkNetwork = AlchemyNetwork.BASE_SEPOLIA;
           break;
+        case NetworkId.Polygon:
+          sdkNetwork = AlchemyNetwork.MATIC_MAINNET;
+          break;
+        case NetworkId.Optimism:
+          sdkNetwork = AlchemyNetwork.OPT_MAINNET;
+          break;
+        case NetworkId.Avalanche:
+          sdkNetwork = AlchemyNetwork.AVAX_MAINNET;
+          break;
+        case NetworkId.BNB_Chain:
+          sdkNetwork = AlchemyNetwork.BNB_MAINNET;
+          break;
+        case NetworkId.Linea:
+          sdkNetwork = AlchemyNetwork.LINEA_MAINNET;
+          break;
+        case NetworkId.Avalanche_Fuji:
+          sdkNetwork = AlchemyNetwork.AVAX_FUJI;
+          break;
       }
 
       const config = {
@@ -109,9 +128,6 @@ class Network {
           case NetworkId.Ethereum_Sepolia:
             this.rpc_url = "https://ethereum-sepolia.publicnode.com";
             break;
-          case NetworkId.Fhenix_Sepolia:
-            this.rpc_url = "https://api.helium.fhenix.zone";
-            break;
           case NetworkId.Arbitrum_One:
             this.rpc_url = "https://arbitrum.publicnode.com";
             break;
@@ -123,6 +139,30 @@ class Network {
             break;
           case NetworkId.Base_Sepolia:
             this.rpc_url = "https://base-sepolia.publicnode.com";
+            break;
+          case NetworkId.Polygon:
+            this.rpc_url = "https://polygon-bor-rpc.publicnode.com";
+            break;
+          case NetworkId.Optimism:
+            this.rpc_url = "https://optimism.publicnode.com";
+            break;
+          case NetworkId.Avalanche:
+            this.rpc_url = "https://avalanche-c-chain-rpc.publicnode.com";
+            break;
+          case NetworkId.BNB_Chain:
+            this.rpc_url = "https://bsc-rpc.publicnode.com";
+            break;
+          case NetworkId.Linea:
+            this.rpc_url = "https://rpc.linea.build";
+            break;
+          case NetworkId.Sei:
+            this.rpc_url = "https://evm-rpc.sei-apis.com";
+            break;
+          case NetworkId.Monad_Testnet:
+            this.rpc_url = "https://testnet-rpc.monad.xyz";
+            break;
+          case NetworkId.Avalanche_Fuji:
+            this.rpc_url = "https://avalanche-fuji-c-chain-rpc.publicnode.com";
             break;
           default:
             this.rpc_url = "";

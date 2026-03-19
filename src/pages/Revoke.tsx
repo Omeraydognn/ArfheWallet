@@ -330,6 +330,9 @@ const CHAIN_LABELS: Record<string, { name: string; color: string }> = {
   "eip155:42220": { name: "Celo", color: "#35D07F" },
   "eip155:130": { name: "Unichain", color: "#FF007A" },
   "eip155:480": { name: "World Chain", color: "#1A1A1A" },
+  "eip155:59144": { name: "Linea", color: "#61DFFF" },
+  "eip155:1329": { name: "Sei", color: "#9B1C1C" },
+  "eip155:10143": { name: "Monad Testnet", color: "#836EF9" },
 };
 
 const RevokeAlchemyPage = () => {

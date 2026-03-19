@@ -25,6 +25,11 @@ const SUPPORTED_CHAINS = [
     "eip155:84532",   // Base Sepolia
     "eip155:10",      // Optimism
     "eip155:11155420", // Optimism Sepolia
+    "eip155:137",     // Polygon
+    "eip155:43114",   // Avalanche C-Chain
+    "eip155:56",      // BNB Smart Chain
+    "eip155:59144",   // Linea
+    "eip155:1329",    // Sei
 ];
 
 const SUPPORTED_METHODS = [

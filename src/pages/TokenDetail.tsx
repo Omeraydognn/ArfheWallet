@@ -92,7 +92,7 @@ function getNetworkColor(networkId: NetworkId): string {
     case NetworkId.Arbitrum_Sepolia: return '#60a5fa';
     case NetworkId.Base_Mainnet: return '#0052ff';
     case NetworkId.Base_Sepolia: return '#93c5fd';
-    case NetworkId.Fhenix_Sepolia: return '#1e3a8a';
+    case NetworkId.Base_Sepolia: return '#93c5fd';
     default: return '#2563eb';
   }
 }

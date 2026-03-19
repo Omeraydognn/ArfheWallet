@@ -637,7 +637,7 @@ const GraphExplorer = () => {
                         else if (net?.network_id === NetworkId.Arbitrum_Sepolia) baseUrl = 'https://sepolia.arbiscan.io';
                         else if (net?.network_id === NetworkId.Base_Mainnet) baseUrl = 'https://basescan.org';
                         else if (net?.network_id === NetworkId.Base_Sepolia) baseUrl = 'https://sepolia.basescan.org';
-                        else if (net?.network_id === NetworkId.Fhenix_Sepolia) baseUrl = 'https://explorer.helium.fhenix.zone';
+                        // Explorer URL is handled by getExplorerBaseForNetwork in shared.tsx
                         window.open(`${baseUrl}/tx/${selectedEdge.hash}`, '_blank');
                       }}
                       sx={{

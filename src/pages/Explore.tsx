@@ -580,7 +580,8 @@ function getChainLabel(chainId: number): string {
         case 421614: return 'ARB Sep';
         case 8453: return 'Base';
         case 84532: return 'Base Sep';
-        case 8008135: return 'Fhenix';
+        case 43114: return 'Avalanche';
+        case 43113: return 'Avax Fuji';
         default: return `#${chainId}`;
     }
 }

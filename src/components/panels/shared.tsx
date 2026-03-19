@@ -84,6 +84,14 @@ export function getExplorerBaseForNetwork(networkOrId: { network_id?: NetworkId;
       case NetworkId.Arbitrum_Sepolia: return "https://sepolia.arbiscan.io";
       case NetworkId.Base_Mainnet: return "https://basescan.org";
       case NetworkId.Base_Sepolia: return "https://sepolia.basescan.org";
+      case NetworkId.Polygon: return "https://polygonscan.com";
+      case NetworkId.Optimism: return "https://optimistic.etherscan.io";
+      case NetworkId.Avalanche: return "https://snowtrace.io";
+      case NetworkId.BNB_Chain: return "https://bscscan.com";
+      case NetworkId.Linea: return "https://lineascan.build";
+      case NetworkId.Sei: return "https://seitrace.com";
+      case NetworkId.Monad_Testnet: return "https://testnet.monadexplorer.com";
+      case NetworkId.Avalanche_Fuji: return "https://testnet.snowtrace.io";
       default:
         // For other built-in or unknown networks, fall back to their explorer_url if set
         if (networkOrId.explorer_url) return networkOrId.explorer_url.replace(/\/+$/, '');
@@ -98,6 +106,14 @@ export function getExplorerBaseForNetwork(networkOrId: { network_id?: NetworkId;
     case NetworkId.Arbitrum_Sepolia: return "https://sepolia.arbiscan.io";
     case NetworkId.Base_Mainnet: return "https://basescan.org";
     case NetworkId.Base_Sepolia: return "https://sepolia.basescan.org";
+    case NetworkId.Polygon: return "https://polygonscan.com";
+    case NetworkId.Optimism: return "https://optimistic.etherscan.io";
+    case NetworkId.Avalanche: return "https://snowtrace.io";
+    case NetworkId.BNB_Chain: return "https://bscscan.com";
+    case NetworkId.Linea: return "https://lineascan.build";
+    case NetworkId.Sei: return "https://seitrace.com";
+    case NetworkId.Monad_Testnet: return "https://testnet.monadexplorer.com";
+    case NetworkId.Avalanche_Fuji: return "https://testnet.snowtrace.io";
     default: return "https://etherscan.io";
   }
 }
