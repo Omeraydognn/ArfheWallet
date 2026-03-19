@@ -21,7 +21,7 @@ import {
     Search, OpenInNew, Explore as ExploreIcon, Shield,
     Star, TrendingUp, SwapHoriz, Image, CompareArrows,
     Build, People, AccountBalance, Close, QrCode2,
-    Link as LinkIcon, WifiTethering, ContentCopy, Verified
+    Link as LinkIcon, WifiTethering, ContentCopy, Verified, SportsEsports
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { WalletContext } from '../AppContext';
@@ -42,6 +42,7 @@ const CATEGORY_ICONS: Record<DAppCategory, React.ReactNode> = {
     bridge: <CompareArrows />,
     tools: <Build />,
     social: <People />,
+    game: <SportsEsports />,
 };
 
 // ─── Main Component ─────────────────────────────────────────────────
@@ -93,6 +94,8 @@ const Explore = () => {
     // Handlers
     const handleDAppClick = (dApp: DApp) => {
         openDApp(dApp);
+        // Automatically open WalletConnect dialog to make connection easier
+        setWcDialogOpen(true);
     };
 
     const handleWcConnect = async () => {

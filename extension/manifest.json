@@ -24,11 +24,24 @@
         "notifications",
         "alarms"
     ],
+    "content_scripts": [
+        {
+            "matches": ["http://*/*", "https://*/*"],
+            "js": ["content-script.js"],
+            "run_at": "document_start"
+        }
+    ],
     "host_permissions": [
         "https://*/*",
         "http://*/*",
         "ws://*/*",
         "wss://*/*"
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": ["inpage.js"],
+            "matches": ["http://*/*", "https://*/*"]
+        }
     ],
     "icons": {
         "32": "icon32.png",

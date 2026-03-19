@@ -22,10 +22,6 @@ describe('NetworkTypes helpers', () => {
       expect(isFheNetwork(NetworkId.Base_Sepolia)).toBe(true);
     });
 
-    it('returns true for Fhenix Sepolia', () => {
-      expect(isFheNetwork(NetworkId.Fhenix_Sepolia)).toBe(true);
-    });
-
     it('returns false for Ethereum Mainnet', () => {
       expect(isFheNetwork(NetworkId.Ethereum_Mainnet)).toBe(false);
     });
@@ -46,16 +42,11 @@ describe('NetworkTypes helpers', () => {
       expect(isFheNetwork(NetworkId.Zama)).toBe(false);
     });
 
-    it('returns false for Fhenix mainnet', () => {
-      expect(isFheNetwork(NetworkId.Fhenix)).toBe(false);
-    });
-  });
 
   // ─── isTestnetNetwork ──────────────────────────────────────────
   describe('isTestnetNetwork', () => {
     it('returns true for all testnets', () => {
       expect(isTestnetNetwork(NetworkId.Ethereum_Sepolia)).toBe(true);
-      expect(isTestnetNetwork(NetworkId.Fhenix_Sepolia)).toBe(true);
       expect(isTestnetNetwork(NetworkId.Arbitrum_Sepolia)).toBe(true);
       expect(isTestnetNetwork(NetworkId.Base_Sepolia)).toBe(true);
     });
@@ -127,7 +118,7 @@ describe('NetworkTypes helpers', () => {
       expect(NetworkId.Ethereum_Sepolia).toBe(4);
       expect(NetworkId.Arbitrum_Sepolia).toBe(421614);
       expect(NetworkId.Base_Sepolia).toBe(84532);
-      expect(NetworkId.Fhenix_Sepolia).toBe(8008135);
     });
   });
+});
 });

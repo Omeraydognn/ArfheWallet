@@ -57,6 +57,14 @@ export default defineConfig({
           dest: '.'
         },
         {
+          src: 'extension/content-script.js',
+          dest: '.'
+        },
+        {
+          src: 'extension/inpage.js',
+          dest: '.'
+        },
+        {
           src: 'images/icon32.png',
           dest: '.'
         },

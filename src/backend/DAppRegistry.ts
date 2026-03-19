@@ -7,7 +7,7 @@
 
 // ─── Types ──────────────────────────────────────────────────────────
 
-export type DAppCategory = 'defi' | 'dex' | 'fhe' | 'nft' | 'bridge' | 'tools' | 'social';
+export type DAppCategory = 'defi' | 'dex' | 'fhe' | 'nft' | 'bridge' | 'tools' | 'social' | 'game';
 
 export interface DApp {
     id: string;
@@ -42,6 +42,7 @@ export const DAPP_CATEGORIES: DAppCategoryInfo[] = [
     { id: 'bridge', label: 'Bridge',        labelKey: 'explore.catBridge', icon: 'CompareArrows',  color: '#3b82f6' },
     { id: 'tools',  label: 'Tools',         labelKey: 'explore.catTools',  icon: 'Build',          color: '#1e3a8a' },
     { id: 'social', label: 'Social',        labelKey: 'explore.catSocial', icon: 'People',         color: '#06b6d4' },
+    { id: 'game',   label: 'Games',         labelKey: 'explore.catGame',   icon: 'SportsEsports',  color: '#9333ea' },
 ];
 
 // ─── Curated dApp Registry ─────────────────────────────────────────
@@ -328,6 +329,19 @@ export const DAPP_REGISTRY: DApp[] = [
         category: 'social',
         chains: [1],
         tags: ['governance', 'voting', 'dao'],
+    },
+
+    // ── Game ──
+    {
+        id: 'a2-saga',
+        name: 'A2 Saga',
+        description: 'Turkish Mythology MOBA Strategy Game',
+        url: 'https://a2saga.me/',
+        icon: 'https://a2saga.me/assets/logo-oXpWOEJi.webp',
+        category: 'game',
+        chains: [1],
+        tags: ['game', 'moba', 'strategy', 'web3'],
+        featured: true,
     },
 ];
 
