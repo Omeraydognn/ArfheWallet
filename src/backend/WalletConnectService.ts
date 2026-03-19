@@ -15,21 +15,13 @@ const METADATA = {
     icons: ["https://avatars.githubusercontent.com/u/37784886"]
 };
 
-// Supported EIP-155 chains
+// Supported EIP-155 chains (testnet only)
 const SUPPORTED_CHAINS = [
-    "eip155:1",       // Ethereum Mainnet
     "eip155:11155111", // Ethereum Sepolia
-    "eip155:42161",   // Arbitrum One
     "eip155:421614",  // Arbitrum Sepolia
-    "eip155:8453",    // Base Mainnet
     "eip155:84532",   // Base Sepolia
-    "eip155:10",      // Optimism
-    "eip155:11155420", // Optimism Sepolia
-    "eip155:137",     // Polygon
-    "eip155:43114",   // Avalanche C-Chain
-    "eip155:56",      // BNB Smart Chain
-    "eip155:59144",   // Linea
-    "eip155:1329",    // Sei
+    "eip155:43113",   // Avalanche Fuji
+    "eip155:10143",   // Monad Testnet
 ];
 
 const SUPPORTED_METHODS = [

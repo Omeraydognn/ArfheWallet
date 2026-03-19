@@ -83,18 +83,18 @@ const tokenBadgeSx = (color: string) => ({
 // ─── Helper: Explorer URL ──────────────────────────────────────
 function getExplorerTxUrl(networkId: NetworkId | undefined, txHash: string): string {
   switch (networkId) {
-    case NetworkId.Ethereum_Mainnet:
-      return `https://etherscan.io/tx/${txHash}`;
     case NetworkId.Ethereum_Sepolia:
       return `https://sepolia.etherscan.io/tx/${txHash}`;
-    case NetworkId.Arbitrum_One:
-      return `https://arbiscan.io/tx/${txHash}`;
     case NetworkId.Arbitrum_Sepolia:
       return `https://sepolia.arbiscan.io/tx/${txHash}`;
-    case NetworkId.Base_Mainnet:
-      return `https://basescan.org/tx/${txHash}`;
+    case NetworkId.Base_Sepolia:
+      return `https://sepolia.basescan.org/tx/${txHash}`;
+    case NetworkId.Avalanche_Fuji:
+      return `https://testnet.snowtrace.io/tx/${txHash}`;
+    case NetworkId.Monad_Testnet:
+      return `https://testnet.monadexplorer.com/tx/${txHash}`;
     default:
-      return `https://etherscan.io/tx/${txHash}`;
+      return `https://sepolia.etherscan.io/tx/${txHash}`;
   }
 }
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Box, IconButton, Typography, useTheme, Paper, Stack, Avatar } from "@mui/material";
 import { ArrowBack, Visibility, VisibilityOff, Shield, TrendingUp } from "@mui/icons-material";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { WalletContext } from "../AppContext";
 import { ActiveAccountContext } from "../ActiveAccountProvider";
 import PortfolioChart from "../components/PortfolioChart";
@@ -25,6 +26,7 @@ const COLORS = ['#2563eb', '#10b981', '#f59e0b', '#3b82f6', '#1e3a8a', '#93c5fd'
 export default function Portfolio() {
     const navigate = useNavigate();
     const theme = useTheme();
+    const { t } = useTranslation();
     const wallet_context = React.useContext(WalletContext);
     const active_context = React.useContext(ActiveAccountContext);
     const activeNetworkId = wallet_context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Unknown;
@@ -140,7 +142,7 @@ export default function Portfolio() {
                         <ArrowBack />
                     </IconButton>
                     <Typography variant="h5" fontWeight="800" sx={{ letterSpacing: '-0.02em' }}>
-                        Portfolio Dashboard
+                        {t("portfolio.dashboard")}
                     </Typography>
                 </Box>
                 <IconButton
@@ -160,27 +162,27 @@ export default function Portfolio() {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 4 }}>
                 <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 calc(33.333% - 16px)' } }}>
                     <Paper elevation={0} sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', boxShadow: '0 8px 32px rgba(0,0,0,0.02)', height: '100%' }}>
-                        <Typography variant="body2" color="text.secondary" fontWeight={600} gutterBottom>Net Worth</Typography>
+                        <Typography variant="body2" color="text.secondary" fontWeight={600} gutterBottom>{t("portfolio.netWorth")}</Typography>
                         <Typography variant="h4" fontWeight="800" sx={{ mt: 1 }}>{formatMoney(totalBalanceUsd)}</Typography>
                     </Paper>
                 </Box>
                 {showFhe && (
-                <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', sm: '1 1 calc(33.333% - 16px)' } }}>
-                    <Paper elevation={0} sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', boxShadow: '0 8px 32px rgba(0,0,0,0.02)', height: '100%' }}>
-                        <Typography variant="body2" color="text.secondary" fontWeight={600} gutterBottom>Privacy Ratio</Typography>
-                        <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
-                            <Shield sx={{ color: 'secondary.main', fontSize: 28 }} />
-                            <Typography variant="h5" fontWeight="800">{isPrivacyMode ? '***' : `${shieldedRatio.toFixed(1)}%`}</Typography>
-                        </Stack>
-                        <Typography variant="caption" color="text.secondary">Held in FHE Assets</Typography>
-                    </Paper>
-                </Box>
+                    <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', sm: '1 1 calc(33.333% - 16px)' } }}>
+                        <Paper elevation={0} sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', boxShadow: '0 8px 32px rgba(0,0,0,0.02)', height: '100%' }}>
+                            <Typography variant="body2" color="text.secondary" fontWeight={600} gutterBottom>{t("portfolio.privacyRatio")}</Typography>
+                            <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
+                                <Shield sx={{ color: 'secondary.main', fontSize: 28 }} />
+                                <Typography variant="h5" fontWeight="800">{isPrivacyMode ? '***' : `${shieldedRatio.toFixed(1)}%`}</Typography>
+                            </Stack>
+                            <Typography variant="caption" color="text.secondary">{t("portfolio.heldInFhe")}</Typography>
+                        </Paper>
+                    </Box>
                 )}
                 <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', sm: '1 1 calc(33.333% - 16px)' } }}>
                     <Paper elevation={0} sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', boxShadow: '0 8px 32px rgba(0,0,0,0.02)', height: '100%' }}>
-                        <Typography variant="body2" color="text.secondary" fontWeight={600} gutterBottom>Top Asset</Typography>
+                        <Typography variant="body2" color="text.secondary" fontWeight={600} gutterBottom>{t("portfolio.topAsset")}</Typography>
                         <Typography variant="h5" fontWeight="800" sx={{ mt: 1 }}>{isPrivacyMode ? '***' : topAsset}</Typography>
-                        <Typography variant="caption" color="success.main" fontWeight={700}>{isPrivacyMode ? '***' : `${topAssetDom}% Dominance`}</Typography>
+                        <Typography variant="caption" color="success.main" fontWeight={700}>{isPrivacyMode ? '***' : `${topAssetDom}% ${t("portfolio.dominance")}`}</Typography>
                     </Paper>
                 </Box>
             </Box>
@@ -189,7 +191,7 @@ export default function Portfolio() {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 4 }}>
                 <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 calc(66.666% - 24px)' } }}>
                     <Paper elevation={0} sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', boxShadow: '0 8px 32px rgba(0,0,0,0.02)', height: '100%' }}>
-                        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>Performance History</Typography>
+                        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>{t("portfolio.performanceHistory")}</Typography>
                         <Box sx={{ filter: isPrivacyMode ? 'blur(8px)' : 'none', transition: 'filter 0.3s' }}>
                             <PortfolioChart currentBalanceUsd={totalBalanceUsd} />
                         </Box>
@@ -197,7 +199,7 @@ export default function Portfolio() {
                 </Box>
                 <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 calc(33.333% - 24px)' } }}>
                     <Paper elevation={0} sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', boxShadow: '0 8px 32px rgba(0,0,0,0.02)', height: '100%', display: 'flex', flexDirection: 'column' }}>
-                        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>Asset Allocation</Typography>
+                        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>{t("portfolio.assetAllocation")}</Typography>
                         <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <AssetAllocationChart data={chartData} isPrivacyMode={isPrivacyMode} />
                         </Box>
@@ -206,7 +208,7 @@ export default function Portfolio() {
             </Box>
 
             {/* Detailed Assets List */}
-            <Typography variant="h6" fontWeight="800" sx={{ mb: 2, px: 1 }}>Your Assets</Typography>
+            <Typography variant="h6" fontWeight="800" sx={{ mb: 2, px: 1 }}>{t("portfolio.yourAssets")}</Typography>
             <Stack spacing={1.5}>
                 {assets.map((asset, i) => (
                     <Paper key={i} elevation={0} sx={{
@@ -248,7 +250,7 @@ export default function Portfolio() {
                     </Paper>
                 ))}
                 {assets.length === 0 && !loading && (
-                    <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ py: 4 }}>No assets found in your portfolio.</Typography>
+                    <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ py: 4 }}>{t("portfolio.noAssets")}</Typography>
                 )}
             </Stack>
         </Box>

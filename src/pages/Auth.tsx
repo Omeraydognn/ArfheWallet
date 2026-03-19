@@ -175,7 +175,6 @@ function ImportWallet({ accountManager, onDone }: WalletStepProps) {
       }
 
       const rpcs = [
-        import.meta.env.VITE_ALCHEMY_MAINNET_API_KEY || "https://cloudflare-eth.com",
         import.meta.env.VITE_ALCHEMY_SEPOLIA_API_KEY || "https://rpc.sepolia.org",
         import.meta.env.VITE_ALCHEMY_ARBSEPOLIA_API_KEY || "https://sepolia-rollup.arbitrum.io/rpc",
         import.meta.env.VITE_ALCHEMY_BASESEPOLIA_API_KEY || "https://sepolia.base.org"
@@ -649,10 +648,10 @@ export default function Auth() {
                   try {
                     const chainConfig = {
                       chainNamespace: CHAIN_NAMESPACES.EIP155,
-                      chainId: "0x1",
-                      rpcTarget: import.meta.env.VITE_ALCHEMY_MAINNET_API_KEY || "https://cloudflare-eth.com",
-                      displayName: "Ethereum Mainnet",
-                      blockExplorerUrl: "https://etherscan.io",
+                      chainId: "0xaa36a7",
+                      rpcTarget: import.meta.env.VITE_ALCHEMY_SEPOLIA_API_KEY || "https://rpc.sepolia.org",
+                      displayName: "Ethereum Sepolia",
+                      blockExplorerUrl: "https://sepolia.etherscan.io",
                       ticker: "ETH",
                       tickerName: "Ethereum",
                     };

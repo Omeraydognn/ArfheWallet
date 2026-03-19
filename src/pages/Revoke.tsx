@@ -34,6 +34,7 @@ import {
 import { WalletContext } from '../AppContext';
 import { formatUnits, Interface, MaxUint256, JsonRpcProvider, Contract, Log } from 'ethers';
 import type { WCSessionInfo, WCNamespace } from '../types/index';
+import { useTranslation } from 'react-i18next';
 
 // ERC20 ABI
 const ERC20_ABI = [
@@ -341,6 +342,7 @@ const RevokeAlchemyPage = () => {
   const network = context?.networkProvider?.getActiveNetwork();
   const wcService = context?.walletConnectService;
   const theme = useTheme();
+  const { t } = useTranslation();
 
   const [approvals, setApprovals] = useState<TokenApproval[]>([]);
   const [sessions, setSessions] = useState<WCSessionInfo[]>([]);
@@ -497,7 +499,7 @@ const RevokeAlchemyPage = () => {
           <Stack direction="row" alignItems="center" spacing={1}>
             <SecurityRounded sx={{ fontSize: 22, color: 'primary.main' }} />
             <Typography variant="subtitle1" fontWeight={800} letterSpacing="-0.01em">
-              Permissions & Sessions
+              {t("revoke.permissionsAndSessions")}
             </Typography>
           </Stack>
           <Button
@@ -515,7 +517,7 @@ const RevokeAlchemyPage = () => {
               borderColor: cardBorder,
             }}
           >
-            {loading ? 'Scanning...' : 'Scan'}
+            {loading ? t("revoke.scanning") : t("revoke.scan")}
           </Button>
         </Stack>
 
@@ -530,7 +532,7 @@ const RevokeAlchemyPage = () => {
               <GppBadRounded sx={{ fontSize: 18, color: '#dc2626' }} />
               <Typography variant="caption" fontWeight={600} color="error.main" sx={{ flex: 1 }}>{error}</Typography>
               <Button size="small" onClick={() => setError(null)} sx={{ minWidth: 'auto', fontSize: '0.65rem', fontWeight: 700 }}>
-                Dismiss
+                {t("revoke.dismiss")}
               </Button>
             </Stack>
           </Paper>
@@ -574,10 +576,10 @@ const RevokeAlchemyPage = () => {
 
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
-                  Scanning Permissions
+                  {t("revoke.scanningPermissions")}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" noWrap>
-                  {scanMessage || 'Analyzing blockchain data...'}
+                  {scanMessage || t("revoke.analyzingBlockchain")}
                 </Typography>
                 <LinearProgress
                   variant="determinate"
@@ -603,7 +605,7 @@ const RevokeAlchemyPage = () => {
           <Box sx={{ mb: 2.5 }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
               <Typography variant="body2" fontWeight={700} color="text.secondary" letterSpacing="0.03em" sx={{ textTransform: 'uppercase', fontSize: '0.7rem' }}>
-                Connected dApps ({sessions.length})
+                {t("revoke.connectedDapps")} ({sessions.length})
               </Typography>
               {sessions.length > 1 && (
                 <Button
@@ -614,7 +616,7 @@ const RevokeAlchemyPage = () => {
                   disabled={disconnectingAll}
                   sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', fontSize: '0.7rem' }}
                 >
-                  Disconnect All
+                  {t("revoke.disconnectAll")}
                 </Button>
               )}
             </Stack>
@@ -689,7 +691,7 @@ const RevokeAlchemyPage = () => {
                             <Chip
                               size="small"
                               icon={<AccessTimeRounded sx={{ fontSize: 10 }} />}
-                              label={isExpired ? 'Expired' : expiryDate.toLocaleDateString()}
+                              label={isExpired ? t("revoke.expired") : expiryDate.toLocaleDateString()}
                               sx={{
                                 fontSize: '0.6rem', height: 18, fontWeight: 600,
                                 color: isExpired ? '#ef4444' : 'text.secondary',
@@ -713,7 +715,7 @@ const RevokeAlchemyPage = () => {
                         '&:hover': { borderColor: 'error.main', bgcolor: 'rgba(239, 68, 68, 0.06)' },
                       }}
                     >
-                      Disconnect
+                      {t("revoke.disconnect")}
                     </Button>
                   </Stack>
                 </Paper>
@@ -750,25 +752,25 @@ const RevokeAlchemyPage = () => {
                   flexShrink: 0,
                 }}>
                   <Typography variant="subtitle2" fontWeight={900} sx={{ color: cfg.color, lineHeight: 1 }}>{avgScore}</Typography>
-                  <Typography sx={{ fontSize: '0.5rem', color: cfg.color, fontWeight: 700, lineHeight: 1 }}>RISK</Typography>
+                  <Typography sx={{ fontSize: '0.5rem', color: cfg.color, fontWeight: 700, lineHeight: 1 }}>{t("revoke.risk")}</Typography>
                 </Box>
 
                 {/* Stats row */}
                 <Stack direction="row" spacing={2} sx={{ flex: 1 }} divider={<Divider orientation="vertical" flexItem />}>
                   <Box sx={{ textAlign: 'center', flex: 1 }}>
                     <Typography variant="subtitle2" fontWeight={800}>{approvals.length}</Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>Approvals</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>{t("revoke.approvals")}</Typography>
                   </Box>
                   {unlimitedCount > 0 && (
                     <Box sx={{ textAlign: 'center', flex: 1 }}>
                       <Typography variant="subtitle2" fontWeight={800} color="error.main">{unlimitedCount}</Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>Unlimited</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>{t("revoke.unlimited")}</Typography>
                     </Box>
                   )}
                   {highRiskCount > 0 && (
                     <Box sx={{ textAlign: 'center', flex: 1 }}>
                       <Typography variant="subtitle2" fontWeight={800} sx={{ color: '#ef4444' }}>{highRiskCount}</Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>High Risk</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>{t("revoke.highRisk")}</Typography>
                     </Box>
                   )}
                 </Stack>
@@ -781,7 +783,7 @@ const RevokeAlchemyPage = () => {
         {approvals.length > 0 && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="body2" fontWeight={700} color="text.secondary" letterSpacing="0.03em" sx={{ textTransform: 'uppercase', fontSize: '0.7rem', mb: 1.5 }}>
-              Token Permissions ({approvals.length})
+              {t("revoke.tokenPermissions")} ({approvals.length})
             </Typography>
 
             {[...approvals].sort((a, b) => b.riskScore - a.riskScore).map((a, i) => {
@@ -851,10 +853,10 @@ const RevokeAlchemyPage = () => {
                       gap: '2px 12px',
                       mb: 1.5,
                     }}>
-                      <Typography variant="caption" color="text.secondary" fontWeight={600}>Spender</Typography>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>{t("revoke.spender")}</Typography>
                       <Typography variant="caption" fontWeight={700}>{a.spenderName}</Typography>
 
-                      <Typography variant="caption" color="text.secondary" fontWeight={600}>Address</Typography>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>{t("revoke.address")}</Typography>
                       <Typography variant="caption" sx={{
                         fontFamily: 'monospace', fontSize: '0.65rem',
                         color: 'primary.main',
@@ -863,9 +865,9 @@ const RevokeAlchemyPage = () => {
                         {a.spenderAddress.slice(0, 6)}...{a.spenderAddress.slice(-4)}
                       </Typography>
 
-                      <Typography variant="caption" color="text.secondary" fontWeight={600}>Allowance</Typography>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>{t("revoke.allowance")}</Typography>
                       <Typography variant="caption" fontWeight={700} color={a.isUnlimited ? 'error.main' : 'text.primary'}>
-                        {a.isUnlimited ? '∞ Unlimited' : a.allowance}
+                        {a.isUnlimited ? t("revoke.unlimitedAllowance") : a.allowance}
                       </Typography>
                     </Box>
 
@@ -906,7 +908,7 @@ const RevokeAlchemyPage = () => {
                           : '0 2px 10px rgba(37, 99, 235, 0.2)',
                       }}
                     >
-                      Revoke Permission
+                      {t("revoke.revokePermission")}
                     </Button>
                   </Box>
                 </Paper>
@@ -936,10 +938,10 @@ const RevokeAlchemyPage = () => {
               <CheckCircleOutlineRounded sx={{ fontSize: 28, color: '#22c55e' }} />
             </Box>
             <Typography variant="subtitle1" fontWeight={800} sx={{ mb: 0.5 }}>
-              Wallet Secure
+              {t("revoke.walletSecure")}
             </Typography>
             <Typography variant="caption" color="text.secondary" fontWeight={500}>
-              No active token approvals or dApp connections found.
+              {t("revoke.noActiveApprovals")}
             </Typography>
           </Paper>
         )}

@@ -73,27 +73,22 @@ const getTokenLogoUrl = (contractAddress: string, logoSrc?: string, symbol?: str
 function getExplorerBase(networkId: NetworkId, explorerUrl?: string): string {
   if (explorerUrl) return explorerUrl;
   switch (networkId) {
-    case NetworkId.Ethereum_Mainnet: return "https://etherscan.io";
     case NetworkId.Ethereum_Sepolia: return "https://sepolia.etherscan.io";
-    case NetworkId.Arbitrum_One: return "https://arbiscan.io";
     case NetworkId.Arbitrum_Sepolia: return "https://sepolia.arbiscan.io";
-    case NetworkId.Base_Mainnet: return "https://basescan.org";
     case NetworkId.Base_Sepolia: return "https://sepolia.basescan.org";
-    default: return "https://etherscan.io";
+    default: return "https://sepolia.etherscan.io";
   }
 }
 
 // Network color helper
 function getNetworkColor(networkId: NetworkId): string {
   switch (networkId) {
-    case NetworkId.Ethereum_Mainnet: return '#10b981';
     case NetworkId.Ethereum_Sepolia: return '#f59e0b';
-    case NetworkId.Arbitrum_One: return '#2563eb';
     case NetworkId.Arbitrum_Sepolia: return '#60a5fa';
-    case NetworkId.Base_Mainnet: return '#0052ff';
     case NetworkId.Base_Sepolia: return '#93c5fd';
-    case NetworkId.Base_Sepolia: return '#93c5fd';
-    default: return '#2563eb';
+    case NetworkId.Avalanche_Fuji: return '#e84142';
+    case NetworkId.Monad_Testnet: return '#836ef9';
+    default: return '#f59e0b';
   }
 }
 
@@ -139,7 +134,7 @@ export default function TokenDetail() {
   const walletAddress = activeAccount?.GetAddress() ?? "";
 
   const activeNetwork = context?.networkProvider?.getActiveNetwork();
-  const activeNetworkId = context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Mainnet;
+  const activeNetworkId = context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Sepolia;
   const networkName = activeNetwork?.network_name ?? "Unknown";
   const networkColor = getNetworkColor(activeNetworkId);
   const explorerBase = getExplorerBase(activeNetworkId, activeNetwork?.explorer_url);

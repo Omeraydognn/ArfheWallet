@@ -403,7 +403,7 @@ export default function History() {
             >
               <HourglassTop sx={{ fontSize: 18, color: "warning.main", animation: "spin 2s linear infinite", "@keyframes spin": { "100%": { transform: "rotate(360deg)" } } }} />
               <Typography variant="subtitle2" fontWeight={700} color="warning.dark">
-                Pending Transactions ({pendingTxs.length})
+                {t("history.pendingTransactions")} ({pendingTxs.length})
               </Typography>
             </Box>
 
@@ -563,15 +563,15 @@ export default function History() {
               <ReceiptLong sx={{ fontSize: 64, color: "text.disabled", mb: 2, opacity: 0.5 }} />
               <Typography variant="h6" color="text.secondary" fontWeight={700}>
                 {activeFilter === "confidential"
-                  ? "No Confidential Transactions"
+                  ? t("history.noConfidentialTx")
                   : activeFilter === "public"
-                    ? "No Public Transactions"
-                    : "No Transactions Yet"}
+                    ? t("history.noPublicTx")
+                    : t("history.noTransactionsYet")}
               </Typography>
               <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: "block" }}>
                 {activeFilter !== "all"
-                  ? "Try switching the filter to see other transactions"
-                  : "Your transaction history will appear here"}
+                  ? t("history.switchFilter")
+                  : t("history.historyAppearHere")}
               </Typography>
             </Box>
           )}
@@ -685,7 +685,7 @@ export default function History() {
                                   ? "Unwrapped"
                                   : isSent ? "Sent" : "Received"}{" "}
                             {isEncrypted ? (
-                              <em style={{ fontWeight: 400, fontSize: "0.85rem" }}>Encrypted Amount </em>
+                              <em style={{ fontWeight: 400, fontSize: "0.85rem" }}>{t("history.encryptedAmount")} </em>
                             ) : (
                               tx.value !== "0" && `${formatValue(tx.value)} `
                             )}
@@ -778,7 +778,7 @@ export default function History() {
                 disabled={loadingMore}
                 sx={{ mb: 2, borderRadius: 2, py: 1, px: 4, textTransform: "none", fontWeight: 600 }}
               >
-                {loadingMore ? <CircularProgress size={24} color="inherit" /> : "Daha Fazla Göster (Load More)"}
+                {loadingMore ? <CircularProgress size={24} color="inherit" /> : t("history.loadMore")}
               </Button>
             )}
 
@@ -821,7 +821,7 @@ export default function History() {
             }}
           >
             <Typography id="tx-detail-title" variant="h6" fontWeight={700}>
-              Transaction Details
+              {t("history.transactionDetails")}
             </Typography>
             <IconButton size="small" onClick={() => setSelectedTx(null)} sx={{ color: "white" }} aria-label="Close transaction details">
               <Close />
@@ -852,7 +852,7 @@ export default function History() {
 
               <Stack spacing={1}>
                 {/* Hash */}
-                <Typography variant="caption" color="text.secondary" fontWeight={600}>Transaction Hash</Typography>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>{t("history.transactionHash")}</Typography>
                 <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <Typography variant="body2" sx={{ fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", mr: 2 }}>
                     {selectedTx.hash}
@@ -866,7 +866,7 @@ export default function History() {
                 </Paper>
 
                 {/* From / To */}
-                <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mt: 2 }}>From / To</Typography>
+                <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mt: 2 }}>{t("history.fromTo")}</Typography>
                 <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
                   <Stack spacing={1.5}>
                     <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -907,11 +907,11 @@ export default function History() {
             {/* Decoded Memo/Note */}
             {memoLoading ? (
               <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 3, mt: 1 }}>
-                <Typography variant="caption" color="text.secondary">Loading note...</Typography>
+                <Typography variant="caption" color="text.secondary">{t("history.loadingNote")}</Typography>
               </Box>
             ) : txMemo ? (
               <Box sx={{ mt: 1 }}>
-                <Typography variant="caption" color="text.secondary" fontWeight={600}>Transaction Note</Typography>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>{t("history.transactionNote")}</Typography>
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mt: 0.5, bgcolor: alpha(theme.palette.info.main, 0.04), borderColor: alpha(theme.palette.info.main, 0.2) }}>
                   <Typography variant="body2" sx={{ fontStyle: 'italic', wordBreak: 'break-word' }}>
                     {txMemo}
@@ -929,7 +929,7 @@ export default function History() {
               onClick={() => window.open(selectedTx.explorerUrl, "_blank")}
               sx={{ borderRadius: 3, px: 4, py: 1, fontWeight: 700, textTransform: "none" }}
             >
-              View on Block Explorer
+              {t("history.viewOnExplorer")}
             </Button>
           </Box>
         </Dialog>

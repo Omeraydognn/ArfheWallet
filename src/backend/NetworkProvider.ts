@@ -1,16 +1,7 @@
 import SepoliaNetwork from "./Sepolia.js";
-import MainnetNetwork from "./Mainnet.js";
-import ArbitrumOneNetwork from "./ArbitrumOne.js";
 import ArbitrumSepoliaNetwork from "./ArbitrumSepolia.js";
-import BaseMainnetNetwork from "./BaseMainnet.js";
 import BaseSepoliaNetwork from "./BaseSepolia.js";
-import PolygonNetwork from "./Polygon.js";
-import OptimismNetwork from "./Optimism.js";
-import AvalancheNetwork from "./Avalanche.js";
 import AvalancheFujiNetwork from "./AvalancheFuji.js";
-import BNBChainNetwork from "./BNBChain.js";
-import LineaNetwork from "./Linea.js";
-import SeiNetwork from "./Sei.js";
 import MonadTestnetNetwork from "./MonadTestnet.js";
 import { Network } from "./Network.js";
 import { NetworkId, CustomNetworkConfig } from "./NetworkTypes.js";
@@ -22,18 +13,9 @@ type Listener = () => void;
 
 class NetworkProvider {
   private sepoliaNetwork?: SepoliaNetwork;
-  private mainnetNetwork?: MainnetNetwork;
-  private arbitrumOneNetwork?: ArbitrumOneNetwork;
   private arbitrumSepoliaNetwork?: ArbitrumSepoliaNetwork;
-  private baseMainnetNetwork?: BaseMainnetNetwork;
   private baseSepoliaNetwork?: BaseSepoliaNetwork;
-  private polygonNetwork?: PolygonNetwork;
-  private optimismNetwork?: OptimismNetwork;
-  private avalancheNetwork?: AvalancheNetwork;
   private avalancheFujiNetwork?: AvalancheFujiNetwork;
-  private bnbChainNetwork?: BNBChainNetwork;
-  private lineaNetwork?: LineaNetwork;
-  private seiNetwork?: SeiNetwork;
   private monadTestnetNetwork?: MonadTestnetNetwork;
 
   /** User-added custom networks keyed by chainId */
@@ -50,18 +32,9 @@ class NetworkProvider {
 
   init() {
     if (!this.sepoliaNetwork) this.sepoliaNetwork = new SepoliaNetwork();
-    if (!this.mainnetNetwork) this.mainnetNetwork = new MainnetNetwork();
-    if (!this.arbitrumOneNetwork) this.arbitrumOneNetwork = new ArbitrumOneNetwork();
     if (!this.arbitrumSepoliaNetwork) this.arbitrumSepoliaNetwork = new ArbitrumSepoliaNetwork();
-    if (!this.baseMainnetNetwork) this.baseMainnetNetwork = new BaseMainnetNetwork();
     if (!this.baseSepoliaNetwork) this.baseSepoliaNetwork = new BaseSepoliaNetwork();
-    if (!this.polygonNetwork) this.polygonNetwork = new PolygonNetwork();
-    if (!this.optimismNetwork) this.optimismNetwork = new OptimismNetwork();
-    if (!this.avalancheNetwork) this.avalancheNetwork = new AvalancheNetwork();
     if (!this.avalancheFujiNetwork) this.avalancheFujiNetwork = new AvalancheFujiNetwork();
-    if (!this.bnbChainNetwork) this.bnbChainNetwork = new BNBChainNetwork();
-    if (!this.lineaNetwork) this.lineaNetwork = new LineaNetwork();
-    if (!this.seiNetwork) this.seiNetwork = new SeiNetwork();
     if (!this.monadTestnetNetwork) this.monadTestnetNetwork = new MonadTestnetNetwork();
   }
 
@@ -70,59 +43,14 @@ class NetworkProvider {
     return this.sepoliaNetwork;
   }
 
-  getMainnetNetwork(): MainnetNetwork {
-    if (!this.mainnetNetwork) this.mainnetNetwork = new MainnetNetwork();
-    return this.mainnetNetwork;
-  }
-
-  getArbitrumOneNetwork(): ArbitrumOneNetwork {
-    if (!this.arbitrumOneNetwork) this.arbitrumOneNetwork = new ArbitrumOneNetwork();
-    return this.arbitrumOneNetwork;
-  }
-
   getArbitrumSepoliaNetwork(): ArbitrumSepoliaNetwork {
     if (!this.arbitrumSepoliaNetwork) this.arbitrumSepoliaNetwork = new ArbitrumSepoliaNetwork();
     return this.arbitrumSepoliaNetwork;
   }
 
-  getBaseMainnetNetwork(): BaseMainnetNetwork {
-    if (!this.baseMainnetNetwork) this.baseMainnetNetwork = new BaseMainnetNetwork();
-    return this.baseMainnetNetwork;
-  }
-
   getBaseSepoliaNetwork(): BaseSepoliaNetwork {
     if (!this.baseSepoliaNetwork) this.baseSepoliaNetwork = new BaseSepoliaNetwork();
     return this.baseSepoliaNetwork;
-  }
-
-  getPolygonNetwork(): PolygonNetwork {
-    if (!this.polygonNetwork) this.polygonNetwork = new PolygonNetwork();
-    return this.polygonNetwork;
-  }
-
-  getOptimismNetwork(): OptimismNetwork {
-    if (!this.optimismNetwork) this.optimismNetwork = new OptimismNetwork();
-    return this.optimismNetwork;
-  }
-
-  getAvalancheNetwork(): AvalancheNetwork {
-    if (!this.avalancheNetwork) this.avalancheNetwork = new AvalancheNetwork();
-    return this.avalancheNetwork;
-  }
-
-  getBNBChainNetwork(): BNBChainNetwork {
-    if (!this.bnbChainNetwork) this.bnbChainNetwork = new BNBChainNetwork();
-    return this.bnbChainNetwork;
-  }
-
-  getLineaNetwork(): LineaNetwork {
-    if (!this.lineaNetwork) this.lineaNetwork = new LineaNetwork();
-    return this.lineaNetwork;
-  }
-
-  getSeiNetwork(): SeiNetwork {
-    if (!this.seiNetwork) this.seiNetwork = new SeiNetwork();
-    return this.seiNetwork;
   }
 
   getMonadTestnetNetwork(): MonadTestnetNetwork {
@@ -137,30 +65,12 @@ class NetworkProvider {
 
   getActiveNetwork(): Network {
     switch (this.activeNetworkId) {
-      case NetworkId.Ethereum_Mainnet:
-        return this.getMainnetNetwork();
       case NetworkId.Ethereum_Sepolia:
         return this.getSepoliaNetwork();
-      case NetworkId.Arbitrum_One:
-        return this.getArbitrumOneNetwork();
       case NetworkId.Arbitrum_Sepolia:
         return this.getArbitrumSepoliaNetwork();
-      case NetworkId.Base_Mainnet:
-        return this.getBaseMainnetNetwork();
       case NetworkId.Base_Sepolia:
         return this.getBaseSepoliaNetwork();
-      case NetworkId.Polygon:
-        return this.getPolygonNetwork();
-      case NetworkId.Optimism:
-        return this.getOptimismNetwork();
-      case NetworkId.Avalanche:
-        return this.getAvalancheNetwork();
-      case NetworkId.BNB_Chain:
-        return this.getBNBChainNetwork();
-      case NetworkId.Linea:
-        return this.getLineaNetwork();
-      case NetworkId.Sei:
-        return this.getSeiNetwork();
       case NetworkId.Monad_Testnet:
         return this.getMonadTestnetNetwork();
       case NetworkId.Avalanche_Fuji:
@@ -223,12 +133,11 @@ class NetworkProvider {
   addCustomNetwork(config: CustomNetworkConfig): void {
     // Prevent overriding built-in networks
     const builtIn = [
-      NetworkId.Ethereum_Mainnet, NetworkId.Ethereum_Sepolia,
-      NetworkId.Arbitrum_One, NetworkId.Arbitrum_Sepolia,
-      NetworkId.Base_Mainnet, NetworkId.Base_Sepolia,
-      NetworkId.Polygon, NetworkId.Optimism, NetworkId.Avalanche,
-      NetworkId.Avalanche_Fuji, NetworkId.BNB_Chain, NetworkId.Linea,
-      NetworkId.Sei, NetworkId.Monad_Testnet
+      NetworkId.Ethereum_Sepolia,
+      NetworkId.Arbitrum_Sepolia,
+      NetworkId.Base_Sepolia,
+      NetworkId.Avalanche_Fuji,
+      NetworkId.Monad_Testnet
     ] as number[];
     if (builtIn.includes(config.chainId)) {
       throw new Error(`Chain ID ${config.chainId} is a built-in network and cannot be overridden.`);

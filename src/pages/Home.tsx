@@ -168,14 +168,14 @@ function Home() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [tokens, setTokens] = useState<DisplayToken[]>(() => {
     try {
-      const initialNetId = wallet_context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Mainnet;
+      const initialNetId = wallet_context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Sepolia;
       const cached = wallet_context?.tokenCache?.getAllTokens(initialNetId) ?? [];
       return cached.map(t => ({ ...t, isShielded: false, isSpam: false, isSuspicious: false, isHidden: false, spamScore: 0 }));
     } catch { return []; }
   });
   const [nfts, setNfts] = useState<NFTDisplayItem[]>(() => {
     try {
-      const initialNetId = wallet_context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Mainnet;
+      const initialNetId = wallet_context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Sepolia;
       const cached = wallet_context?.nftCache?.getAllNFTs(initialNetId) ?? [];
       return cached.map(n => ({ ...n, balance: 0 }));
     } catch { return []; }
@@ -198,7 +198,7 @@ function Home() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const openNetworkMenu = Boolean(anchorEl);
 
-  const activeNetworkId = wallet_context?.networkProvider.getActiveNetworkId() ?? NetworkId.Ethereum_Mainnet;
+  const activeNetworkId = wallet_context?.networkProvider.getActiveNetworkId() ?? NetworkId.Ethereum_Sepolia;
   const activeNetwork = wallet_context?.networkProvider.getActiveNetwork();
 
   const handleNetworkClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -414,7 +414,7 @@ function Home() {
       } catch (e) { /* silenced */ }
 
       // Testnet & custom network price fallback: fetch mainnet prices and map known tokens by symbol
-      if (activeNetworkId !== NetworkId.Ethereum_Mainnet) {
+      {
         try {
           // Collect all token symbols we need to price
           const allSymbols = new Set<string>();
@@ -711,20 +711,12 @@ function Home() {
             height: 8,
             borderRadius: '50%',
             bgcolor:
-              activeNetworkId === NetworkId.Ethereum_Mainnet ? '#10b981' :
-                activeNetworkId === NetworkId.Ethereum_Sepolia ? '#f59e0b' :
-                  activeNetworkId === NetworkId.Arbitrum_One ? '#2563eb' :
-                    activeNetworkId === NetworkId.Arbitrum_Sepolia ? '#60a5fa' :
-                      activeNetworkId === NetworkId.Base_Mainnet ? '#0052ff' :
-                        activeNetworkId === NetworkId.Base_Sepolia ? '#93c5fd' :
-                          activeNetworkId === NetworkId.Polygon ? '#8247e5' :
-                            activeNetworkId === NetworkId.Optimism ? '#ff0420' :
-                              activeNetworkId === NetworkId.Avalanche ? '#e84142' :
-                                activeNetworkId === NetworkId.BNB_Chain ? '#f0b90b' :
-                                  activeNetworkId === NetworkId.Linea ? '#61dfff' :
-                                    activeNetworkId === NetworkId.Sei ? '#9b1c1c' :
-                                      activeNetworkId === NetworkId.Monad_Testnet ? '#836ef9' :
-                                        (wallet_context?.networkProvider?.getCustomNetworks()?.find(cn => cn.chainId === (activeNetworkId as number))?.iconColor) || '#404040',
+              activeNetworkId === NetworkId.Ethereum_Sepolia ? '#f59e0b' :
+                activeNetworkId === NetworkId.Arbitrum_Sepolia ? '#60a5fa' :
+                  activeNetworkId === NetworkId.Base_Sepolia ? '#93c5fd' :
+                    activeNetworkId === NetworkId.Avalanche_Fuji ? '#e84142' :
+                      activeNetworkId === NetworkId.Monad_Testnet ? '#836ef9' :
+                        (wallet_context?.networkProvider?.getCustomNetworks()?.find(cn => cn.chainId === (activeNetworkId as number))?.iconColor) || '#404040',
             mr: 1
           }} />
           {activeNetwork?.network_name}
@@ -735,40 +727,6 @@ function Home() {
           onClose={() => handleNetworkClose(null)}
           PaperProps={{ sx: { borderRadius: 3, mt: 1, minWidth: 200, maxHeight: 400 } }}
         >
-          {/* ── Mainnets ── */}
-          <MenuItem disabled sx={{ opacity: 0.6, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, py: 0.5, minHeight: 0 }}>
-            Mainnets
-          </MenuItem>
-          <MenuItem onClick={() => handleNetworkClose(NetworkId.Ethereum_Mainnet)}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#10b981', mr: 1 }} /> Ethereum
-          </MenuItem>
-          <MenuItem onClick={() => handleNetworkClose(NetworkId.Arbitrum_One)}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#2563eb', mr: 1 }} /> Arbitrum One
-          </MenuItem>
-          <MenuItem onClick={() => handleNetworkClose(NetworkId.Base_Mainnet)}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#0052ff', mr: 1 }} /> Base
-          </MenuItem>
-          <MenuItem onClick={() => handleNetworkClose(NetworkId.Polygon)}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#8247e5', mr: 1 }} /> Polygon
-          </MenuItem>
-          <MenuItem onClick={() => handleNetworkClose(NetworkId.Optimism)}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#ff0420', mr: 1 }} /> Optimism
-          </MenuItem>
-          <MenuItem onClick={() => handleNetworkClose(NetworkId.Avalanche)}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#e84142', mr: 1 }} /> Avalanche
-          </MenuItem>
-          <MenuItem onClick={() => handleNetworkClose(NetworkId.BNB_Chain)}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#f0b90b', mr: 1 }} /> BNB Chain
-          </MenuItem>
-          <MenuItem onClick={() => handleNetworkClose(NetworkId.Linea)}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#61dfff', mr: 1 }} /> Linea
-          </MenuItem>
-          <MenuItem onClick={() => handleNetworkClose(NetworkId.Sei)}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#9b1c1c', mr: 1 }} /> Sei
-          </MenuItem>
-
-          <Divider sx={{ my: 0.5 }} />
-
           {/* ── Testnets ── */}
           <MenuItem disabled sx={{ opacity: 0.6, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, py: 0.5, minHeight: 0 }}>
             Testnets

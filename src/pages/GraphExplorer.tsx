@@ -22,6 +22,7 @@ import { ActiveAccountContext } from "../ActiveAccountProvider.js";
 import { GraphNode, GraphEdge, ExplorerService } from "../backend/ExplorerService.js";
 import { NetworkId } from "../backend/NetworkTypes.js";
 import { isAddress } from 'ethers';
+import { useTranslation } from 'react-i18next';
 
 // Register layout
 cytoscape.use(fcose);
@@ -30,6 +31,7 @@ const GraphExplorer = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
   const theme = useTheme();
+  const { t } = useTranslation();
   const isDark = theme.palette.mode === 'dark';
 
   const wallet_context = useContext(WalletContext);
@@ -91,7 +93,7 @@ const GraphExplorer = () => {
       setTargetAddress(query);
       setError("");
     } else {
-      setError("Invalid address format. Please enter a valid 0x address.");
+      setError(t("graph.invalidAddress"));
     }
   };
 
@@ -354,7 +356,7 @@ const GraphExplorer = () => {
           </InputAdornment>
           <TextField
             sx={{ ml: 0.5, flex: 1, '& input': { fontSize: '0.82rem', py: 0.8 } }}
-            placeholder="Wallet address (0x...)"
+            placeholder={t("graph.searchPlaceholder")}
             variant="standard"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
@@ -402,7 +404,7 @@ const GraphExplorer = () => {
             fontWeight: 600,
             letterSpacing: '0.02em',
           }}>
-            Analyzing network...
+            {t("graph.analyzingNetwork")}
           </Typography>
         </Box>
       )}
@@ -451,10 +453,10 @@ const GraphExplorer = () => {
           pointerEvents: 'auto',
         }}>
           {[
-            { color: '#059669', shape: 'line', label: 'In' },
-            { color: '#dc2626', shape: 'line', label: 'Out' },
-            { color: '#2563eb', shape: 'circle', label: 'Center' },
-            { color: '#ea580c', shape: 'diamond', label: 'Exchange' },
+            { color: '#059669', shape: 'line', label: t("graph.legendIn") },
+            { color: '#dc2626', shape: 'line', label: t("graph.legendOut") },
+            { color: '#2563eb', shape: 'circle', label: t("graph.legendCenter") },
+            { color: '#ea580c', shape: 'diamond', label: t("graph.legendExchange") },
           ].map((item) => (
             <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               {item.shape === 'line' ? (
@@ -485,9 +487,9 @@ const GraphExplorer = () => {
           pointerEvents: 'auto',
         }}>
           {[
-            { icon: <ZoomOut sx={{ fontSize: 18 }} />, action: () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8), label: "Zoom out" },
-            { icon: <Hub sx={{ fontSize: 16, color: 'primary.main' }} />, action: () => cyRef.current?.fit(), label: "Fit" },
-            { icon: <ZoomIn sx={{ fontSize: 18 }} />, action: () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2), label: "Zoom in" },
+            { icon: <ZoomOut sx={{ fontSize: 18 }} />, action: () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8), label: t("graph.zoomOut") },
+            { icon: <Hub sx={{ fontSize: 16, color: 'primary.main' }} />, action: () => cyRef.current?.fit(), label: t("graph.fit") },
+            { icon: <ZoomIn sx={{ fontSize: 18 }} />, action: () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2), label: t("graph.zoomIn") },
           ].map((ctrl, i) => (
             <IconButton
               key={i}
@@ -552,10 +554,10 @@ const GraphExplorer = () => {
               </Box>
               <Box>
                 <Typography variant="caption" fontWeight={800} sx={{ fontSize: '0.75rem', lineHeight: 1.2, display: 'block' }}>
-                  {selectedNode ? "Wallet" : "Transaction"}
+                  {selectedNode ? t("graph.nodeWallet") : t("graph.nodeTx")}
                 </Typography>
                 <Typography sx={{ fontSize: '0.55rem', fontWeight: 600, color: 'text.secondary', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                  {selectedNode ? selectedNode.type : "TRANSFER"}
+                  {selectedNode ? selectedNode.type : t("graph.txTransfer")}
                 </Typography>
               </Box>
             </Box>
@@ -580,10 +582,10 @@ const GraphExplorer = () => {
               {selectedNode && (
                 <>
                   <Grid size={{ xs: 12 }}>
-                    <DataCard label="Address" value={selectedNode.id} copyable />
+                    <DataCard label={t("common.address")} value={selectedNode.id} copyable />
                   </Grid>
                   <Grid size={{ xs: 6 }}>
-                    <DataCard label="Label" value={selectedNode.label} />
+                    <DataCard label={t("graph.label")} value={selectedNode.label} />
                   </Grid>
                   <Grid size={{ xs: 6 }}>
                     <Button
@@ -608,7 +610,7 @@ const GraphExplorer = () => {
                         },
                       }}
                     >
-                      Visualize
+                      {t("graph.visualizeBtn")}
                     </Button>
                   </Grid>
                 </>
@@ -617,13 +619,13 @@ const GraphExplorer = () => {
               {selectedEdge && (
                 <>
                   <Grid size={{ xs: 12 }}>
-                    <DataCard label="Tx Hash" value={selectedEdge.hash} copyable />
+                    <DataCard label={t("graph.txHash")} value={selectedEdge.hash} copyable />
                   </Grid>
                   <Grid size={{ xs: 4 }}>
-                    <DataCard label="Value" value={`${selectedEdge.value.toFixed(4)} ${selectedEdge.asset || 'ETH'}`} highlight />
+                    <DataCard label={t("graph.value")} value={`${selectedEdge.value.toFixed(4)} ${selectedEdge.asset || 'ETH'}`} highlight />
                   </Grid>
                   <Grid size={{ xs: 4 }}>
-                    <DataCard label="Time" value={new Date(selectedEdge.timestamp).toLocaleDateString()} />
+                    <DataCard label={t("graph.time")} value={new Date(selectedEdge.timestamp).toLocaleDateString()} />
                   </Grid>
                   <Grid size={{ xs: 4 }}>
                     <Button
@@ -649,7 +651,7 @@ const GraphExplorer = () => {
                         borderColor: isDark ? 'rgba(96,165,250,0.15)' : 'divider',
                       }}
                     >
-                      Explorer ↗
+                      {t("graph.explorer")}
                     </Button>
                   </Grid>
                 </>

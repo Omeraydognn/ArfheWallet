@@ -14,8 +14,10 @@ import SwapPanel from "./SwapPanel.js";
 import { CustomTabPanel } from "./panels/shared.js";
 import SendPanel from "./panels/SendPanel.js";
 import ReceivePanel from "./panels/ReceivePanel.js";
+import { useTranslation } from "react-i18next";
 
 export default function ArfBottomMenu() {
+  const { t } = useTranslation();
   const [value, setValue] = React.useState(0);
 
   React.useEffect(() => {
@@ -74,9 +76,9 @@ export default function ArfBottomMenu() {
           },
         }}
       >
-        <Tab icon={<SendIcon sx={{ fontSize: 14 }} />} iconPosition="start" label="Send" />
-        <Tab icon={<CallReceived sx={{ fontSize: 14 }} />} iconPosition="start" label="Receive" />
-        <Tab icon={<SwapVert sx={{ fontSize: 14 }} />} iconPosition="start" label="Swap" />
+        <Tab icon={<SendIcon sx={{ fontSize: 14 }} />} iconPosition="start" label={t("common.send")} />
+        <Tab icon={<CallReceived sx={{ fontSize: 14 }} />} iconPosition="start" label={t("common.receive")} />
+        <Tab icon={<SwapVert sx={{ fontSize: 14 }} />} iconPosition="start" label={t("common.swap")} />
       </Tabs>
 
       <CustomTabPanel value={value} index={0}>

@@ -9,6 +9,7 @@ import {
     ResponsiveContainer,
     ReferenceArea
 } from 'recharts';
+import { useTranslation } from 'react-i18next';
 
 interface PortfolioChartProps {
     currentBalanceUsd: number;
@@ -74,6 +75,7 @@ const generateMockHistory = (currentBalance: number, timeframe: Timeframe) => {
 
 function PortfolioChart({ currentBalanceUsd }: PortfolioChartProps) {
     const theme = useTheme();
+    const { t } = useTranslation();
     const [timeframe, setTimeframe] = useState<Timeframe>('1W');
 
     // Regenerate data when timeframe or significant balance changes
@@ -118,7 +120,7 @@ function PortfolioChart({ currentBalanceUsd }: PortfolioChartProps) {
             <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={3}>
                 <Box>
                     <Typography variant="body2" color="text.secondary" fontWeight={500} gutterBottom>
-                        Portfolio Balance
+                        {t("portfolio.balance")}
                     </Typography>
                     <Typography variant="h4" fontWeight="800" sx={{ letterSpacing: -1 }}>
                         ${currentBalanceUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -140,7 +142,7 @@ function PortfolioChart({ currentBalanceUsd }: PortfolioChartProps) {
                             ({isPositive ? '+' : ''}{changePct.toFixed(2)}%)
                         </Box>
                         <Typography variant="caption" color="text.secondary" fontWeight={500}>
-                            {timeframe === '1D' ? 'Today' : timeframe === '1W' ? 'This Week' : 'This Month'}
+                            {timeframe === '1D' ? t("portfolio.today") : timeframe === '1W' ? t("portfolio.thisWeek") : t("portfolio.thisMonth")}
                         </Typography>
                     </Stack>
                 </Box>

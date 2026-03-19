@@ -31,6 +31,7 @@ import {
 } from '@mui/icons-material';
 import { WalletContext } from '../AppContext.js';
 import { isFheNetwork, NetworkId } from '../backend/NetworkTypes.js';
+import { useTranslation } from 'react-i18next';
 
 type PrivacyLevel = 'open' | 'semi-open' | 'full';
 
@@ -48,6 +49,7 @@ const CONTRACTS = {
 
 const FHEPrivacyPanel = () => {
   const theme = useTheme();
+  const { t } = useTranslation();
   const context = useContext(WalletContext);
   const network = context?.networkProvider?.getActiveNetwork();
   const activeAccount = context?.accountManager?.GetActive();
@@ -85,13 +87,13 @@ const FHEPrivacyPanel = () => {
             mb: 2,
             letterSpacing: '-0.02em'
           }}>
-            Coming Soon
+            {t("privacy.comingSoon")}
           </Typography>
           <Typography variant="body1" sx={{ color: 'text.secondary', fontSize: '1.1rem', lineHeight: 1.6, mb: 2 }}>
-            FHE Privacy features are currently available only on testnet networks. Switch to a testnet (Sepolia, Arbitrum Sepolia, or Base Sepolia) to explore privacy features.
+            {t("privacy.comingSoonDesc")}
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.disabled', fontSize: '0.85rem' }}>
-            Mainnet FHE support will be enabled once smart contracts are deployed.
+            {t("privacy.mainnetNote")}
           </Typography>
         </Paper>
       </Box>
@@ -195,10 +197,10 @@ const FHEPrivacyPanel = () => {
             mb: 2,
             letterSpacing: '-0.02em'
           }}>
-            VERY SOON
+            {t("privacy.verySoon")}
           </Typography>
           <Typography variant="body1" sx={{ color: 'text.secondary', fontSize: '1.1rem', lineHeight: 1.6 }}>
-            The full FHE Privacy Shield management center is currently under development. You will soon have absolute control over your on-chain visibility.
+            {t("privacy.verySoonDesc")}
           </Typography>
         </Paper>
       </Box>
@@ -220,10 +222,10 @@ const FHEPrivacyPanel = () => {
               <Shield sx={{ fontSize: 40, color: '#fff' }} />
             </Box>
             <Typography variant="h4" fontWeight={800} gutterBottom color="text.primary">
-              Privacy Shield
+              {t("privacy.privacyShield")}
             </Typography>
             <Typography variant="subtitle1" color="text.secondary">
-              Manage your on-chain visibility and FHE encryption settings
+              {t("privacy.manageVisibility")}
             </Typography>
             <Typography variant="h6" color="#000000ff" >
               VERY COMİNG SOON with CONTRACT V5 support!
@@ -233,8 +235,8 @@ const FHEPrivacyPanel = () => {
           {/* Shielded Balances */}
           <Paper elevation={0} sx={{ p: 0, borderRadius: 4, mb: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
             <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
-              <Typography variant="h6" fontWeight={700}>Shielded Balances</Typography>
-              <Typography variant="caption" color="text.secondary">Only you can view these balances (using FHE Decryption).</Typography>
+              <Typography variant="h6" fontWeight={700}>{t("privacy.shieldedBalances")}</Typography>
+              <Typography variant="caption" color="text.secondary">{t("privacy.shieldedBalancesDesc")}</Typography>
             </Box>
             <List>
               {['eETH', 'eUSDC'].map((token) => (
@@ -265,7 +267,7 @@ const FHEPrivacyPanel = () => {
                         }
                       }}
                     >
-                      {decrypted[token as keyof typeof decrypted] ? "Hide" : "Decrypt"}
+                      {decrypted[token as keyof typeof decrypted] ? t("privacy.hide") : t("privacy.decrypt")}
                     </Button>
                   </Stack>
                 </ListItem>
@@ -365,10 +367,10 @@ const FHEPrivacyPanel = () => {
 
       {/* Password Dialog */}
       <Dialog open={passwordOpen} onClose={() => setPasswordOpen(false)} aria-labelledby="privacy-password-title">
-        <DialogTitle id="privacy-password-title">Enter Wallet Password</DialogTitle>
+        <DialogTitle id="privacy-password-title">{t("privacy.enterPassword")}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
-            Please enter your password to decrypt your shielded balance (Simulated).
+            {t("privacy.enterPasswordDesc")}
           </Typography>
           <TextField
             autoFocus
@@ -380,8 +382,8 @@ const FHEPrivacyPanel = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setPasswordOpen(false)}>Cancel</Button>
-          <Button onClick={handlePasswordSubmit} variant="contained" disabled={!passwordInput}>Decrypt</Button>
+          <Button onClick={() => setPasswordOpen(false)}>{t("common.cancel")}</Button>
+          <Button onClick={handlePasswordSubmit} variant="contained" disabled={!passwordInput}>{t("privacy.decrypt")}</Button>
         </DialogActions>
       </Dialog>
     </Box>

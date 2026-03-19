@@ -26,19 +26,18 @@ export default function ReceivePanel() {
   const context = useContext(WalletContext);
   const address = context?.accountManager?.GetActive()?.GetAddress() ?? "";
   const accountName = context?.accountManager?.GetActive()?.GetName() ?? "";
-  const activeNetworkId = context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Mainnet;
+  const activeNetworkId = context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Sepolia;
   const activeNetwork = context?.networkProvider?.getActiveNetwork();
   const [copied, setCopied] = useState(false);
   const { showToast } = useToast();
 
   // Network display info
   const networkName = activeNetwork?.network_name ?? "Unknown";
-  const networkColor = activeNetworkId === NetworkId.Ethereum_Mainnet ? '#10b981' :
-    activeNetworkId === NetworkId.Ethereum_Sepolia ? '#f59e0b' :
-    activeNetworkId === NetworkId.Arbitrum_One ? '#2563eb' :
+  const networkColor = activeNetworkId === NetworkId.Ethereum_Sepolia ? '#f59e0b' :
     activeNetworkId === NetworkId.Arbitrum_Sepolia ? '#60a5fa' :
-    activeNetworkId === NetworkId.Base_Mainnet ? '#0052ff' :
-    activeNetworkId === NetworkId.Base_Sepolia ? '#93c5fd' : '#404040';
+      activeNetworkId === NetworkId.Base_Sepolia ? '#93c5fd' :
+        activeNetworkId === NetworkId.Avalanche_Fuji ? '#e84142' :
+          activeNetworkId === NetworkId.Monad_Testnet ? '#836ef9' : '#404040';
 
   const handleCopy = async () => {
     try {
