@@ -451,14 +451,26 @@ class Network {
 
     const activeTokensRaw = [...tokenBalancesRaw];
 
-    // Some custom testnet tokens or user-added tokens might be missed by Alchemy's indexer.
     // Ensure all known tokens in the local cache are queried directly if not natively returned.
     const rawSet = new Set(activeTokensRaw.map(t => (t.contractAddress || "").toLowerCase()));
     const cachedTokens = tokenCacheObj.getAllTokens(this.network_id) || [];
 
+    const shieldedAddresses = [
+      (import.meta.env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase(),
+      (import.meta.env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase(),
+      (import.meta.env.VITE_ARB_WRAPPED_ETH_ADDRESS || "").toLowerCase(),
+      (import.meta.env.VITE_ARB_WRAPPED_USDC_ADDRESS || "").toLowerCase(),
+      (import.meta.env.VITE_BASE_WRAPPED_ETH_ADDRESS || "").toLowerCase(),
+      (import.meta.env.VITE_BASE_WRAPPED_USDC_ADDRESS || "").toLowerCase(),
+    ].filter(Boolean);
+
     for (const cached of cachedTokens) {
       if (cached.contractAddress === "ETH") continue;
       const lowerAddr = cached.contractAddress.toLowerCase();
+
+      // Skip shielded FHE tokens — their transparent balanceOf throws "execution reverted"
+      // and their encrypted balances are handled separately in Home.tsx UI.
+      if (shieldedAddresses.includes(lowerAddr)) continue;
 
       if (!rawSet.has(lowerAddr)) {
         try {
