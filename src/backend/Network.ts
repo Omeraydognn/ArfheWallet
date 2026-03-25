@@ -1217,14 +1217,12 @@ class Network {
         networkId: this.network_id,
       });
 
-      const receipt = await sentTx.wait();
-
-      // Remove from pending once confirmed
-      this.pendingTransactions.delete(sentTx.hash);
-
-      if (receipt && receipt.status === 0) {
-        throw new Error(`Transaction reverted on-chain. TX: ${sentTx.hash}`);
-      }
+      // Launch background wait to clean up pending list, DONT block the UI here
+      sentTx.wait().then(() => {
+        this.pendingTransactions.delete(sentTx.hash);
+      }).catch(() => {
+        this.pendingTransactions.delete(sentTx.hash);
+      });
 
       return sentTx.hash;
     } catch (err) {
@@ -1242,14 +1240,26 @@ class Network {
 
   async waitForTransaction(txHash: string): Promise<unknown> {
     if (this.alchemy) {
-      return this.alchemy.core.waitForTransaction(txHash);
+      const receipt = await this.alchemy.core.waitForTransaction(txHash);
+      if (receipt && receipt.status === 0) {
+        throw new Error("Transaction reverted on-chain");
+      }
+      return receipt;
     }
     let attempts = 0;
     while (attempts < 60) {
       try {
         const receipt = await this.call("eth_getTransactionReceipt", [txHash]);
-        if (receipt && BigInt(receipt.blockNumber) > 0n) return receipt;
-      } catch (e) { }
+        if (receipt && BigInt(receipt.blockNumber) > 0n) {
+          if (receipt.status === "0x0" || receipt.status === 0 || receipt.status === false) {
+             throw new Error("Transaction reverted on-chain");
+          }
+          return receipt;
+        }
+      } catch (e: any) {
+        // If the error we just explicitly threw is caught, rethrow it so we don't swallow revert errors
+        if (e.message === "Transaction reverted on-chain") throw e;
+      }
       await new Promise(r => setTimeout(r, 2000));
       attempts++;
     }

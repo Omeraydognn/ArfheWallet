@@ -111,12 +111,6 @@ export default function ReceivePanel() {
           size={120}
           level="M"
           marginSize={1}
-          imageSettings={{
-            src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%236366f1'/%3E%3Ctext x='12' y='16' text-anchor='middle' fill='white' font-size='12' font-weight='bold'%3EA%3C/text%3E%3C/svg%3E",
-            width: 24,
-            height: 24,
-            excavate: true,
-          }}
         />
       </Paper>
 

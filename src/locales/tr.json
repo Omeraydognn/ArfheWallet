@@ -18,6 +18,8 @@
     "retry": "Tekrar Dene",
     "send": "Gönder",
     "receive": "Al",
+    "runInBackground": "Arka Planda Çalıştır",
+    "backgroundTxInfo": "İşlem arka planda devam ediyor. Durumunu Geçmiş sekmesinden takip edebilirsiniz.",
     "swap": "Takas",
     "address": "Adres",
     "amount": "Miktar",

@@ -18,6 +18,8 @@
     "retry": "Retry",
     "send": "Send",
     "receive": "Receive",
+    "runInBackground": "Run in Background",
+    "backgroundTxInfo": "Transaction running in background. You can track it in the History tab.",
     "swap": "Swap",
     "address": "Address",
     "amount": "Amount",

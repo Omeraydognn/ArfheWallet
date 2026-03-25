@@ -6,10 +6,12 @@
  * Uses a React Portal to render over the entire viewport.
  */
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Box, Typography, Fade } from "@mui/material";
-import { Lock } from "@mui/icons-material";
+import { Box, Typography, Fade, Button, IconButton, useTheme } from "@mui/material";
+import { Lock, Close, OpenInNew } from "@mui/icons-material";
+import { useTranslation } from "react-i18next";
+import { useToast } from "./ToastProvider";
 
 interface FheEncryptingOverlayProps {
     visible: boolean;
@@ -21,6 +23,8 @@ const THEME_PRIMARY = "#2563eb";
 const THEME_SECONDARY = "#1e3a8a";
 
 function MatrixRainCanvas() {
+    const theme = useTheme();
+    const isDark = theme.palette.mode === 'dark';
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
@@ -41,8 +45,8 @@ function MatrixRainCanvas() {
         let animFrameId: number;
 
         const draw = () => {
-            // Light semi-transparent trail — works on a bright background
-            ctx.fillStyle = "rgba(255, 255, 255, 0.07)";
+            // Adjust trail color based on theme
+            ctx.fillStyle = isDark ? "rgba(18, 18, 18, 0.07)" : "rgba(255, 255, 255, 0.07)";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             ctx.font = `${fontSize}px monospace`;
@@ -81,7 +85,10 @@ function MatrixRainCanvas() {
     );
 }
 
-function OverlayContent({ message }: { message: string }) {
+function OverlayContent({ message, onDismiss, t }: { message: string, onDismiss: () => void, t: any }) {
+    const theme = useTheme();
+    const isDark = theme.palette.mode === 'dark';
+
     return (
         <Fade in timeout={400}>
             <Box
@@ -94,12 +101,29 @@ function OverlayContent({ message }: { message: string }) {
                     alignItems: "center",
                     justifyContent: "center",
                     gap: 2.5,
-                    // Light frosted glass look
-                    background: "rgba(248, 248, 255, 0.88)",
+                    // Dynamic frosted glass look based on theme
+                    background: isDark ? "rgba(18, 18, 18, 0.88)" : "rgba(248, 248, 255, 0.88)",
                     backdropFilter: "blur(16px)",
                     overflow: "hidden",
                 }}
             >
+                {/* Close Button in top right */}
+                <IconButton 
+                    onClick={onDismiss}
+                    sx={{
+                        position: 'absolute',
+                        top: 16,
+                        right: 16,
+                        zIndex: 10,
+                        color: 'text.secondary',
+                        bgcolor: 'background.paper',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        '&:hover': { bgcolor: 'background.paper', transform: 'scale(1.05)' }
+                    }}
+                >
+                    <Close />
+                </IconButton>
+
                 {/* Hex rain canvas */}
                 <MatrixRainCanvas />
 
@@ -188,6 +212,27 @@ function OverlayContent({ message }: { message: string }) {
                             />
                         ))}
                     </Box>
+
+                    <Button 
+                        variant="outlined" 
+                        size="small"
+                        onClick={onDismiss}
+                        endIcon={<OpenInNew />}
+                        sx={{ 
+                            mt: 4, 
+                            borderRadius: 4, 
+                            textTransform: 'none',
+                            fontWeight: 600,
+                            borderColor: `${THEME_PRIMARY}50`,
+                            color: THEME_PRIMARY,
+                            '&:hover': {
+                                borderColor: THEME_PRIMARY,
+                                bgcolor: `${THEME_PRIMARY}10`
+                            }
+                        }}
+                    >
+                        {t ? t("runInBackground", "Run in Background") : "Run in Background"}
+                    </Button>
                 </Box>
             </Box>
         </Fade>
@@ -198,10 +243,30 @@ export default function FheEncryptingOverlay({
     visible,
     message = "Encrypting with FHE...",
 }: FheEncryptingOverlayProps) {
-    if (!visible) return null;
+    const [dismissed, setDismissed] = useState(false);
+    const { showToast } = useToast();
+    const { t } = useTranslation();
+
+    // Reset dismissed state when it becomes visible again
+    useEffect(() => {
+        if (visible) {
+            setDismissed(false);
+        }
+    }, [visible]);
+
+    const handleDismiss = () => {
+        setDismissed(true);
+        showToast(
+            t("backgroundTxInfo", "Transaction running in background. You can track it in the History tab."), 
+            "info"
+        );
+    };
+
+    if (!visible || dismissed) return null;
+
     // Render into document.body so it covers the full viewport
     return createPortal(
-        <OverlayContent message={message} />,
+        <OverlayContent message={message} onDismiss={handleDismiss} t={t} />,
         document.body
     );
 }

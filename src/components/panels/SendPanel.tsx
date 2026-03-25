@@ -846,9 +846,21 @@ export default function SendPanel() {
               value={sendAddress}
               onChange={(e) => setSendAddress(e.target.value)}
               disabled={isLoading}
+              autoComplete="off"
+              spellCheck={false}
               InputProps={{
                 disableUnderline: true,
                 style: { fontSize: '0.95rem', fontWeight: 500, fontFamily: 'monospace', marginTop: 4 }
+              }}
+              sx={{
+                '& .MuiInputBase-input': {
+                  '&:-webkit-autofill': {
+                    caretColor: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
+                    WebkitBoxShadow: theme.palette.mode === 'dark' ? '0 0 0 100px #1e1e1e inset' : '0 0 0 100px #f5f5f5 inset',
+                    WebkitTextFillColor: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
+                    transition: 'background-color 5000s ease-in-out 0s'
+                  }
+                }
               }}
             />
           </Paper>
@@ -968,9 +980,21 @@ export default function SendPanel() {
                 value={sendAmount}
                 onChange={(e) => setSendAmount(e.target.value)}
                 disabled={isLoading}
+                autoComplete="off"
+                spellCheck={false}
                 InputProps={{
                   disableUnderline: true,
                   style: { fontSize: '1rem', fontWeight: 700, marginTop: 4 }
+                }}
+                sx={{
+                  '& .MuiInputBase-input': {
+                    '&:-webkit-autofill': {
+                      caretColor: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
+                      WebkitBoxShadow: theme.palette.mode === 'dark' ? '0 0 0 100px #1e1e1e inset' : '0 0 0 100px #f5f5f5 inset',
+                      WebkitTextFillColor: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
+                      transition: 'background-color 5000s ease-in-out 0s'
+                    }
+                  }
                 }}
               />
             </Paper>

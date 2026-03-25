@@ -61,9 +61,9 @@ export interface NetworkGasInfo {
 // ─── Gas Presets ────────────────────────────────────────────────────
 
 const PRESET_MULTIPLIERS: Record<Exclude<GasPreset, "custom">, { fee: number; priority: number; label: string; time: string }> = {
-    slow:     { fee: 0.9,  priority: 0.8, label: "🐢", time: "~5 min" },
-    standard: { fee: 1.0,  priority: 1.0, label: "⚡",  time: "~30 sec" },
-    fast:     { fee: 1.3,  priority: 1.5, label: "🚀", time: "~10 sec" },
+    slow:     { fee: 0.9,  priority: 0.8, label: "Slow", time: "~5 min" },
+    standard: { fee: 1.0,  priority: 1.0, label: "Standard",  time: "~30 sec" },
+    fast:     { fee: 1.3,  priority: 1.5, label: "Fast", time: "~10 sec" },
 };
 
 // ─── Component ──────────────────────────────────────────────────────
@@ -295,11 +295,8 @@ function GasSettingsPanel({
                                     key={p}
                                     label={
                                         <Stack alignItems="center" spacing={0}>
-                                            <Typography fontSize="0.85rem">
-                                                {info ? info.label : "⚙️"}
-                                            </Typography>
-                                            <Typography fontSize="0.6rem" fontWeight={600}>
-                                                {t(`gas.preset.${p}`)}
+                                            <Typography fontSize="0.75rem" fontWeight={700}>
+                                                {info ? info.label : "Custom"}
                                             </Typography>
                                             {info && (
                                                 <Typography fontSize="0.55rem" color="text.secondary">

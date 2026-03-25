@@ -56,7 +56,7 @@ const STEPS: OnboardingStep[] = [
     subtitle: "Gizliliğe öncelik veren Web3 cüzdanınız",
     description:
       "ArfheWallet, bakiyelerinizi tamamen gizli tutabilen ilk FHE (Fully Homomorphic Encryption) destekli tarayıcı cüzdanıdır. Ethereum, Arbitrum, Base ve özel ağları destekler.",
-    icon: <RocketLaunch sx={{ fontSize: 32 }} />,
+    icon: <RocketLaunch sx={{ fontSize: 24 }} />,
     gradient: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%)",
     badge: "v1.0",
     tips: [
@@ -70,7 +70,7 @@ const STEPS: OnboardingStep[] = [
     subtitle: "Fully Homomorphic Encryption nedir?",
     description:
       "FHE teknolojisi, token bakiyelerinizi blokzincir üzerinde şifreli tutmanızı sağlar. Kimse — madenciler, düğümler, hatta akıllı kontratlar bile — bakiyenizi göremez. Transfer ve işlemler şifreli halde gerçekleşir.",
-    icon: <Shield sx={{ fontSize: 32 }} />,
+    icon: <Shield sx={{ fontSize: 24 }} />,
     gradient: "linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%)",
     badge: "CoFHE",
     tips: [
@@ -84,7 +84,7 @@ const STEPS: OnboardingStep[] = [
     subtitle: "12 kelimeniz = tüm varlıklarınız",
     description:
       "Seed phrase (kurtarma ifadesi) cüzdanınıza erişmenin TEK yoludur. Bunu kaybederseniz varlıklarınıza bir daha erişemezsiniz. ArfheWallet dahil hiç kimse onu kurtaramaz.",
-    icon: <Key sx={{ fontSize: 32 }} />,
+    icon: <Key sx={{ fontSize: 24 }} />,
     gradient: "linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #b45309 100%)",
     badge: "Kritik",
     tips: [
@@ -99,7 +99,7 @@ const STEPS: OnboardingStep[] = [
     subtitle: "ArfheWallet'ın temel özellikleri",
     description:
       "Cüzdanınız kullanıma hazır. İşte hemen başlayabileceğiniz temel özellikler:",
-    icon: <CheckCircle sx={{ fontSize: 32 }} />,
+    icon: <CheckCircle sx={{ fontSize: 24 }} />,
     gradient: "linear-gradient(135deg, #172554 0%, #1e40af 50%, #1e3a8a 100%)",
     tips: [
       "Token gönder/al — birden fazla ağda",
@@ -184,14 +184,14 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
     <Dialog
       open={open}
       onClose={handleSkip}
-      maxWidth="sm"
+      maxWidth="xs"
       fullWidth
       PaperProps={{
         sx: {
           borderRadius: 4,
           overflow: "hidden",
-          maxHeight: 560,
-          m: 1,
+          maxHeight: 520,
+          m: 2,
         },
       }}
     >
@@ -212,9 +212,9 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
         <Box
           sx={{
             background: step.gradient,
-            pt: 3,
-            pb: 2.5,
-            px: 2.5,
+            pt: 2.5,
+            pb: 2,
+            px: 2,
             textAlign: "center",
             position: "relative",
           }}
@@ -246,15 +246,15 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
           {/* Icon */}
           <Box
             sx={{
-              width: 56,
-              height: 56,
+              width: 46,
+              height: 46,
               borderRadius: "50%",
               bgcolor: "rgba(255,255,255,0.2)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               mx: "auto",
-              mb: 2,
+              mb: 1.5,
               color: "white",
               backdropFilter: "blur(10px)",
             }}
@@ -268,9 +268,9 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
               label={step.badge}
               size="small"
               sx={{
-                mb: 1.5,
-                height: 22,
-                fontSize: "0.7rem",
+                mb: 1,
+                height: 20,
+                fontSize: "0.65rem",
                 fontWeight: 700,
                 bgcolor: "rgba(255,255,255,0.25)",
                 color: "white",
@@ -280,10 +280,10 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
           )}
 
           {/* Title */}
-          <Typography variant="h5" fontWeight={800} sx={{ color: "white", mb: 0.5 }}>
+          <Typography variant="h6" fontWeight={800} sx={{ color: "white", mb: 0.5, fontSize: "1.1rem" }}>
             {step.title}
           </Typography>
-          <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>
+          <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.85)", fontWeight: 500, fontSize: "0.75rem" }}>
             {step.subtitle}
           </Typography>
         </Box>
@@ -291,14 +291,14 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
 
       {/* Content */}
       <Fade in key={`content-${activeStep}`} timeout={400}>
-        <Box sx={{ px: 2.5, py: 2 }}>
+        <Box sx={{ px: 2, py: 2 }}>
           <Typography
             variant="body2"
             sx={{
               color: "text.secondary",
-              lineHeight: 1.6,
+              lineHeight: 1.5,
               mb: 1.5,
-              fontSize: "0.8rem",
+              fontSize: "0.75rem",
             }}
           >
             {step.description}
@@ -309,8 +309,8 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
             <Box
               sx={{
                 bgcolor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.02)",
-                borderRadius: 3,
-                p: 2,
+                borderRadius: 2,
+                p: 1.5,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -322,13 +322,13 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
                     display: "flex",
                     alignItems: "flex-start",
                     gap: 1,
-                    mb: idx < step.tips!.length - 1 ? 1.2 : 0,
+                    mb: idx < step.tips!.length - 1 ? 1 : 0,
                   }}
                 >
                   <Box
                     sx={{
-                      width: 6,
-                      height: 6,
+                      width: 5,
+                      height: 5,
                       borderRadius: "50%",
                       bgcolor: activeStep === 2 ? "warning.main" : "primary.main",
                       mt: 0.8,
@@ -339,8 +339,8 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
                     variant="caption"
                     sx={{
                       color: "text.primary",
-                      fontSize: "0.78rem",
-                      lineHeight: 1.5,
+                      fontSize: "0.72rem",
+                      lineHeight: 1.4,
                       fontWeight: activeStep === 2 ? 600 : 400,
                     }}
                   >
@@ -356,7 +356,7 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
       {/* Footer: Stepper + Buttons */}
       <Box
         sx={{
-          px: 2.5,
+          px: 2,
           pb: 2,
           pt: 0,
           display: "flex",
@@ -368,9 +368,10 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
           size="small"
           onClick={handleBack}
           disabled={activeStep === 0}
-          startIcon={<ArrowBack />}
+          startIcon={<ArrowBack sx={{ fontSize: 16 }} />}
           sx={{
             fontWeight: 600,
+            fontSize: "0.75rem",
             textTransform: "none",
             visibility: activeStep === 0 ? "hidden" : "visible",
           }}
@@ -387,8 +388,8 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
             flexGrow: 0,
             bgcolor: "transparent",
             "& .MuiMobileStepper-dot": {
-              width: 8,
-              height: 8,
+              width: 6,
+              height: 6,
               mx: 0.5,
             },
             "& .MuiMobileStepper-dotActive": {
@@ -403,12 +404,14 @@ export default function OnboardingTour({ open, onClose }: OnboardingTourProps) {
           size="small"
           variant="contained"
           onClick={handleNext}
-          endIcon={activeStep === maxSteps - 1 ? <CheckCircle /> : <ArrowForward />}
+          endIcon={activeStep === maxSteps - 1 ? <CheckCircle sx={{ fontSize: 16 }} /> : <ArrowForward sx={{ fontSize: 16 }} />}
           sx={{
             fontWeight: 700,
+            fontSize: "0.75rem",
             textTransform: "none",
             borderRadius: 2,
-            px: 2.5,
+            px: 2,
+            py: 0.4,
             bgcolor: activeStep === maxSteps - 1 ? "secondary.main" : "primary.main",
             "&:hover": {
               bgcolor: activeStep === maxSteps - 1 ? "secondary.dark" : "primary.dark",
