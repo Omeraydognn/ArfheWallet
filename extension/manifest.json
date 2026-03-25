@@ -1,5 +1,6 @@
 {
     "manifest_version": 3,
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoIQ/s577Zetns6m/BoXKwhcmkC0InTBaOzObsFHY+Gu1rInTjX7rP0DDaM+8Tx5eU831NnJjZQIUzSYjHRy9AtOMVZCJb9CLV/iqNr4JTDmXVHYQS0MQ65G/cN3hLX6f1XcpLY+Q8XSLw8H4//H97oMZSjRNgPWn6/8VqhscdjDaZpc5viOR+nTszaHdAkaWobHtvEXSYrLt3gsdb5GNzC9+P8RthHYTCQGWcPqQF+1aX3qv4gJisrkJBdU0/4zHFW1FK4+xPaZjjPJGZigP4wD+YTDrAsOfLA5bQzMpZcrTSbdXAfTecqeA5/qnj2UBK0hgF1pk+pylnTI4WlXQQwIDAQAB",
     "name": "Arfhe Wallet",
     "version": "1.0.0",
     "description": "Privacy-first FHE-powered crypto wallet with encrypted on-chain transactions",
