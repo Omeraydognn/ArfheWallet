@@ -54,8 +54,15 @@ function toFriendlyError(e: any): { title: string; hint: string } {
     return { title: 'SUI bakiyeniz yetersiz', hint: '"Otomatik Al" butonuyla ücretsiz testnet SUI alabilirsiniz.' };
   if (msg.includes('ERR_CAP_NOT_FOUND'))
     return { title: 'Cüzdan doğrulaması başarısız', hint: 'dWallet oluşturuldu ancak onaylanamadı. Lütfen tekrar deneyin.' };
-  if (msg.includes('ERR_SESSIONS_MANAGER_LOCKED'))
-    return { title: 'IKA ağı şu an yoğun', hint: 'Birkaç dakika bekleyip tekrar deneyin. Bu geçici bir durumdur.' };
+  if (msg.includes('ERR_SESSIONS_MANAGER_LOCKED')) {
+    const isTimeout = msg.includes('ERR_ATTEMPT_TIMEOUT') || msg.includes('ERR_NETWORK_FETCH_TIMEOUT');
+    return {
+      title: isTimeout ? 'IKA ağı yanıt vermiyor' : 'IKA ağı şu an yoğun',
+      hint: isTimeout
+        ? 'IKA testnet gRPC bağlantısı zaman aşımına uğradı. Birkaç dakika bekleyip tekrar deneyin.'
+        : 'IKA sessions manager kilitli (epoch geçişi). Birkaç dakika bekleyip tekrar deneyin.',
+    };
+  }
   if (msg.includes('ERR_DWALLET_NOT_ACTIVE'))
     return { title: 'Aktivasyon tamamlanamadı', hint: 'dWallet aktif hale gelmedi. Bir süre bekleyip tekrar deneyin.' };
   if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('timed out'))
@@ -159,7 +166,8 @@ export default function IkaDashboard() {
     if (!account) return;
     const signer = account.GetSuiKeypair();
     if (!signer) {
-      setError('Bu hesap için Sui imzalayıcı bulunamadı. Mnemonic ile oluşturulmuş hesap gereklidir.');
+      setError({ title: 'İmzalayıcı bulunamadı', hint: 'Bu hesap için Sui imzalayıcı bulunamadı. Mnemonic ile oluşturulmuş hesap gereklidir.' });
+      setPhase('setup');
       return;
     }
     const seed = account.GetIkaRootSeed('solana');
@@ -194,6 +202,7 @@ export default function IkaDashboard() {
     } catch (e: any) {
       console.error('[IkaDashboard] dWallet creation failed:', e);
       setError({ ...toFriendlyError(e), raw: e?.message || String(e) });
+      setPhase('setup');
     }
   };
 

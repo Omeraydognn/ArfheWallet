@@ -36,12 +36,24 @@ importers:
       '@mui/material':
         specifier: ^7.3.1
         version: 7.3.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      '@mui/system':
+        specifier: ^9.0.1
+        version: 9.0.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1)
       '@mui/x-charts':
         specifier: ^8.10.0
-        version: 8.11.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@mui/material@7.3.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@mui/system@7.3.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+        version: 8.11.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@mui/material@7.3.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@mui/system@9.0.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@mysten/sui':
         specifier: ^2.16.2
         version: 2.16.2(typescript@5.9.3)
+      '@protobuf-ts/grpcweb-transport':
+        specifier: ^2.11.1
+        version: 2.11.1
+      '@protobuf-ts/runtime':
+        specifier: ^2.11.1
+        version: 2.11.1
+      '@protobuf-ts/runtime-rpc':
+        specifier: ^2.11.1
+        version: 2.11.1
       '@simplewebauthn/browser':
         specifier: ^13.2.2
         version: 13.2.2
@@ -65,13 +77,13 @@ importers:
         version: 2.23.7(typescript@5.9.3)(zod@3.25.76)
       '@web3auth/base':
         specifier: ^9.7.0
-        version: 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        version: 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       '@web3auth/ethereum-provider':
         specifier: ^9.7.0
-        version: 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+        version: 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)
       '@web3auth/modal':
         specifier: ^9.7.0
-        version: 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)
+        version: 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)
       alchemy-sdk:
         specifier: ^3.6.5
         version: 3.6.5(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)
@@ -122,7 +134,10 @@ importers:
         version: 11.0.5(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       recharts:
         specifier: ^3.1.2
-        version: 3.2.1(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react-is@19.1.1)(react@19.1.1)(redux@5.0.1)
+        version: 3.2.1(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react-is@19.2.6)(react@19.1.1)(redux@5.0.1)
+      tweetnacl:
+        specifier: ^1.0.3
+        version: 1.0.3
       web-bip39:
         specifier: git+https://github.com/hujiulong/web-bip39.git
         version: https://codeload.github.com/hujiulong/web-bip39/tar.gz/946009264f9e9c7babe381eeb337b1d47f559edf
@@ -310,6 +325,10 @@ packages:
 
   '@babel/runtime@7.28.4':
     resolution: {integrity: sha512-Q/N6JNWvIvPnLDvjlE1OUBLPQHH6l3CltCEsHIujp45zQUSSh8K+gHnaEX45yAT1nyngnINhvWtzN+Nb9D8RAQ==}
+    engines: {node: '>=6.9.0'}
+
+  '@babel/runtime@7.29.2':
+    resolution: {integrity: sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==}
     engines: {node: '>=6.9.0'}
 
   '@babel/template@7.27.2':
@@ -862,8 +881,31 @@ packages:
       '@types/react':
         optional: true
 
+  '@mui/private-theming@9.0.1':
+    resolution: {integrity: sha512-pSIGq4Yw749KHEwlkYZWVERgHgwJELP6ODtBNUfV8V4oIb5H+h7IQDFXuk/b2oQccODK1enJAtiEzlgLZmq+8g==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      '@types/react': ^17.0.0 || ^18.0.0 || ^19.0.0
+      react: ^17.0.0 || ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+
   '@mui/styled-engine@7.3.2':
     resolution: {integrity: sha512-PkJzW+mTaek4e0nPYZ6qLnW5RGa0KN+eRTf5FA2nc7cFZTeM+qebmGibaTLrgQBy3UpcpemaqfzToBNkzuxqew==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      '@emotion/react': ^11.4.1
+      '@emotion/styled': ^11.3.0
+      react: ^17.0.0 || ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@emotion/react':
+        optional: true
+      '@emotion/styled':
+        optional: true
+
+  '@mui/styled-engine@9.0.0':
+    resolution: {integrity: sha512-9RLGdX4Jg0aQPRuvqh/OLzYSPlgd5zyEw5/1HIRfdavSiOd03WtUaGZH9/w1RoTYuRKwpgy0hpIFaMHIqPVIWg==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       '@emotion/react': ^11.4.1
@@ -891,6 +933,22 @@ packages:
       '@types/react':
         optional: true
 
+  '@mui/system@9.0.1':
+    resolution: {integrity: sha512-WvlioaLxk6ewUIOfh0StxUvOPDS1mCfzaulcudsL1brZNXuh0N9FMk7RpH7ImJKjEz412SEy/V/yvqmtxbqxCQ==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      '@emotion/react': ^11.5.0
+      '@emotion/styled': ^11.3.0
+      '@types/react': ^17.0.0 || ^18.0.0 || ^19.0.0
+      react: ^17.0.0 || ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@emotion/react':
+        optional: true
+      '@emotion/styled':
+        optional: true
+      '@types/react':
+        optional: true
+
   '@mui/types@7.4.6':
     resolution: {integrity: sha512-NVBbIw+4CDMMppNamVxyTccNv0WxtDb7motWDlMeSC8Oy95saj1TIZMGynPpFLePt3yOD8TskzumeqORCgRGWw==}
     peerDependencies:
@@ -899,8 +957,26 @@ packages:
       '@types/react':
         optional: true
 
+  '@mui/types@9.0.0':
+    resolution: {integrity: sha512-i1cuFCAWN44b3AJWO7mh7tuh1sqbQSeVr/94oG0TX5uXivac8XalgE4/6fQZcmGZigzbQ35IXxj/4jLpRIBYZg==}
+    peerDependencies:
+      '@types/react': ^17.0.0 || ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+
   '@mui/utils@7.3.2':
     resolution: {integrity: sha512-4DMWQGenOdLnM3y/SdFQFwKsCLM+mqxzvoWp9+x2XdEzXapkznauHLiXtSohHs/mc0+5/9UACt1GdugCX2te5g==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      '@types/react': ^17.0.0 || ^18.0.0 || ^19.0.0
+      react: ^17.0.0 || ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+
+  '@mui/utils@9.0.1':
+    resolution: {integrity: sha512-f3UO3jNN1pYg5zxqXC81Bvv8hx5ACcYc0387382ZI7M5ono1heIwHYLrKsz85myguWdeVKPRZGmDdynWUBjK2g==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       '@types/react': ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -2654,6 +2730,9 @@ packages:
   csstype@3.1.3:
     resolution: {integrity: sha512-M1uQkMl8rQK/szD0LNhtqxIPLpimGm8sOBwU7lLnCpSbTyY3yeU1Vc7l4KT5zT4s/yOxHH5O7tIuuLOCnLADRw==}
 
+  csstype@3.2.3:
+    resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
+
   cytoscape-fcose@2.2.0:
     resolution: {integrity: sha512-ki1/VuRIHFCzxWNrsshHYPs6L7TvLu3DL+TyIGEsRcvVERmxokbf5Gdk7mFxZnTdiGtnA4cfSmjZJMviqSuZrQ==}
     peerDependencies:
@@ -3997,6 +4076,9 @@ packages:
   react-is@19.1.1:
     resolution: {integrity: sha512-tr41fA15Vn8p4X9ntI+yCyeGSf1TlYaY5vlTZfQmeLBrFo3psOPX6HhTDnFNL9uj3EhP0KAQ80cugCl4b4BERA==}
 
+  react-is@19.2.6:
+    resolution: {integrity: sha512-XjBR15BhXuylgWGuslhDKqlSayuqvqBX91BP8pauG8kd1zY8kotkNWbXksTCNRarse4kuGbe2kIY05ARtwNIvw==}
+
   react-qrcode-logo@3.0.0:
     resolution: {integrity: sha512-2+vZ3GNBdUpYxIKyt6SFZsDGXa0xniyUQ0wPI4O0hJTzRjttPIx1pPnH9IWQmp/4nDMoN47IBhi3Breu1KudYw==}
     peerDependencies:
@@ -4745,7 +4827,7 @@ packages:
     engines: {node: '>=18'}
 
   web-bip39@https://codeload.github.com/hujiulong/web-bip39/tar.gz/946009264f9e9c7babe381eeb337b1d47f559edf:
-    resolution: {tarball: https://codeload.github.com/hujiulong/web-bip39/tar.gz/946009264f9e9c7babe381eeb337b1d47f559edf}
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/hujiulong/web-bip39/tar.gz/946009264f9e9c7babe381eeb337b1d47f559edf}
     version: 0.0.3
 
   webidl-conversions@3.0.1:
@@ -5072,6 +5154,8 @@ snapshots:
       '@babel/helper-plugin-utils': 7.27.1
 
   '@babel/runtime@7.28.4': {}
+
+  '@babel/runtime@7.29.2': {}
 
   '@babel/template@7.27.2':
     dependencies:
@@ -5744,6 +5828,15 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.1.13
 
+  '@mui/private-theming@9.0.1(@types/react@19.1.13)(react@19.1.1)':
+    dependencies:
+      '@babel/runtime': 7.29.2
+      '@mui/utils': 9.0.1(@types/react@19.1.13)(react@19.1.1)
+      prop-types: 15.8.1
+      react: 19.1.1
+    optionalDependencies:
+      '@types/react': 19.1.13
+
   '@mui/styled-engine@7.3.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(react@19.1.1)':
     dependencies:
       '@babel/runtime': 7.28.4
@@ -5751,6 +5844,19 @@ snapshots:
       '@emotion/serialize': 1.3.3
       '@emotion/sheet': 1.4.0
       csstype: 3.1.3
+      prop-types: 15.8.1
+      react: 19.1.1
+    optionalDependencies:
+      '@emotion/react': 11.14.0(@types/react@19.1.13)(react@19.1.1)
+      '@emotion/styled': 11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1)
+
+  '@mui/styled-engine@9.0.0(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(react@19.1.1)':
+    dependencies:
+      '@babel/runtime': 7.29.2
+      '@emotion/cache': 11.14.0
+      '@emotion/serialize': 1.3.3
+      '@emotion/sheet': 1.4.0
+      csstype: 3.2.3
       prop-types: 15.8.1
       react: 19.1.1
     optionalDependencies:
@@ -5773,9 +5879,31 @@ snapshots:
       '@emotion/styled': 11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1)
       '@types/react': 19.1.13
 
+  '@mui/system@9.0.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1)':
+    dependencies:
+      '@babel/runtime': 7.29.2
+      '@mui/private-theming': 9.0.1(@types/react@19.1.13)(react@19.1.1)
+      '@mui/styled-engine': 9.0.0(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(react@19.1.1)
+      '@mui/types': 9.0.0(@types/react@19.1.13)
+      '@mui/utils': 9.0.1(@types/react@19.1.13)(react@19.1.1)
+      clsx: 2.1.1
+      csstype: 3.2.3
+      prop-types: 15.8.1
+      react: 19.1.1
+    optionalDependencies:
+      '@emotion/react': 11.14.0(@types/react@19.1.13)(react@19.1.1)
+      '@emotion/styled': 11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1)
+      '@types/react': 19.1.13
+
   '@mui/types@7.4.6(@types/react@19.1.13)':
     dependencies:
       '@babel/runtime': 7.28.4
+    optionalDependencies:
+      '@types/react': 19.1.13
+
+  '@mui/types@9.0.0(@types/react@19.1.13)':
+    dependencies:
+      '@babel/runtime': 7.29.2
     optionalDependencies:
       '@types/react': 19.1.13
 
@@ -5788,6 +5916,18 @@ snapshots:
       prop-types: 15.8.1
       react: 19.1.1
       react-is: 19.1.1
+    optionalDependencies:
+      '@types/react': 19.1.13
+
+  '@mui/utils@9.0.1(@types/react@19.1.13)(react@19.1.1)':
+    dependencies:
+      '@babel/runtime': 7.29.2
+      '@mui/types': 9.0.0(@types/react@19.1.13)
+      '@types/prop-types': 15.7.15
+      clsx: 2.1.1
+      prop-types: 15.8.1
+      react: 19.1.1
+      react-is: 19.2.6
     optionalDependencies:
       '@types/react': 19.1.13
 
@@ -5813,11 +5953,11 @@ snapshots:
       delaunator: 5.0.1
       robust-predicates: 3.0.2
 
-  '@mui/x-charts@8.11.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@mui/material@7.3.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@mui/system@7.3.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
+  '@mui/x-charts@8.11.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@mui/material@7.3.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(@mui/system@9.0.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
       '@babel/runtime': 7.28.4
       '@mui/material': 7.3.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      '@mui/system': 7.3.2(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1)
+      '@mui/system': 9.0.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1))(@types/react@19.1.13)(react@19.1.1)
       '@mui/utils': 7.3.2(@types/react@19.1.13)(react@19.1.1)
       '@mui/x-charts-vendor': 8.11.0
       '@mui/x-internal-gestures': 0.2.5
@@ -6791,7 +6931,7 @@ snapshots:
   '@testing-library/dom@10.4.1':
     dependencies:
       '@babel/code-frame': 7.29.0
-      '@babel/runtime': 7.28.4
+      '@babel/runtime': 7.29.2
       '@types/aria-query': 5.0.4
       aria-query: 5.3.0
       dom-accessibility-api: 0.5.16
@@ -6818,13 +6958,13 @@ snapshots:
       '@types/react': 19.1.13
       '@types/react-dom': 19.1.9(@types/react@19.1.13)
 
-  '@toruslabs/base-controllers@7.4.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+  '@toruslabs/base-controllers@7.4.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
     dependencies:
-      '@babel/runtime': 7.28.4
+      '@babel/runtime': 7.29.2
       '@ethereumjs/util': 9.1.0
       '@toruslabs/broadcast-channel': 11.0.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.28.4)
-      '@web3auth/auth': 9.6.4(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.29.2)
+      '@web3auth/auth': 9.6.4(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       async-mutex: 0.5.0
       bignumber.js: 9.3.1
       bowser: 2.14.1
@@ -6851,9 +6991,9 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@toruslabs/constants@14.2.0(@babel/runtime@7.28.4)':
+  '@toruslabs/constants@14.2.0(@babel/runtime@7.29.2)':
     dependencies:
-      '@babel/runtime': 7.28.4
+      '@babel/runtime': 7.29.2
 
   '@toruslabs/eccrypto@5.0.4':
     dependencies:
@@ -6864,6 +7004,12 @@ snapshots:
   '@toruslabs/http-helpers@7.0.1(@babel/runtime@7.28.4)':
     dependencies:
       '@babel/runtime': 7.28.4
+      deepmerge: 4.3.1
+      loglevel: 1.9.2
+
+  '@toruslabs/http-helpers@7.0.1(@babel/runtime@7.29.2)':
+    dependencies:
+      '@babel/runtime': 7.29.2
       deepmerge: 4.3.1
       loglevel: 1.9.2
 
@@ -6878,13 +7024,24 @@ snapshots:
     transitivePeerDependencies:
       - '@sentry/types'
 
-  '@toruslabs/secure-pub-sub@1.1.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+  '@toruslabs/metadata-helpers@6.0.0(@babel/runtime@7.29.2)':
     dependencies:
-      '@babel/runtime': 7.28.4
-      '@toruslabs/constants': 14.2.0(@babel/runtime@7.28.4)
+      '@babel/runtime': 7.29.2
       '@toruslabs/eccrypto': 5.0.4
-      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.28.4)
-      '@toruslabs/metadata-helpers': 6.0.0(@babel/runtime@7.28.4)
+      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.29.2)
+      elliptic: 6.6.1
+      ethereum-cryptography: 2.2.1
+      json-stable-stringify: 1.3.0
+    transitivePeerDependencies:
+      - '@sentry/types'
+
+  '@toruslabs/secure-pub-sub@1.1.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+    dependencies:
+      '@babel/runtime': 7.29.2
+      '@toruslabs/constants': 14.2.0(@babel/runtime@7.29.2)
+      '@toruslabs/eccrypto': 5.0.4
+      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.29.2)
+      '@toruslabs/metadata-helpers': 6.0.0(@babel/runtime@7.29.2)
       loglevel: 1.9.2
       socket.io-client: 4.8.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)
     transitivePeerDependencies:
@@ -6893,21 +7050,21 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@toruslabs/session-manager@3.2.0(@babel/runtime@7.28.4)':
+  '@toruslabs/session-manager@3.2.0(@babel/runtime@7.29.2)':
     dependencies:
-      '@toruslabs/constants': 14.2.0(@babel/runtime@7.28.4)
+      '@toruslabs/constants': 14.2.0(@babel/runtime@7.29.2)
       '@toruslabs/eccrypto': 5.0.4
-      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.28.4)
-      '@toruslabs/metadata-helpers': 6.0.0(@babel/runtime@7.28.4)
+      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.29.2)
+      '@toruslabs/metadata-helpers': 6.0.0(@babel/runtime@7.29.2)
     optionalDependencies:
       '@rollup/rollup-linux-x64-gnu': 4.50.2
     transitivePeerDependencies:
       - '@babel/runtime'
       - '@sentry/types'
 
-  '@toruslabs/starkware-crypto@4.0.1(@babel/runtime@7.28.4)':
+  '@toruslabs/starkware-crypto@4.0.1(@babel/runtime@7.29.2)':
     dependencies:
-      '@babel/runtime': 7.28.4
+      '@babel/runtime': 7.29.2
       assert: 2.1.0
       bip39: 3.1.0
       bn.js: 5.2.3
@@ -7371,12 +7528,12 @@ snapshots:
       '@walletconnect/window-getters': 1.0.1
       tslib: 1.14.1
 
-  '@web3auth/auth-adapter@9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+  '@web3auth/auth-adapter@9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
     dependencies:
-      '@babel/runtime': 7.28.4
-      '@web3auth/auth': 9.6.4(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/base': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/base-provider': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@babel/runtime': 7.29.2
+      '@web3auth/auth': 9.6.4(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/base': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/base-provider': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       deepmerge: 4.3.1
     transitivePeerDependencies:
       - '@sentry/types'
@@ -7384,16 +7541,16 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@web3auth/auth@9.6.4(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+  '@web3auth/auth@9.6.4(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
     dependencies:
-      '@babel/runtime': 7.28.4
+      '@babel/runtime': 7.29.2
       '@ethereumjs/util': 9.1.0
-      '@toruslabs/constants': 14.2.0(@babel/runtime@7.28.4)
+      '@toruslabs/constants': 14.2.0(@babel/runtime@7.29.2)
       '@toruslabs/ffjavascript': 4.0.0
-      '@toruslabs/metadata-helpers': 6.0.0(@babel/runtime@7.28.4)
-      '@toruslabs/secure-pub-sub': 1.1.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@toruslabs/session-manager': 3.2.0(@babel/runtime@7.28.4)
-      '@toruslabs/starkware-crypto': 4.0.1(@babel/runtime@7.28.4)
+      '@toruslabs/metadata-helpers': 6.0.0(@babel/runtime@7.29.2)
+      '@toruslabs/secure-pub-sub': 1.1.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@toruslabs/session-manager': 3.2.0(@babel/runtime@7.29.2)
+      '@toruslabs/starkware-crypto': 4.0.1(@babel/runtime@7.29.2)
       '@toruslabs/tweetnacl-js': 1.0.4
       base64url: 3.0.1
       bip39: 3.1.0
@@ -7420,12 +7577,12 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@web3auth/base-provider@9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+  '@web3auth/base-provider@9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
     dependencies:
-      '@babel/runtime': 7.28.4
-      '@toruslabs/base-controllers': 7.4.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/auth': 9.6.4(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/base': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@babel/runtime': 7.29.2
+      '@toruslabs/base-controllers': 7.4.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/auth': 9.6.4(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/base': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       json-rpc-random-id: 1.0.1
     transitivePeerDependencies:
       - '@sentry/types'
@@ -7433,13 +7590,13 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@web3auth/base@9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+  '@web3auth/base@9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
     dependencies:
-      '@babel/runtime': 7.28.4
-      '@toruslabs/base-controllers': 7.4.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@toruslabs/constants': 14.2.0(@babel/runtime@7.28.4)
-      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.28.4)
-      '@web3auth/auth': 9.6.4(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@babel/runtime': 7.29.2
+      '@toruslabs/base-controllers': 7.4.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@toruslabs/constants': 14.2.0(@babel/runtime@7.29.2)
+      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.29.2)
+      '@web3auth/auth': 9.6.4(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       jwt-decode: 4.0.0
       loglevel: 1.9.2
       ts-custom-error: 3.3.1
@@ -7449,16 +7606,16 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@web3auth/ethereum-provider@9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)':
+  '@web3auth/ethereum-provider@9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)':
     dependencies:
-      '@babel/runtime': 7.28.4
+      '@babel/runtime': 7.29.2
       '@ethereumjs/util': 9.1.0
-      '@toruslabs/base-controllers': 7.4.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@toruslabs/base-controllers': 7.4.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       '@toruslabs/eccrypto': 5.0.4
-      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.28.4)
-      '@web3auth/auth': 9.6.4(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/base': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/base-provider': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.29.2)
+      '@web3auth/auth': 9.6.4(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/base': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/base-provider': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       assert: 2.1.0
       bignumber.js: 9.3.1
       bn.js: 5.2.3
@@ -7473,14 +7630,14 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@web3auth/modal@9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)':
+  '@web3auth/modal@9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)':
     dependencies:
-      '@babel/runtime': 7.28.4
-      '@web3auth/auth-adapter': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/base': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/base-provider': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/no-modal': 9.7.0(@babel/runtime@7.28.4)(@web3auth/auth-adapter@9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10))(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/ui': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)
+      '@babel/runtime': 7.29.2
+      '@web3auth/auth-adapter': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/base': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/base-provider': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/no-modal': 9.7.0(@babel/runtime@7.29.2)(@web3auth/auth-adapter@9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10))(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/ui': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)
       deepmerge: 4.3.1
     transitivePeerDependencies:
       - '@sentry/types'
@@ -7492,27 +7649,27 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@web3auth/no-modal@9.7.0(@babel/runtime@7.28.4)(@web3auth/auth-adapter@9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10))(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+  '@web3auth/no-modal@9.7.0(@babel/runtime@7.29.2)(@web3auth/auth-adapter@9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10))(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
     dependencies:
-      '@babel/runtime': 7.28.4
-      '@web3auth/auth': 9.6.4(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/base': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/base-provider': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@babel/runtime': 7.29.2
+      '@web3auth/auth': 9.6.4(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/base': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/base-provider': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       deepmerge: 4.3.1
     optionalDependencies:
-      '@web3auth/auth-adapter': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/auth-adapter': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
     transitivePeerDependencies:
       - '@sentry/types'
       - bufferutil
       - supports-color
       - utf-8-validate
 
-  '@web3auth/ui@9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)':
+  '@web3auth/ui@9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)':
     dependencies:
-      '@babel/runtime': 7.28.4
-      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.28.4)
-      '@web3auth/auth': 9.6.4(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@web3auth/base': 9.7.0(@babel/runtime@7.28.4)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@babel/runtime': 7.29.2
+      '@toruslabs/http-helpers': 7.0.1(@babel/runtime@7.29.2)
+      '@web3auth/auth': 9.6.4(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@web3auth/base': 9.7.0(@babel/runtime@7.29.2)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       bowser: 2.14.1
       classnames: 2.5.1
       copy-to-clipboard: 3.3.3
@@ -8106,6 +8263,8 @@ snapshots:
       lru-cache: 11.2.6
 
   csstype@3.1.3: {}
+
+  csstype@3.2.3: {}
 
   cytoscape-fcose@2.2.0(cytoscape@3.33.1):
     dependencies:
@@ -9651,6 +9810,8 @@ snapshots:
 
   react-is@19.1.1: {}
 
+  react-is@19.2.6: {}
+
   react-qrcode-logo@3.0.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
       lodash.isequal: 4.5.0
@@ -9726,7 +9887,7 @@ snapshots:
 
   real-require@0.2.0: {}
 
-  recharts@3.2.1(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react-is@19.1.1)(react@19.1.1)(redux@5.0.1):
+  recharts@3.2.1(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react-is@19.2.6)(react@19.1.1)(redux@5.0.1):
     dependencies:
       '@reduxjs/toolkit': 2.9.0(react-redux@9.2.0(@types/react@19.1.13)(react@19.1.1)(redux@5.0.1))(react@19.1.1)
       clsx: 2.1.1
@@ -9736,7 +9897,7 @@ snapshots:
       immer: 10.1.3
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
-      react-is: 19.1.1
+      react-is: 19.2.6
       react-redux: 9.2.0(@types/react@19.1.13)(react@19.1.1)(redux@5.0.1)
       reselect: 5.1.1
       tiny-invariant: 1.3.3

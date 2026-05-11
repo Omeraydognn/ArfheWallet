@@ -296,4 +296,74 @@ async function signWithDWallet(
 
 ---
 
+## 🔬 Araştırma Bulguları (2026-05-11)
+
+### IKA Ağı Hakkında Doğrulanmış Gerçekler
+
+**IKA ayrı bir chain değil, Sui üzerinde çalışıyor:**
+- `getJsonRpcFullnodeUrl('testnet')` → `https://fullnode.testnet.sui.io:443` ✅ doğru URL
+- IKA paket ve objeleri Sui testnet üzerinde deploy edilmiş durumda
+- Bizim `SuiJsonRpcClient` + `getNetworkConfig('testnet')` kullanımı SDK README ile birebir uyuşuyor
+
+**Testnet Paket ID'leri (`getNetworkConfig('testnet')` çıktısı):**
+```
+ikaPackage:                  0x1f26bb2f711ff82dcda4d02c77d5123089cb7f8418751474b9fb744ce031526a
+ikaSystemObject:             0x2172c6483ccd24930834e30102e33548b201d0607fb1fdc336ba3267d910dec6
+ikaDWalletCoordinator:       0x4d157b7415a298c56ec2cb1dcab449525fa74aec17ddba376a83a7600f2062fc
+  initialSharedVersion:        510819272
+```
+
+**Mainnet Paket ID'leri (`getNetworkConfig('mainnet')` çıktısı):**
+```
+ikaPackage:                  0x7262fb2f7a3a14c888c438a3cd9b912469a58cf60f367352c46584262e8299aa
+ikaSystemObject:             0x215de95d27454d102d6f82ff9c54d8071eb34d5706be85b5c73cbd8173013c80
+ikaDWalletCoordinator:       0x5ea59bce034008a006425df777da925633ef384ce25761657ea89e2a08ec75f3
+  initialSharedVersion:        595876492
+```
+
+### `prepareDKGAsync` Gerçekte Ne Yapıyor?
+
+Kodun yorumunda "pure local computation" yazıyor, **bu yanlış:**
+
+```typescript
+async function prepareDKGAsync(ikaClient, curve, userShareEncryptionKeys, bytesToHash, senderAddress) {
+  // ← ÖNCE ağa gidiyor!
+  const protocolPublicParameters = await ikaClient.getProtocolPublicParameters(void 0, curve);
+  return prepareDKG(protocolPublicParameters, curve, ...); // ← sonra WASM çağrısı (local)
+}
+```
+
+`getProtocolPublicParameters` → Sui testnet'ten veri çekiyor. Bu çağrı testnet yavaşlığında süresiz askıda kalabilir. **Bu yüzden 50s timeout şart.**
+
+### IKA SDK Timeout Stratejisi (Güncel)
+
+```
+DKG oluşturma akışı timeout korumaları:
+
+[initializeIkaClient]  ← timeout yok (bir kez çalışır, cache'lenir)
+[registerEncryptionKey] ← timeout yok (hata yutulur, try/catch var)
+[8s wait]              ← sabit bekleme
+[getLatestNetworkEncryptionKey + getOwnedDWalletCaps]  ← 30s timeout ✅
+[retry loop × 5]:
+  [prepareDKGAsync]      ← 50s toplam timeout (loop içi) ✅
+  [transaction build]    ← sync, timeout gereksiz
+  [signAndExecuteTransaction] ← 50s toplam timeout (loop içi) ✅
+  [20s retry delay]
+[findNewDWalletCap]    ← timeout yok (hızlı, bir getObject çağrısı)
+[getDWalletInParticularState("Active", 180s)] ← SDK'nın kendi timeout'u ✅
+```
+
+### IKA için gRPC Yok
+
+IKA SDK tamamen HTTP/JSON-RPC üzerinden çalışır. gRPC sadece Encrypt.xyz için kullanılıyor (`pre-alpha-dev-1.encrypt.ika-network.net:443`). IKA için ekstra bir transport kurulumu gerekmez.
+
+### Faucet ve Token Bilgisi
+
+- **SUI faucet:** `https://faucet.testnet.sui.io/v2/gas` (POST ile otomatik alınabiliyor ✅)
+- **IKA faucet:** `https://faucet.ika.xyz` — SUI → IKA swap. Sui Wallet extension ile bağlan.
+- **IKA exchange Discord:** `https://discord.gg/ika`
+- Her DKG işlemi: ~1 IKA + ~0.01 SUI gas
+
+---
+
 [[06 - Mevcut Durum ve Sorunlar|← Sorunlar]] | [[08 - Encrypt Entegrasyon Rehberi|→ Encrypt Rehberi]]

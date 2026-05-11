@@ -64,7 +64,7 @@ export interface IkaDWalletResult {
   userShareEncryptionKeysBytes: Uint8Array;
   userSecretKeyShare: Uint8Array;
   userPublicOutput: Uint8Array;
-  transactionDigest: string;
+  transactionDigest: string | undefined;
 }
 
 export interface FundingStatus {
@@ -119,6 +119,24 @@ export class IkaService {
 
     await this.ikaClient.initialize();
     return this.ikaClient;
+  }
+
+  // Reads the sessions_manager lock field directly from Sui RPC.
+  // The lock (locked_last_user_initiated_session_to_complete_in_current_epoch) activates
+  // briefly before an epoch switch; new sessions are rejected while it's true.
+  private async isSessionsManagerLocked(): Promise<boolean> {
+    try {
+      const coordinatorId = this.networkConfig.objects.ikaDWalletCoordinator.objectID;
+      const dfs = await this.suiClient!.core.getDynamicFields({ parentId: coordinatorId });
+      const innerDFId = dfs.data[dfs.data.length - 1]?.objectId;
+      if (!innerDFId) return false;
+      const obj = await this.suiClient!.core.getObject({ id: innerDFId, options: { showContent: true } });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sm = (obj as any)?.data?.content?.fields?.value?.fields?.sessions_manager?.fields;
+      return sm?.locked_last_user_initiated_session_to_complete_in_current_epoch === true;
+    } catch {
+      return false;
+    }
   }
 
   getSolanaConnection(): Connection {
@@ -210,66 +228,165 @@ export class IkaService {
       // Key may already be registered from a previous attempt — safe to continue.
     }
 
-    const [networkEncryptionKey, capsBefore] = await Promise.all([
-      ikaClient.getLatestNetworkEncryptionKey(),
+    // capsBefore is fetched once to detect newly created caps after any attempt.
+    const PRE_LOOP_TIMEOUT_MS = 30_000;
+    const capsBefore = await Promise.race([
       ikaClient.getOwnedDWalletCaps(signerAddress),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("ERR_NETWORK_FETCH_TIMEOUT")), PRE_LOOP_TIMEOUT_MS)),
     ]);
     const capIdsBefore = new Set(capsBefore.dWalletCaps.map((cap) => cap.id));
 
-    onProgress?.({ step: "submitting", message: "Ika ağına gönderiliyor..." });
+    onProgress?.({ step: "submitting", message: "IKA ağına gönderiliyor..." });
 
-    // Retry loop to handle transient sessions_manager lock errors (epoch transitions on IKA testnet).
-    // Each attempt generates a fresh session identifier because prepareDKGAsync binds the identifier
-    // into the cryptographic proof — reusing one from a failed attempt would produce a proof mismatch.
-    const MAX_RETRIES = 5;
-    const RETRY_DELAY_MS = 20_000;
+    // Retry loop handles transient sessions_manager lock errors and network timeouts.
+    // Each attempt uses a fresh session identifier — prepareDKGAsync binds it into the proof,
+    // so reusing one from a failed attempt would produce a proof mismatch.
+    // networkEncryptionKey is re-fetched each attempt because epoch transitions can rotate it.
+    // IKA testnet epoch transitions lock sessions_manager for 2-15 minutes.
+    // 20 retries: 60s lock-delay × ~15 = ~15 min coverage for epoch transitions.
+    const MAX_RETRIES = 20;
+    const RETRY_DELAY_MS = 30_000;
+    // Per-attempt timeout covers prepareDKGAsync (gRPC) + transaction build + signAndExecuteTransaction.
+    // IKA testnet gRPC and Sui RPC can hang indefinitely without this guard.
+    const ATTEMPT_TIMEOUT_MS = 45_000;
     let lastError: unknown;
+    // Saved across retries so we can recover if signAndExecuteTransaction timed out but tx landed.
+    let savedDkgRequestInput: Awaited<ReturnType<typeof prepareDKGAsync>> | null = null;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        const retryMsg = `Sessions manager kilitli, bekleniyor (${attempt}/${MAX_RETRIES - 1})...`;
-        onProgress?.({ step: "submitting", message: retryMsg });
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
-        onProgress?.({ step: "submitting", message: `Tekrar deneniyor (${attempt}/${MAX_RETRIES - 1})...` });
+        // A previous attempt may have timed out after signAndExecuteTransaction landed on-chain.
+        // Check for orphan caps before retrying to avoid a duplicate transaction.
+        const orphanCap = await this.ikaClient!.getOwnedDWalletCaps(signerAddress)
+          .then(r => r.dWalletCaps.find(c => !capIdsBefore.has(c.id)))
+          .catch(() => undefined);
+
+        if (orphanCap?.dwallet_id && savedDkgRequestInput) {
+          onProgress?.({ step: "waiting-activation", message: "İşlem bulundu, aktivasyon bekleniyor..." });
+          const dkgRequestInput = savedDkgRequestInput;
+          const dWallet = waitForActive
+            ? await ikaClient.getDWalletInParticularState(orphanCap.dwallet_id, "Active", { timeout: timeoutMs })
+            : await ikaClient.getDWallet(orphanCap.dwallet_id);
+          const activeDWallet = assertActiveDWallet(dWallet);
+          const publicKeyBytes = await publicKeyFromDWalletOutput(
+            curve, Uint8Array.from(activeDWallet.state.Active.public_output),
+          );
+          onProgress?.({ step: "complete", message: "dWallet oluşturuldu!" });
+          return {
+            chain, curve,
+            address: addressFromDWalletPublicKey(chain, publicKeyBytes),
+            publicKeyBytes,
+            dWalletId: orphanCap.dwallet_id,
+            dWalletCapId: orphanCap.id,
+            sessionIdentifier: new Uint8Array(),
+            userShareEncryptionKeyAddress: userShareEncryptionKeys.getSuiAddress(),
+            userShareEncryptionKeysBytes: userShareEncryptionKeys.toShareEncryptionKeysBytes(),
+            userSecretKeyShare: dkgRequestInput.userSecretKeyShare,
+            userPublicOutput: dkgRequestInput.userPublicOutput,
+            transactionDigest: undefined,
+          };
+        }
+
+        const isLocked = String(lastError).includes("sessions_manager") || String(lastError).includes("SessionsManager") || String(lastError).includes("abort code: 1");
+        if (isLocked) {
+          // Poll the sessions_manager lock field directly — lock clears in minutes (not hours),
+          // retry as soon as it becomes false without waiting for a full epoch transition.
+          let waitedMs = 0;
+          const LOCK_POLL_MS = 10_000;
+          const MAX_LOCK_WAIT_MS = 30 * 60_000; // 30 min safety cap
+          onProgress?.({ step: "submitting", message: `IKA ağı kilitli, açılması bekleniyor... (deneme ${attempt + 1}/${MAX_RETRIES})` });
+          while (waitedMs < MAX_LOCK_WAIT_MS) {
+            await new Promise(resolve => setTimeout(resolve, LOCK_POLL_MS));
+            waitedMs += LOCK_POLL_MS;
+            const stillLocked = await this.isSessionsManagerLocked();
+            if (!stillLocked) break;
+            const waitedMin = Math.round(waitedMs / 60_000);
+            onProgress?.({ step: "submitting", message: `IKA ağı kilitli, bekleniyor... ${waitedMin > 0 ? `${waitedMin}dk` : `${waitedMs / 1000}s`} (deneme ${attempt + 1}/${MAX_RETRIES})` });
+          }
+        } else {
+          onProgress?.({ step: "submitting", message: `Bekleniyor... (${attempt}/${MAX_RETRIES - 1})` });
+          const waitSteps = RETRY_DELAY_MS / 5_000;
+          for (let w = 0; w < waitSteps; w++) {
+            await new Promise(resolve => setTimeout(resolve, 5_000));
+            const remaining = Math.round((RETRY_DELAY_MS - (w + 1) * 5_000) / 1_000);
+            if (remaining > 0) {
+              onProgress?.({ step: "submitting", message: `Bekleniyor (${remaining}s) — deneme ${attempt + 1}/${MAX_RETRIES}` });
+            }
+          }
+        }
+        onProgress?.({ step: "submitting", message: `Tekrar deneniyor... (${attempt + 1}/${MAX_RETRIES})` });
       }
+
+      // Re-fetch network encryption key each attempt — epoch transitions can rotate it.
+      const networkEncryptionKey = await Promise.race([
+        ikaClient.getLatestNetworkEncryptionKey(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("ERR_NETWORK_FETCH_TIMEOUT")), PRE_LOOP_TIMEOUT_MS)),
+      ]);
 
       try {
         const sessionIdentifier = createRandomSessionIdentifier();
+        savedDkgRequestInput = null;
 
-        // prepareDKGAsync is pure local computation — fast enough to run on every attempt.
-        const dkgRequestInput = await prepareDKGAsync(
-          ikaClient, curve, userShareEncryptionKeys, sessionIdentifier, signerAddress,
+        type SubmitResult = { dkgRequestInput: Awaited<ReturnType<typeof prepareDKGAsync>>; result: Awaited<ReturnType<SuiJsonRpcClient["core"]["signAndExecuteTransaction"]>> };
+
+        let heartbeatSecs = 0;
+        const heartbeat = setInterval(() => {
+          heartbeatSecs += 5;
+          onProgress?.({ step: "submitting", message: `IKA ağına gönderiliyor... (${heartbeatSecs}s)` });
+        }, 5_000);
+
+        const submitAttempt: Promise<SubmitResult> = (async () => {
+          const dkgRequestInput = await prepareDKGAsync(
+            ikaClient, curve, userShareEncryptionKeys, sessionIdentifier, signerAddress,
+          );
+          // Save immediately so orphan-cap recovery can use it if signAndExecuteTransaction times out.
+          savedDkgRequestInput = dkgRequestInput;
+
+          // Build a single PTB that registers the session identifier and requests DKG atomically.
+          const transaction = new Transaction();
+          const ikaTx = new IkaTransaction({
+            ikaClient,
+            transaction,
+            userShareEncryptionKeys,
+          });
+
+          const [ikaCoin] = transaction.splitCoins(transaction.object(ikaCoinObjectId), [asMistAmount(ikaMistAmount)]);
+          const [suiCoin] = transaction.splitCoins(transaction.gas, [asMistAmount(suiMistAmount)]);
+
+          const sessionIdentifierArg = ikaTx.registerSessionIdentifier(sessionIdentifier);
+
+          const [dWalletCapArg] = await ikaTx.requestDWalletDKG({
+            dkgRequestInput,
+            ikaCoin,
+            suiCoin,
+            sessionIdentifier: sessionIdentifierArg,
+            dwalletNetworkEncryptionKeyId: networkEncryptionKey.id,
+            curve,
+          });
+
+          transaction.transferObjects([dWalletCapArg, ikaCoin, suiCoin], signerAddress);
+
+          const result = await this.suiClient!.core.signAndExecuteTransaction({
+            transaction,
+            signer,
+            include: { effects: true },
+          });
+
+          return { dkgRequestInput, result };
+        })();
+
+        const attemptTimeout: Promise<never> = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("ERR_ATTEMPT_TIMEOUT")), ATTEMPT_TIMEOUT_MS),
         );
 
-        // Build a single PTB that registers the session identifier and requests DKG atomically.
-        const transaction = new Transaction();
-        const ikaTx = new IkaTransaction({
-          ikaClient,
-          transaction,
-          userShareEncryptionKeys,
-        });
+        let submitResult: SubmitResult;
+        try {
+          submitResult = await Promise.race([submitAttempt, attemptTimeout]);
+        } finally {
+          clearInterval(heartbeat);
+        }
 
-        const [ikaCoin] = transaction.splitCoins(transaction.object(ikaCoinObjectId), [asMistAmount(ikaMistAmount)]);
-        const [suiCoin] = transaction.splitCoins(transaction.gas, [asMistAmount(suiMistAmount)]);
-
-        const sessionIdentifierArg = ikaTx.registerSessionIdentifier(sessionIdentifier);
-
-        const [dWalletCapArg] = await ikaTx.requestDWalletDKG({
-          dkgRequestInput,
-          ikaCoin,
-          suiCoin,
-          sessionIdentifier: sessionIdentifierArg,
-          dwalletNetworkEncryptionKeyId: networkEncryptionKey.id,
-          curve,
-        });
-
-        transaction.transferObjects([dWalletCapArg, ikaCoin, suiCoin], signerAddress);
-
-        const result = await this.suiClient!.core.signAndExecuteTransaction({
-          transaction,
-          signer,
-          include: { effects: true },
-        });
+        const { dkgRequestInput, result } = submitResult;
 
         onProgress?.({ step: "waiting-activation", message: "Aktivasyon bekleniyor (~2 dakika)..." });
 
@@ -315,7 +432,8 @@ export class IkaService {
       }
     }
 
-    throw new Error("ERR_SESSIONS_MANAGER_LOCKED");
+    const cause = lastError instanceof Error ? lastError.message : String(lastError);
+    throw new Error(`ERR_SESSIONS_MANAGER_LOCKED (last: ${cause})`);
   }
 
   async createDWalletWithFunding(
@@ -390,6 +508,9 @@ function asMistAmount(amount: bigint | number | string): bigint {
 
 function isRetryableError(error: unknown): boolean {
   const msg = String(error);
+  // Timeout guards: network calls hung without response
+  if (msg.includes("ERR_ATTEMPT_TIMEOUT")) return true;
+  if (msg.includes("ERR_NETWORK_FETCH_TIMEOUT")) return true;
   // IKA testnet sessions manager lock (epoch transition) or low abort codes
   if (msg.includes("sessions_manager") || msg.includes("SessionsManager")) return true;
   if (msg.includes("MoveAbort") && /abort code: [012]/.test(msg)) return true;

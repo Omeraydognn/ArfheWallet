@@ -49,7 +49,7 @@ pnpm test           # 273 test çalıştır
 
 ## 🚨 Kritik Sorunlar (Özet)
 
-1. **IKA dWallet — gerçek DKG çalışmıyor:** `createDWallet()` mock sonuç döndürüyor, WASM yükleme sorunu var
+1. **IKA DKG "submitting" adımında takılıyor** ← kısmen düzeltildi (timeout eklendi), testnet yavaşlığı sürüyor
 2. **Encrypt vault kontratı deploy edilmedi:** `arfhe_confidential_vault` henüz Solana devnet'e deploy edilmemiş
 3. **`sendConfidentialPolicyTransfer` tamamen mock:** 0 SOL dummy TX atıyor, gerçek FHE yok
 4. **IKA signing akışı tamamlanmamış:** `signCrossChainTransaction` dummy byte array döndürüyor
@@ -57,4 +57,4 @@ pnpm test           # 273 test çalıştır
 
 ---
 
-*Son güncelleme: 2026-05-10*
+*Son güncelleme: 2026-05-11*

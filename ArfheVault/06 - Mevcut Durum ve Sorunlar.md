@@ -35,6 +35,22 @@ Mock DKG ve fetch wrapper tamamen kaldırıldı. `IkaService.ts` artık sadece g
 
 ---
 
+### ✅ 2026-05-11 — IKA DKG Network Timeout Koruması Eklendi
+**Ne yapıldı:** `createDWallet` içindeki tüm network çağrılarına timeout guard eklendi.
+- Retry loop öncesi `getLatestNetworkEncryptionKey` + `getOwnedDWalletCaps` → **30 saniyelik** `Promise.race` ile sınırlandı.
+- Retry loop içi `prepareDKGAsync` (ağ çağrısı var: `getProtocolPublicParameters`) + transaction build + `signAndExecuteTransaction` → **50 saniyelik** `Promise.race` ile sınırlandı.
+- Her iki timeout hatası (`ERR_NETWORK_FETCH_TIMEOUT`, `ERR_ATTEMPT_TIMEOUT`) `isRetryableError` tarafından yakalanıp retry loop devam ediyor.
+- `IkaDashboard.tsx:162` — `setError(string)` → `setError({ title, hint })` tipi hatası düzeltildi.
+
+**Neden gerekiyordu:** `prepareDKGAsync` "pure local computation" değil, içinde `ikaClient.getProtocolPublicParameters()` ağ çağrısı var. IKA testnet yavaş veya congested olduğunda bu çağrılar timeout olmadan sonsuza kadar askıda kalıyordu.
+
+**Araştırma bulgusu:** IKA, ayrı bir chain değil — Sui testnet üzerinde çalışıyor. `getJsonRpcFullnodeUrl('testnet')` → `https://fullnode.testnet.sui.io:443` doğru URL. Bizim client initialization SDK README ile birebir uyuşuyor ✅
+
+**Dosyalar:** `src/backend/IkaService.ts`, `src/pages/IkaDashboard.tsx`
+**Agent:** Claude Sonnet 4.6
+
+---
+
 ### ✅ 2026-05-11 — IKA DKG "Submitting" Hatası Düzeltildi
 **Ne yapıldı:** `createDWallet` içindeki `transferObjects([ikaCoin, suiCoin, dWalletCapArg], ...)` çağrısındaki kritik hata düzeltildi. `ikaCoin` ve `suiCoin` `requestDWalletDKG` tarafından fee olarak tüketilir; tekrar transfer edilemez. Sadece `[dWalletCapArg]` transfer ediliyor. `registerUserShareEncryptionKey` ön-kaydı sırası da düzeltildi (prepareDKGAsync'ten önce çalışıyor, wait 5 saniyeye çıkarıldı). Silinen `splitCoin` yardımcı fonksiyonu geri eklendi.  
 **Dosyalar:** `src/backend/IkaService.ts`  
@@ -48,6 +64,19 @@ Mock DKG ve fetch wrapper tamamen kaldırıldı. `IkaService.ts` artık sadece g
 **Dosyalar:** `src/backend/IkaService.ts`, `src/pages/IkaDashboard.tsx`, `src/pages/Home.tsx`  
 **Agent:** Claude  
 **Notlar:** Gerçek DKG için kullanıcının Sui testnet adresine SUI + IKA token göndermesi gerekiyor. Sui faucet: https://faucet.testnet.sui.io — IKA: Discord faucet.
+
+### ✅ 2026-05-11 — IKA Epoch Geçişi Lock: Retry Kapsamı Artırıldı
+**Ne yapıldı:** `ERR_SESSIONS_MANAGER_LOCKED` hatası için retry mantığı güçlendirildi.
+- `MAX_RETRIES`: 10 → **20** (daha uzun epoch lock'larını kapsıyor)
+- `RETRY_DELAY_LOCKED_MS`: lock tespit edildiğinde 30s yerine **60s** bekleme
+- `isLocked` tespiti (`sessions_manager` / `abort code: 1`) artık `effectiveDelay` seçimini de yönlendiriyor
+- Toplam kapsam: lock durumunda ~20 deneme × 60s = **~20 dakika**
+
+**Dosyalar:** `src/backend/IkaService.ts`
+**Agent:** Claude Sonnet 4.6
+**Notlar:** IKA testnet epoch geçişleri sessions_manager'ı 2-15 dakika kilitleyebiliyor; önceki 10×30s (~6 dak) yetersizdi.
+
+---
 
 ### ✅ 2026-05-11 — IKA DKG `sessions_manager::initiate_user_session` Abort Code 1 Düzeltildi
 **Ne yapıldı:** `sessions_manager::initiate_user_session` abort code 1 hatası düzeltildi. Sorun: `registerSessionIdentifierTx` ayrı bir TX'te çalışıyor, DKG PTB ayrı TX'te; bu iki TX arasında sessions manager epoch lock'a girebiliyordu. Fix: Her iki işlem tek bir PTB'ye taşındı. `ikaTx.registerSessionIdentifier(sessionIdentifier)` DKG PTB içinden çağrılıyor; dönen `TransactionResult` doğrudan `requestDWalletDKG`'ye `sessionIdentifier` olarak geçiriliyor. `registerSessionIdentifierTx` private metodu silindi.
