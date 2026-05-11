@@ -335,23 +335,74 @@ async function prepareDKGAsync(ikaClient, curve, userShareEncryptionKeys, bytesT
 
 `getProtocolPublicParameters` → Sui testnet'ten veri çekiyor. Bu çağrı testnet yavaşlığında süresiz askıda kalabilir. **Bu yüzden 50s timeout şart.**
 
-### IKA SDK Timeout Stratejisi (Güncel)
+### IKA SDK Timeout Stratejisi (Güncel — 2026-05-11)
 
 ```
-DKG oluşturma akışı timeout korumaları:
+DKG oluşturma akışı (IkaService.createDWallet):
 
-[initializeIkaClient]  ← timeout yok (bir kez çalışır, cache'lenir)
-[registerEncryptionKey] ← timeout yok (hata yutulur, try/catch var)
-[8s wait]              ← sabit bekleme
-[getLatestNetworkEncryptionKey + getOwnedDWalletCaps]  ← 30s timeout ✅
-[retry loop × 5]:
-  [prepareDKGAsync]      ← 50s toplam timeout (loop içi) ✅
-  [transaction build]    ← sync, timeout gereksiz
-  [signAndExecuteTransaction] ← 50s toplam timeout (loop içi) ✅
-  [20s retry delay]
-[findNewDWalletCap]    ← timeout yok (hızlı, bir getObject çağrısı)
-[getDWalletInParticularState("Active", 180s)] ← SDK'nın kendi timeout'u ✅
+[initializeIkaClient]           ← bir kez, cache'lenir
+[registerEncryptionKey]         ← hata yutulur (zaten kayıtlıysa geçer)
+[8s wait]                       ← on-chain indexing için
+[getLatestNetworkEncryptionKey
+ + getOwnedDWalletCaps]         ← 30s timeout ✅
+
+[retry loop × 20 (MAX_RETRIES)]:
+  [orphan cap check]            ← önceki TX iniyor muydu kontrol eder
+  [lock polling]                ← sessions_manager.locked = true ise
+    her 10s'de isSessionsManagerLocked() çağrısı
+    false olunca hemen devam    ← epoch geçişini dakika bazında bekler
+  [1/3] prepareDKGAsync         ← Sui RPC (protocol params) + WASM
+  [2/3] IkaTransaction build    ← sync, ~instant
+  [3/3] signAndExecuteTransaction ← Sui RPC
+  [45s per-attempt timeout]     ← ERR_ATTEMPT_TIMEOUT → retryable ✅
+  [30s normal retry delay]
+
+[findCapFromEffects(result)]    ← transaction effects'ten cap bul (BCS bypass) ✅
+ └─ fallback: findNewDWalletCap (SDK getOwnedDWalletCaps — BCS parse sorunlu)
+
+[getDWalletInParticularState("Active", 180s)] ← SDK timeout ✅
 ```
+
+### IKA Testnet Ücret Tablosu (2026-05-11 itibarıyla)
+
+On-chain `pricing_and_fee_manager`'dan okundu:
+
+| Protocol | Curve | İşlem | Ücret (MIST IKA) |
+|----------|-------|--------|-------------------|
+| 0 | Hepsi | **DKG (dWallet oluşturma)** | **80,000,000** |
+| 1-4, 9 | Hepsi | Çeşitli | 20,000,000 |
+| 5 | secp256k1 | Presign | 250,000,000 |
+| 5 | secp256r1/ed25519 | Presign | 120,000,000 |
+| 6 | secp256k1 | Sign | 100,000,000 |
+| 7 | secp256k1 | — | 40,000,000 |
+
+> ⚠️ `DEFAULT_IKA_PAYMENT` kodda **100,000,000 MIST (0.1 IKA)** olmalıdır.
+> Eski değer 1,000,000 idi — bu `sessions_manager::initiate_user_session abort code 1` hatasına yol açıyordu.
+
+### SessionsManager Lock Davranışı
+
+IKA testnet epoch süresi ~24 saattir. Lock (`locked_last_user_initiated_session_to_complete_in_current_epoch: bool`) sadece epoch geçişinden hemen önce birkaç dakika `true` olur — validators pending session'ları bitirirken. Sonra epoch ilerler ve lock `false` döner.
+
+Lock durumunu kontrol için Sui RPC:
+```bash
+curl -X POST https://fullnode.testnet.sui.io:443 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"sui_getObject","params":
+  ["0x3ec4e8db62e3a757ce9e23a45476b0c7d69e2efc0bb1f31d6a71314530d40998",
+  {"showContent":true}]}' | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+sm=d['result']['data']['content']['fields']['value']['fields']['sessions_manager']['fields']
+print('locked:', sm['locked_last_user_initiated_session_to_complete_in_current_epoch'])
+print('active:', int(sm['user_sessions_keeper']['fields']['started_sessions_count'])
+      - int(sm['user_sessions_keeper']['fields']['completed_sessions_count']))
+"
+```
+
+### DWalletCap BCS Sorunu
+
+SDK'nın `coordinator_inner.js`'deki `DWalletCap` BCS schema'sı (`{ id, dwallet_id }`) on-chain struct ile uyuşmuyor (package upgrade'den sonra struct değişmiş olabilir). `getOwnedDWalletCaps()` bu yüzden `InvalidObjectError` fırlatıyor.
+
+**Çözüm:** `findCapFromEffects()` transaction effects'teki created objects'ı JSON content olarak okuyor, BCS parse kullanmıyor.
 
 ### IKA için gRPC Yok
 
@@ -362,7 +413,7 @@ IKA SDK tamamen HTTP/JSON-RPC üzerinden çalışır. gRPC sadece Encrypt.xyz i�
 - **SUI faucet:** `https://faucet.testnet.sui.io/v2/gas` (POST ile otomatik alınabiliyor ✅)
 - **IKA faucet:** `https://faucet.ika.xyz` — SUI → IKA swap. Sui Wallet extension ile bağlan.
 - **IKA exchange Discord:** `https://discord.gg/ika`
-- Her DKG işlemi: ~1 IKA + ~0.01 SUI gas
+- Her DKG işlemi: **~0.1 IKA** + ~0.01 SUI gas
 
 ---
 

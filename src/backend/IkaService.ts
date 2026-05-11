@@ -75,10 +75,12 @@ export interface FundingStatus {
   isFunded: boolean;
 }
 
-const DEFAULT_IKA_PAYMENT = 1_000_000n;
+// IKA testnet pricing: DKG (protocol 0) = 80_000_000 MIST for all curves.
+// Source: pricing_and_fee_manager on-chain, fetched 2026-05-11.
+const DEFAULT_IKA_PAYMENT = 100_000_000n; // 0.1 IKA — covers 80M fee + buffer
 const DEFAULT_SUI_PAYMENT = 1_000_000n;
 export const MIN_SUI_FOR_GAS = 10_000_000n;
-export const MIN_IKA_FOR_DKG = 1_000_000n;
+export const MIN_IKA_FOR_DKG = 80_000_000n; // minimum for DKG protocol 0
 const SUI_COIN_TYPE = "0x2::sui::SUI";
 const SOLANA_DEVNET_RPC = "https://api.devnet.solana.com";
 
@@ -127,10 +129,14 @@ export class IkaService {
   private async isSessionsManagerLocked(): Promise<boolean> {
     try {
       const coordinatorId = this.networkConfig.objects.ikaDWalletCoordinator.objectID;
-      const dfs = await this.suiClient!.core.getDynamicFields({ parentId: coordinatorId });
-      const innerDFId = dfs.data[dfs.data.length - 1]?.objectId;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const dfs = await (this.suiClient!.core as any).listDynamicFields({ parentId: coordinatorId });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fields: any[] = dfs?.dynamicFields ?? [];
+      const innerDFId = fields[fields.length - 1]?.fieldId;
       if (!innerDFId) return false;
-      const obj = await this.suiClient!.core.getObject({ id: innerDFId, options: { showContent: true } });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const obj = await this.suiClient!.core.getObject({ objectId: innerDFId, include: { content: true } } as any);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sm = (obj as any)?.data?.content?.fields?.value?.fields?.sessions_manager?.fields;
       return sm?.locked_last_user_initiated_session_to_complete_in_current_epoch === true;
@@ -197,7 +203,7 @@ export class IkaService {
       suiBalanceMist,
       ikaBalanceMist,
       ikaCoinType,
-      paymentIkaCoinObjectId: paymentObj ? coinStructObjectId(paymentObj) : undefined,
+      paymentIkaCoinObjectId: paymentObj ? coinStructObjectId(paymentObj as any) : undefined,
       isFunded: suiBalanceMist >= MIN_SUI_FOR_GAS && ikaBalanceMist >= MIN_IKA_FOR_DKG,
     };
   }
@@ -210,7 +216,7 @@ export class IkaService {
     ikaMistAmount = DEFAULT_IKA_PAYMENT,
     suiMistAmount = DEFAULT_SUI_PAYMENT,
     waitForActive = true,
-    timeoutMs = 120_000,
+    timeoutMs = 300_000,
     onProgress,
   }: CreateIkaDWalletParams): Promise<IkaDWalletResult> {
     onProgress?.({ step: "preparing-dkg", message: "DKG hazırlanıyor..." });
@@ -229,9 +235,11 @@ export class IkaService {
     }
 
     // capsBefore is fetched once to detect newly created caps after any attempt.
+    // getOwnedDWalletCaps throws InvalidObjectError when the user has no existing caps
+    // or when on-chain BCS schema diverges from the SDK — treat both as "no prior caps".
     const PRE_LOOP_TIMEOUT_MS = 30_000;
     const capsBefore = await Promise.race([
-      ikaClient.getOwnedDWalletCaps(signerAddress),
+      ikaClient.getOwnedDWalletCaps(signerAddress).catch(() => ({ dWalletCaps: [] })),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("ERR_NETWORK_FETCH_TIMEOUT")), PRE_LOOP_TIMEOUT_MS)),
     ]);
     const capIdsBefore = new Set(capsBefore.dWalletCaps.map((cap) => cap.id));
@@ -263,7 +271,8 @@ export class IkaService {
 
         if (orphanCap?.dwallet_id && savedDkgRequestInput) {
           onProgress?.({ step: "waiting-activation", message: "İşlem bulundu, aktivasyon bekleniyor..." });
-          const dkgRequestInput = savedDkgRequestInput;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const dkgRequestInput = savedDkgRequestInput as any;
           const dWallet = waitForActive
             ? await ikaClient.getDWalletInParticularState(orphanCap.dwallet_id, "Active", { timeout: timeoutMs })
             : await ikaClient.getDWallet(orphanCap.dwallet_id);
@@ -329,19 +338,15 @@ export class IkaService {
 
         type SubmitResult = { dkgRequestInput: Awaited<ReturnType<typeof prepareDKGAsync>>; result: Awaited<ReturnType<SuiJsonRpcClient["core"]["signAndExecuteTransaction"]>> };
 
-        let heartbeatSecs = 0;
-        const heartbeat = setInterval(() => {
-          heartbeatSecs += 5;
-          onProgress?.({ step: "submitting", message: `IKA ağına gönderiliyor... (${heartbeatSecs}s)` });
-        }, 5_000);
-
         const submitAttempt: Promise<SubmitResult> = (async () => {
+          onProgress?.({ step: "submitting", message: `[1/3] DKG proof hesaplanıyor... (deneme ${attempt + 1}/${MAX_RETRIES})` });
           const dkgRequestInput = await prepareDKGAsync(
             ikaClient, curve, userShareEncryptionKeys, sessionIdentifier, signerAddress,
           );
           // Save immediately so orphan-cap recovery can use it if signAndExecuteTransaction times out.
           savedDkgRequestInput = dkgRequestInput;
 
+          onProgress?.({ step: "submitting", message: `[2/3] Transaction imzalanıyor... (deneme ${attempt + 1}/${MAX_RETRIES})` });
           // Build a single PTB that registers the session identifier and requests DKG atomically.
           const transaction = new Transaction();
           const ikaTx = new IkaTransaction({
@@ -366,6 +371,7 @@ export class IkaService {
 
           transaction.transferObjects([dWalletCapArg, ikaCoin, suiCoin], signerAddress);
 
+          onProgress?.({ step: "submitting", message: `[3/3] Sui ağına gönderiliyor... (deneme ${attempt + 1}/${MAX_RETRIES})` });
           const result = await this.suiClient!.core.signAndExecuteTransaction({
             transaction,
             signer,
@@ -380,17 +386,14 @@ export class IkaService {
         );
 
         let submitResult: SubmitResult;
-        try {
-          submitResult = await Promise.race([submitAttempt, attemptTimeout]);
-        } finally {
-          clearInterval(heartbeat);
-        }
+        submitResult = await Promise.race([submitAttempt, attemptTimeout]);
 
         const { dkgRequestInput, result } = submitResult;
 
         onProgress?.({ step: "waiting-activation", message: "Aktivasyon bekleniyor (~2 dakika)..." });
 
-        const dWalletCap = await this.findNewDWalletCap(signerAddress, capIdsBefore);
+        const digest = transactionDigestFromResult(result);
+        const dWalletCap = await this.findCapFromTxBlock(digest) ?? await this.findNewDWalletCap(signerAddress, capIdsBefore);
         if (!dWalletCap?.dwallet_id) {
           throw new Error("ERR_CAP_NOT_FOUND");
         }
@@ -452,9 +455,19 @@ export class IkaService {
       throw new Error("ERR_INSUFFICIENT_SUI");
     }
 
+    if (funding.ikaBalanceMist < MIN_IKA_FOR_DKG) {
+      throw new Error("ERR_INSUFFICIENT_IKA");
+    }
+
+    // Split only what's available — previous failed attempts may have consumed part of the coin.
+    const ikaMistAmount = funding.ikaBalanceMist < DEFAULT_IKA_PAYMENT
+      ? funding.ikaBalanceMist
+      : DEFAULT_IKA_PAYMENT;
+
     return this.createDWallet({
       ...params,
       ikaCoinObjectId: funding.paymentIkaCoinObjectId,
+      ikaMistAmount,
     });
   }
 
@@ -481,13 +494,92 @@ export class IkaService {
     });
   }
 
+  // Fetches an object's fields via raw Sui JSON-RPC, bypassing the SDK's BCS parser.
+  // core.getObject returns content:undefined for IKA types due to BCS schema mismatch.
+  private async fetchObjectFieldsRaw(objectId: string): Promise<Record<string, unknown> | undefined> {
+    try {
+      const rpcUrl = getJsonRpcFullnodeUrl(this.network);
+      const resp = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0", id: 1,
+          method: "sui_getObject",
+          params: [objectId, { showContent: true }],
+        }),
+      });
+      const json = await resp.json();
+      return json?.result?.data?.content?.fields as Record<string, unknown> | undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Primary: find DWalletCap from transaction's objectTypes map, fetch content via raw RPC.
+  private async findCapFromTxBlock(
+    digest: string,
+  ): Promise<{ id: string; dwallet_id: string } | undefined> {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tx = await (this.suiClient!.core as any).getTransaction({
+        digest,
+        include: { objectTypes: true },
+      });
+      // parseTransaction stores objectTypes as { [objectId]: fullTypeName } dict.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const objectTypes: Record<string, string> = (tx as any)?.Transaction?.objectTypes ?? {};
+      const capObjectIds = Object.entries(objectTypes)
+        .filter(([, typeName]) => typeName.includes("::coordinator_inner::DWalletCap"))
+        .map(([objectId]) => objectId);
+      for (const objectId of capObjectIds) {
+        const fields = await this.fetchObjectFieldsRaw(objectId);
+        const dwalletId = fields?.dwallet_id as string | undefined;
+        if (dwalletId) return { id: objectId, dwallet_id: dwalletId };
+      }
+    } catch (e) {
+      console.error("[IkaService] findCapFromTxBlock error:", e);
+    }
+    return undefined;
+  }
+
+  // Fallback: list owned DWalletCap objects via Sui RPC, fetch content via raw RPC.
   private async findNewDWalletCap(
     owner: string,
     capIdsBefore: Set<string>,
   ): Promise<{ id: string; dwallet_id: string } | undefined> {
-    const caps = await this.ikaClient!.getOwnedDWalletCaps(owner);
-    const createdCap = caps.dWalletCaps.find((cap) => !capIdsBefore.has(cap.id));
-    return createdCap ?? caps.dWalletCaps.at(-1);
+    // Try IKA SDK first (works when BCS schema matches on-chain version).
+    const sdkCaps = await this.ikaClient!.getOwnedDWalletCaps(owner).catch(() => null);
+    if (sdkCaps) {
+      const cap = sdkCaps.dWalletCaps.find((c) => !capIdsBefore.has(c.id)) ?? sdkCaps.dWalletCaps.at(-1);
+      if (cap) return cap;
+    }
+
+    // core.listOwnedObjects — type filter, no BCS schema dependency.
+    try {
+      const capType = `${this.networkConfig.packages.ikaDwallet2pcMpcOriginalPackage}::coordinator_inner::DWalletCap`;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resp = await (this.suiClient!.core as any).listOwnedObjects({
+        owner,
+        type: capType,
+        limit: 50,
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const items: any[] = Array.isArray(resp) ? resp : (resp?.data ?? resp?.objects ?? []);
+      const newItem = items.find((o: any) => {
+        const id = o?.objectId ?? o?.data?.objectId;
+        return id && !capIdsBefore.has(id);
+      }) ?? items.at(-1);
+      if (!newItem) return undefined;
+      const objectId: string = newItem?.objectId ?? newItem?.data?.objectId;
+      if (objectId) {
+        const fields = await this.fetchObjectFieldsRaw(objectId);
+        const dwalletId = fields?.dwallet_id as string | undefined;
+        if (dwalletId) return { id: objectId, dwallet_id: dwalletId };
+      }
+    } catch (e) {
+      console.error("[IkaService] findNewDWalletCap error:", e);
+    }
+    return undefined;
   }
 }
 
@@ -519,6 +611,8 @@ function isRetryableError(error: unknown): boolean {
   if (msg.includes("StaleObjectVersion")) return true;
   if (msg.includes("IncorrectUserSignature")) return true;
   if (msg.includes("object_not_found") || msg.includes("ObjectNotFound")) return true;
+  // getDWalletInParticularState timed out — dWallet may still be processing; retry lets orphan-cap recovery pick it up.
+  if (msg.includes("Timeout waiting for DWallet")) return true;
   return false;
 }
 

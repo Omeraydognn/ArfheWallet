@@ -6,7 +6,7 @@
 |------|-------|---------|
 | SOL/SPL Transfer (Solana) | ✅ Çalışıyor | — |
 | EVM FHE (Fhenix/cofhejs) | ✅ Çalışıyor | — |
-| IKA dWallet DKG | ✅ Gerçek SDK flow (testnet token gerekli) | — |
+| IKA dWallet DKG | ✅ DKG çalışıyor — cap bulunuyor, Active bekleniyor (5dk timeout) | — |
 | Encrypt.xyz gRPC-Web Client | ✅ `EncryptSolanaService` kuruldu | — |
 | Encrypt.xyz createInput (devnet) | ✅ Gerçek executor RPC | — |
 | Encrypt.xyz readCiphertext | ✅ Manuel gRPC-Web impl | — |
@@ -57,6 +57,12 @@ Mock DKG ve fetch wrapper tamamen kaldırıldı. `IkaService.ts` artık sadece g
 **Agent:** Claude  
 **Notlar:** Hata "Ika ağına gönderiliyor" aşamasında Sui PTB çift-kullanım (double-use) hatasıydı.
 
+### ✅ 2026-05-11 — IKA `getOwnedDWalletCaps` BCS Hatası Düzeltildi
+**Ne yapıldı:** `createDWallet` başındaki `capsBefore` fetch'i ve `findNewDWalletCap` içindeki `getOwnedDWalletCaps` çağrıları `.catch(() => ({ dWalletCaps: [] }))` ile korundu.
+**Dosyalar:** `src/backend/IkaService.ts`
+**Agent:** Claude
+**Notlar:** İlk dWallet oluşturmada (hiç cap yokken) `InvalidObjectError: Invalid Response bcs missing: "...::coordinator_inner::DWalletCap"` hatası tüm DKG sürecini başlamadan çöküyordu.
+
 ---
 
 ### ✅ 2026-05-11 — IKA dWallet Sıfırdan Yazıldı
@@ -64,6 +70,68 @@ Mock DKG ve fetch wrapper tamamen kaldırıldı. `IkaService.ts` artık sadece g
 **Dosyalar:** `src/backend/IkaService.ts`, `src/pages/IkaDashboard.tsx`, `src/pages/Home.tsx`  
 **Agent:** Claude  
 **Notlar:** Gerçek DKG için kullanıcının Sui testnet adresine SUI + IKA token göndermesi gerekiyor. Sui faucet: https://faucet.testnet.sui.io — IKA: Discord faucet.
+
+---
+
+## 🔴 Aktif Sorun: IKA DKG BCS Parse Hatası (2026-05-11)
+
+### Belirti
+```
+InvalidObjectError: Invalid Response bcs missing:
+"0xf02f...::coordinator_inner::DWalletCap" object: Expected structure not found
+at IkaService.findNewDWalletCap
+```
+
+### Kök Neden
+IKA testnet paketi upgrade edildi. `DWalletCap` struct'ının on-chain BCS formatı SDK'nın
+`coordinator_inner.js`'deki schema ile uyuşmuyor. SDK `{ id, dwallet_id }` bekliyor ama
+on-chain daha fazla field var (veya farklı sıralamada).
+
+### Geçici Fix (Uygulandı)
+`findCapFromEffects()` metodu eklendi: transaction effects'teki created objects arasında
+`dwallet_id` field'ı olan ilk objeyi JSON content'ten okur — BCS parse tamamen atlanıyor.
+Fallback olarak `findNewDWalletCap()` (SDK) hâlâ çağrılıyor.
+
+### Kalıcı Fix
+SDK'nın yeni versiyonuna (`@ika.xyz/sdk` > 0.4.1) geçmek veya `coordinator_inner.js`'deki
+`DWalletCap` MoveStruct tanımını on-chain struct ile senkronize etmek.
+
+---
+
+## Çözülen Sorunlar (2026-05-11)
+
+### ✅ 2026-05-11 — IKA DKG Fee Miktarı Düzeltildi
+**Ne yapıldı:** On-chain `pricing_and_fee_manager`'dan DKG (protocol 0) için gereken ücretin `80_000_000` MIST olduğu tespit edildi. Eski değer `1_000_000` MIST idi (80x eksik).
+- `DEFAULT_IKA_PAYMENT`: `1_000_000n` → `100_000_000n` (0.1 IKA)
+- `MIN_IKA_FOR_DKG`: `1_000_000n` → `80_000_000n`
+- Bu hata `sessions_manager::initiate_user_session abort code 1` olarak görünüyordu (fee yetersiz = abort)
+
+**IKA Testnet Ücret Tablosu (2026-05-11):**
+| Protocol | Curve | İşlem | Ücret (MIST IKA) |
+|----------|-------|--------|-------------------|
+| 0 | Hepsi | DKG (dWallet oluşturma) | 80,000,000 |
+| 1-4,9 | Hepsi | Çeşitli | 20,000,000 |
+| 5 | secp256k1 | Presign | 250,000,000 |
+| 5 | secp256r1/ed25519 | Presign | 120,000,000 |
+| 6 | secp256k1 | Sign | 100,000,000 |
+| 7 | secp256k1 | — | 40,000,000 |
+
+**Dosyalar:** `src/backend/IkaService.ts`
+**Agent:** Claude Sonnet 4.6
+
+---
+
+### ✅ 2026-05-11 — IKA SessionsManager Lock: Canlı Poll ile Bekleme
+**Ne yapıldı:** `ERR_SESSIONS_MANAGER_LOCKED` hatası için retry mantığı kökten iyileştirildi.
+- `isSessionsManagerLocked()` private metodu eklendi: Sui RPC'den `coordinator_inner` objesini çekip `locked_last_user_initiated_session_to_complete_in_current_epoch` field'ını okur
+- Lock tespit edilince sabit 60s beklemek yerine her 10s'de bir lock field'ı poll ediyor; `false` olunca hemen retry yapıyor
+- `MAX_RETRIES`: 10 → 20; maksimum 30 dakika bekleme limiti
+- IKA testnet epoch süresi 24 saattir; lock sadece epoch geçişinden ÖNCE birkaç dakika aktif olur
+
+**Dosyalar:** `src/backend/IkaService.ts`
+**Agent:** Claude Sonnet 4.6
+
+---
 
 ### ✅ 2026-05-11 — IKA Epoch Geçişi Lock: Retry Kapsamı Artırıldı
 **Ne yapıldı:** `ERR_SESSIONS_MANAGER_LOCKED` hatası için retry mantığı güçlendirildi.
