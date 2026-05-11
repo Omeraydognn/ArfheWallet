@@ -201,23 +201,14 @@ export class IkaService {
     const curve = curveForChain(chain);
     const signerAddress = signer.toSuiAddress();
     const userShareEncryptionKeys = await this.generateUserShareKeys(seed, curve);
-    const sessionIdentifier = createRandomSessionIdentifier();
 
-    // Prepare DKG cryptography (pure local computation) and register encryption key in parallel.
-    // The encryption key must be indexed on-chain before the DKG PTB is submitted so IKA nodes
-    // can encrypt the user share.
-    const [dkgRequestInput] = await Promise.all([
-      prepareDKGAsync(ikaClient, curve, userShareEncryptionKeys, sessionIdentifier, signerAddress),
-      (async () => {
-        try {
-          await this.registerUserShareEncryptionKey({ signer, seed, curve });
-          // Wait for the key to be indexed before submitting the DKG PTB.
-          await new Promise(resolve => setTimeout(resolve, 5000));
-        } catch {
-          // Key may already be registered from a previous attempt.
-        }
-      })(),
-    ]);
+    // Register encryption key first and wait for on-chain indexing before submitting DKG.
+    try {
+      await this.registerUserShareEncryptionKey({ signer, seed, curve });
+      await new Promise(resolve => setTimeout(resolve, 8000));
+    } catch {
+      // Key may already be registered from a previous attempt — safe to continue.
+    }
 
     const [networkEncryptionKey, capsBefore] = await Promise.all([
       ikaClient.getLatestNetworkEncryptionKey(),
@@ -227,74 +218,104 @@ export class IkaService {
 
     onProgress?.({ step: "submitting", message: "Ika ağına gönderiliyor..." });
 
-    // Build a single PTB that registers the session identifier and requests DKG atomically.
-    // Separating them into two transactions caused sessions_manager::initiate_user_session to
-    // abort (code 1) if the sessions manager locked between the two transactions.
-    const transaction = new Transaction();
-    const ikaTx = new IkaTransaction({
-      ikaClient,
-      transaction,
-      userShareEncryptionKeys,
-    });
+    // Retry loop to handle transient sessions_manager lock errors (epoch transitions on IKA testnet).
+    // Each attempt generates a fresh session identifier because prepareDKGAsync binds the identifier
+    // into the cryptographic proof — reusing one from a failed attempt would produce a proof mismatch.
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 20_000;
+    let lastError: unknown;
 
-    const [ikaCoin] = transaction.splitCoins(transaction.object(ikaCoinObjectId), [asMistAmount(ikaMistAmount)]);
-    const [suiCoin] = transaction.splitCoins(transaction.gas, [asMistAmount(suiMistAmount)]);
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const retryMsg = `Sessions manager kilitli, bekleniyor (${attempt}/${MAX_RETRIES - 1})...`;
+        onProgress?.({ step: "submitting", message: retryMsg });
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+        onProgress?.({ step: "submitting", message: `Tekrar deneniyor (${attempt}/${MAX_RETRIES - 1})...` });
+      }
 
-    // Register session identifier within the same PTB so it is atomically consumed by DKG.
-    const sessionIdentifierArg = ikaTx.registerSessionIdentifier(sessionIdentifier);
+      try {
+        const sessionIdentifier = createRandomSessionIdentifier();
 
-    const [dWalletCapArg] = await ikaTx.requestDWalletDKG({
-      dkgRequestInput,
-      ikaCoin,
-      suiCoin,
-      sessionIdentifier: sessionIdentifierArg,
-      dwalletNetworkEncryptionKeyId: networkEncryptionKey.id,
-      curve,
-    });
+        // prepareDKGAsync is pure local computation — fast enough to run on every attempt.
+        const dkgRequestInput = await prepareDKGAsync(
+          ikaClient, curve, userShareEncryptionKeys, sessionIdentifier, signerAddress,
+        );
 
-    transaction.transferObjects([dWalletCapArg, ikaCoin, suiCoin], signerAddress);
+        // Build a single PTB that registers the session identifier and requests DKG atomically.
+        const transaction = new Transaction();
+        const ikaTx = new IkaTransaction({
+          ikaClient,
+          transaction,
+          userShareEncryptionKeys,
+        });
 
-    const result = await this.suiClient!.core.signAndExecuteTransaction({
-      transaction,
-      signer,
-      include: { effects: true },
-    });
+        const [ikaCoin] = transaction.splitCoins(transaction.object(ikaCoinObjectId), [asMistAmount(ikaMistAmount)]);
+        const [suiCoin] = transaction.splitCoins(transaction.gas, [asMistAmount(suiMistAmount)]);
 
-    onProgress?.({ step: "waiting-activation", message: "Aktivasyon bekleniyor (~2 dakika)..." });
+        const sessionIdentifierArg = ikaTx.registerSessionIdentifier(sessionIdentifier);
 
-    const dWalletCap = await this.findNewDWalletCap(signerAddress, capIdsBefore);
-    if (!dWalletCap?.dwallet_id) {
-      throw new Error("Ika DKG işlemi başarılı, ancak DWalletCap bulunamadı.");
+        const [dWalletCapArg] = await ikaTx.requestDWalletDKG({
+          dkgRequestInput,
+          ikaCoin,
+          suiCoin,
+          sessionIdentifier: sessionIdentifierArg,
+          dwalletNetworkEncryptionKeyId: networkEncryptionKey.id,
+          curve,
+        });
+
+        transaction.transferObjects([dWalletCapArg, ikaCoin, suiCoin], signerAddress);
+
+        const result = await this.suiClient!.core.signAndExecuteTransaction({
+          transaction,
+          signer,
+          include: { effects: true },
+        });
+
+        onProgress?.({ step: "waiting-activation", message: "Aktivasyon bekleniyor (~2 dakika)..." });
+
+        const dWalletCap = await this.findNewDWalletCap(signerAddress, capIdsBefore);
+        if (!dWalletCap?.dwallet_id) {
+          throw new Error("ERR_CAP_NOT_FOUND");
+        }
+
+        const dWallet = waitForActive
+          ? await ikaClient.getDWalletInParticularState(dWalletCap.dwallet_id, "Active", {
+              timeout: timeoutMs,
+            })
+          : await ikaClient.getDWallet(dWalletCap.dwallet_id);
+
+        const activeDWallet = assertActiveDWallet(dWallet);
+        const publicKeyBytes = await publicKeyFromDWalletOutput(
+          curve,
+          Uint8Array.from(activeDWallet.state.Active.public_output),
+        );
+
+        onProgress?.({ step: "complete", message: "dWallet oluşturuldu!" });
+
+        return {
+          chain,
+          curve,
+          address: addressFromDWalletPublicKey(chain, publicKeyBytes),
+          publicKeyBytes,
+          dWalletId: dWalletCap.dwallet_id,
+          dWalletCapId: dWalletCap.id,
+          sessionIdentifier,
+          userShareEncryptionKeyAddress: userShareEncryptionKeys.getSuiAddress(),
+          userShareEncryptionKeysBytes: userShareEncryptionKeys.toShareEncryptionKeysBytes(),
+          userSecretKeyShare: dkgRequestInput.userSecretKeyShare,
+          userPublicOutput: dkgRequestInput.userPublicOutput,
+          transactionDigest: transactionDigestFromResult(result),
+        };
+      } catch (error) {
+        lastError = error;
+        if (isRetryableError(error)) {
+          continue;
+        }
+        throw error;
+      }
     }
 
-    const dWallet = waitForActive
-      ? await ikaClient.getDWalletInParticularState(dWalletCap.dwallet_id, "Active", {
-          timeout: timeoutMs,
-        })
-      : await ikaClient.getDWallet(dWalletCap.dwallet_id);
-
-    const activeDWallet = assertActiveDWallet(dWallet);
-    const publicKeyBytes = await publicKeyFromDWalletOutput(
-      curve,
-      Uint8Array.from(activeDWallet.state.Active.public_output),
-    );
-
-    onProgress?.({ step: "complete", message: "dWallet oluşturuldu!" });
-
-    return {
-      chain,
-      curve,
-      address: addressFromDWalletPublicKey(chain, publicKeyBytes),
-      publicKeyBytes,
-      dWalletId: dWalletCap.dwallet_id,
-      dWalletCapId: dWalletCap.id,
-      sessionIdentifier,
-      userShareEncryptionKeyAddress: userShareEncryptionKeys.getSuiAddress(),
-      userShareEncryptionKeysBytes: userShareEncryptionKeys.toShareEncryptionKeysBytes(),
-      userSecretKeyShare: dkgRequestInput.userSecretKeyShare,
-      userPublicOutput: dkgRequestInput.userPublicOutput,
-      transactionDigest: transactionDigestFromResult(result),
-    };
+    throw new Error("ERR_SESSIONS_MANAGER_LOCKED");
   }
 
   async createDWalletWithFunding(
@@ -306,15 +327,11 @@ export class IkaService {
     const funding = await this.getFundingStatus(owner);
 
     if (!funding.paymentIkaCoinObjectId) {
-      throw new Error(
-        `IKA token bulunamadı. Önce Sui testnet adresinizi (${owner}) IKA ve SUI ile fonlayın.`,
-      );
+      throw new Error("ERR_NO_IKA_TOKEN");
     }
 
     if (funding.suiBalanceMist < MIN_SUI_FOR_GAS) {
-      throw new Error(
-        `Yetersiz SUI gas. Sui testnet adresinize en az 0.01 SUI gönderin.`,
-      );
+      throw new Error("ERR_INSUFFICIENT_SUI");
     }
 
     return this.createDWallet({
@@ -371,6 +388,19 @@ function asMistAmount(amount: bigint | number | string): bigint {
 }
 
 
+function isRetryableError(error: unknown): boolean {
+  const msg = String(error);
+  // IKA testnet sessions manager lock (epoch transition) or low abort codes
+  if (msg.includes("sessions_manager") || msg.includes("SessionsManager")) return true;
+  if (msg.includes("MoveAbort") && /abort code: [012]/.test(msg)) return true;
+  // Sui owned-object version conflicts from rapid sequential transactions
+  if (msg.includes("ObjectVersionMismatch")) return true;
+  if (msg.includes("StaleObjectVersion")) return true;
+  if (msg.includes("IncorrectUserSignature")) return true;
+  if (msg.includes("object_not_found") || msg.includes("ObjectNotFound")) return true;
+  return false;
+}
+
 function sumCoinBalances(coins: Array<{ balance: string }>): bigint {
   return coins.reduce((total, coin) => total + BigInt(coin.balance), 0n);
 }
@@ -389,7 +419,7 @@ function coinStructObjectId(coin: { objectId?: string; id?: string }): string | 
 
 function assertActiveDWallet(dWallet: Awaited<ReturnType<IkaClient["getDWallet"]>>): DWalletWithState<"Active"> {
   if (dWallet.state.$kind !== "Active") {
-    throw new Error(`Ika dWallet henüz aktif değil. Mevcut durum: ${dWallet.state.$kind}`);
+    throw new Error("ERR_DWALLET_NOT_ACTIVE");
   }
   return dWallet as DWalletWithState<"Active">;
 }

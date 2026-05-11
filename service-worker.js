@@ -592,6 +592,32 @@ async function handleMessage(message) {
       return { success: true };
     }
 
+    // ── gRPC-Web Proxy (popup → service worker → gRPC endpoint) ──
+    // Routes binary/text gRPC-Web requests through the service worker to avoid
+    // extension popup network restrictions. Body and response are transferred
+    // as plain number arrays (structuredClone-safe).
+    case "GRPC_FETCH": {
+      const { url: grpcUrl, headers: grpcHeaders, bodyArray } = message;
+      if (!grpcUrl) return { ok: false, error: "No URL" };
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch(grpcUrl, {
+          method: "POST",
+          headers: grpcHeaders || {},
+          body: new Uint8Array(bodyArray || []),
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        const buf = await res.arrayBuffer();
+        const respHeaders = {};
+        res.headers.forEach((v, k) => { respHeaders[k] = v; });
+        return { ok: true, status: res.status, headers: respHeaders, bodyArray: Array.from(new Uint8Array(buf)) };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+    }
+
     // ── Generic RPC Proxy (popup → service worker → external RPC) ──
     // Service workers are NOT subject to popup CSP restrictions.
     // Use this for any external fetch from popup that fails due to CORS / CSP.

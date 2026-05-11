@@ -632,6 +632,7 @@ class Network {
    * Get balance for a single ERC20 token
    */
   async getTokenBalance(tokenAddress: string, walletAddress: string): Promise<string> {
+    if (this.type === "SOLANA") return "0";
     try {
       const ethers = await import("ethers");
       const ERC20_ABI = [

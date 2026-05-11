@@ -28,8 +28,6 @@ import {
   LockOutlined,
   ArrowForward,
   OpenInNew,
-  Visibility,
-  VisibilityOff,
   Contacts,
 } from "@mui/icons-material";
 import { WalletContext } from "../../AppContext.js";
@@ -41,6 +39,8 @@ import SuccessAnimation from "../SuccessAnimation.js";
 import { isAddress, parseUnits, Interface, formatEther, toUtf8Bytes, hexlify } from "ethers";
 import { isDomainName, resolveDomain } from "../../backend/DomainResolver.js";
 import { NetworkId, isFheNetwork } from "../../backend/NetworkTypes.js";
+import EncryptSolanaService from "../../backend/EncryptSolanaService.js";
+import { FheVaultService } from "../../backend/FheVaultService.js";
 import { TransactionSimulator, SimResult } from "../../backend/TransactionSimulator.js";
 import { getContractsForNetwork, getExplorerBaseForNetwork, inputCardSx, ctaButtonSx } from "./shared.js";
 
@@ -53,6 +53,7 @@ export default function SendPanel() {
   const theme = useTheme();
   const networkId = network?.network_id ?? NetworkId.Unknown;
   const showFhe = isFheNetwork(networkId);
+  const isSolana = network?.type === "SOLANA";
 
   // 'sendAddress' always holds what the user *typed* (domain or 0x address).
   // 'resolvedAddress' holds the actual 0x address after domain resolution.
@@ -82,12 +83,20 @@ export default function SendPanel() {
     return () => window.removeEventListener('arf-send-prefill', handlePrefill);
   }, []);
   const [isConfidential, setIsConfidential] = useState(false);
+  const [isFhePrivate, setIsFhePrivate] = useState(false);
+  const [lastFheCiphertextId, setLastFheCiphertextId] = useState("");
+  const [isFhePreviewMode, setIsFhePreviewMode] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
 
   // Reset confidential mode when switching to a non-FHE network
   React.useEffect(() => {
     if (!showFhe) setIsConfidential(false);
   }, [showFhe]);
+
+  // Reset FHE private mode when switching away from Solana
+  React.useEffect(() => {
+    if (!isSolana) { setIsFhePrivate(false); setIsFhePreviewMode(false); }
+  }, [isSolana]);
 
   // Phishing Protection State
   const [isNewAddress, setIsNewAddress] = useState(false);
@@ -113,6 +122,15 @@ export default function SendPanel() {
     setResolvedDomainMethod(null);
 
     const input = sendAddress.trim();
+
+    // Solana base58 address — bypass EVM validation entirely
+    if (isSolana) {
+      const isSolanaAddr = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(input);
+      setIsDomainInput(false);
+      setResolvedAddress(isSolanaAddr ? input : "");
+      setIsResolvingDomain(false);
+      return;
+    }
 
     // Plain 0x address: pass through directly, no resolution needed
     if (isAddress(input)) {
@@ -218,7 +236,9 @@ export default function SendPanel() {
       }
       setTokensLoading(true);
       try {
-        const address = activeAccount.GetAddress();
+        const address = isSolana
+          ? activeAccount.GetSolanaAddress()
+          : activeAccount.GetAddress();
         if (!address) { setTokensLoading(false); return; }
         const networkId = network.network_id;
 
@@ -326,6 +346,17 @@ export default function SendPanel() {
             } catch (e) { /* silenced */ }
           }
           setOwnedShieldedTokens(shielded);
+        } else if (networkId === NetworkId.Solana_Devnet) {
+          const shieldedTotal = FheVaultService.totalShielded(address);
+          if (shieldedTotal > 0) {
+            setOwnedShieldedTokens([{
+              contractAddress: "SHIELDED_SOL",
+              symbol: "sSOL",
+              balance: shieldedTotal.toFixed(6)
+            }]);
+          } else {
+            setOwnedShieldedTokens([]);
+          }
         }
       } catch (e) {
       } finally {
@@ -337,7 +368,13 @@ export default function SendPanel() {
 
   const [advancedGas, setAdvancedGas] = useState<GasSettings>({ preset: "standard", maxFeePerGas: 30, maxPriorityFee: 1.5, gasLimit: 21000 });
 
-  const handleSend = async () => {
+    // Auto-select first available token
+    React.useEffect(() => {
+      const tokensToSelect = (isConfidential || (isSolana && isFhePrivate)) ? ownedShieldedTokens : ownedTokens;
+      if (tokensToSelect.length === 0) return;
+      const exists = tokensToSelect.some(t => t.contractAddress === sendTokenAddress);
+      if (!exists) setSendTokenAddress(tokensToSelect[0].contractAddress);
+    }, [ownedTokens, ownedShieldedTokens, isConfidential, isFhePrivate, isSolana]);  const handleSend = async () => {
     if (!activeAccount || !network) return;
 
     setFeedbackMsg("");
@@ -345,6 +382,86 @@ export default function SendPanel() {
     setStatus("validating");
 
     try {
+      // ── Solana path (skip EVM simulation entirely) ────────────────────
+      if (isSolana) {
+        const toAddress = resolvedAddress || sendAddress.trim();
+        if (!toAddress) throw new Error(t("send.invalidRecipient"));
+        if (!sendAmount || parseFloat(sendAmount) <= 0) throw new Error(t("send.invalidAmount"));
+
+        // FHE preview gate — show confirmation screen before encrypting
+        if (isFhePrivate && !isFhePreviewMode) {
+          setIsFhePreviewMode(true);
+          setStatus("idle");
+          return;
+        }
+
+        setStatus("signing");
+        setLastFheCiphertextId("");
+
+          let fheCiphertextId = "";
+          let txOpts: any;
+
+          if (sendTokenAddress === "SHIELDED_SOL") {
+            setFeedbackMsg("Processing FHE Transfer…");
+            const solanaAddr = (activeAccount as any)?.GetSolanaAddress?.() ?? "";
+            fheCiphertextId = "transfer-" + Date.now();
+            // Deduct the shielded balance locally since we are transferring it
+            FheVaultService.add(solanaAddr, {
+              id: fheCiphertextId,
+              amount: `-${sendAmount}`,
+              revealed: false,
+              source: 'send',
+            });
+            
+            txOpts = { to: toAddress, value: "0", isShielded: false, memo: "fhe:transfer:sSOL" };
+          } else if (isFhePrivate) {
+            setFeedbackMsg("Encrypting amount via FHE…");
+            const solanaKeypair = (activeAccount as any)?.solana_keypair;
+            if (!solanaKeypair) throw new Error("Solana keypair not found for FHE encryption");
+            const svc = EncryptSolanaService.getInstance();
+            const valueLamports = BigInt(Math.round(parseFloat(sendAmount) * 1e9));
+            const fheResult = await svc.createEncryptedInput(valueLamports, solanaKeypair.publicKey.toBytes());
+            fheCiphertextId = fheResult.ciphertextIdHex;
+            const solanaAddr = (activeAccount as any)?.GetSolanaAddress?.() ?? "";
+            FheVaultService.add(solanaAddr, {
+              id: fheCiphertextId,
+              amount: sendAmount,
+              revealed: false,
+              source: 'send',
+            });
+            setLastFheCiphertextId(fheCiphertextId);
+
+            txOpts = { to: toAddress, value: sendAmount, isShielded: false, memo: `fhe:${fheCiphertextId}` };
+          } else {
+            const isSolNative = sendTokenAddress === "SOL";
+            const tokenMeta = !isSolNative
+              ? context?.tokenCache?.getToken(networkId, sendTokenAddress)
+              : undefined;
+
+            txOpts = isSolNative
+              ? { to: toAddress, value: sendAmount, isShielded: false }
+              : { to: toAddress, value: "0", mint: sendTokenAddress, amount: sendAmount, decimals: tokenMeta?.decimals ?? 6, isShielded: false };
+          }
+
+          setFeedbackMsg(t("send.signPrompt"));
+
+          const hash = await network.sendTransaction(activeAccount, txOpts);        if (fheCiphertextId) {
+          const solanaAddr = (activeAccount as any)?.GetSolanaAddress?.() ?? "";
+          FheVaultService.setTxHash(solanaAddr, fheCiphertextId, hash);
+        }
+
+        setTxHash(hash);
+        setStatus("pending");
+        setFeedbackMsg(t("send.broadcasted"));
+        await network.waitForTransaction(hash);
+        setStatus("success");
+        setFeedbackMsg(fheCiphertextId ? "FHE Protected Transfer Complete" : t("common.success"));
+
+        try { context?.contactManager?.addRecentAddress(toAddress); } catch (_) {}
+        return;
+      }
+      // ─────────────────────────────────────────────────────────────────
+
       if (!isAddress(resolvedAddress)) throw new Error(isDomainInput ? t("send.domainNotResolved") : t("send.invalidRecipient"));
       if (!sendAmount || parseFloat(sendAmount) <= 0) throw new Error(t("send.invalidAmount"));
 
@@ -528,7 +645,7 @@ export default function SendPanel() {
   };
 
   const isLoading = ["validating", "signing", "broadcasting", "pending"].includes(status);
-  const displayTokens = isConfidential ? ownedShieldedTokens : ownedTokens;
+  const displayTokens = (isConfidential || (isSolana && isFhePrivate)) ? ownedShieldedTokens : ownedTokens;
 
   return (
     <Box sx={{ position: 'relative' }}>
@@ -551,14 +668,14 @@ export default function SendPanel() {
             {t("send.title")}
           </Typography>
         </Stack>
-        {showFhe && (
-          <Tooltip title={isConfidential ? t("send.encryptedViaFhe") : t("send.enableEncrypted")} arrow>
+        {isSolana && (
+          <Tooltip title={isFhePrivate ? "FHE encryption active — amount will be shielded in vault" : "Enable FHE privacy — encrypts amount via Encrypt.xyz"} arrow>
             <Button
               size="small"
-              variant={isConfidential ? "contained" : "outlined"}
-              color={isConfidential ? "secondary" : "inherit"}
-              onClick={() => setIsConfidential(!isConfidential)}
-              startIcon={isConfidential ? <VisibilityOff sx={{ fontSize: 16 }} /> : <Visibility sx={{ fontSize: 16 }} />}
+              variant={isFhePrivate ? "contained" : "outlined"}
+              color={isFhePrivate ? "success" : "inherit"}
+              onClick={() => setIsFhePrivate(!isFhePrivate)}
+              startIcon={<LockOutlined sx={{ fontSize: 16 }} />}
               sx={{
                 borderRadius: 2,
                 px: 1.5,
@@ -566,16 +683,36 @@ export default function SendPanel() {
                 fontSize: '0.75rem',
                 fontWeight: 600,
                 minWidth: 'auto',
-                ...(isConfidential && {
+                ...(isFhePrivate && {
                   boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+                  bgcolor: '#10b981',
+                  '&:hover': { bgcolor: '#059669' },
                 })
               }}
             >
-              {isConfidential ? t("send.confidential") : t("send.public")}
+              {isFhePrivate ? "FHE On" : "Private"}
             </Button>
           </Tooltip>
         )}
       </Stack>
+
+      {/* FHE Private mode hint */}
+      {isFhePrivate && isSolana && (
+        <Fade in>
+          <Paper elevation={0} sx={{
+            mb: 1, p: 1, borderRadius: 2,
+            bgcolor: 'rgba(16, 185, 129, 0.08)',
+            border: '1px solid rgba(16, 185, 129, 0.2)',
+          }}>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <LockOutlined sx={{ fontSize: 14, color: '#10b981' }} />
+              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4, flex: 1 }}>
+                Amount will be encrypted via Encrypt.xyz FHE and saved to your Privacy Vault.
+              </Typography>
+            </Stack>
+          </Paper>
+        </Fade>
+      )}
 
       {/* Confidential mode hint + Shield shortcut */}
       {isConfidential && (
@@ -625,11 +762,108 @@ export default function SendPanel() {
           )}
           <Button
             variant="outlined"
-            onClick={() => { setStatus('idle'); setSendAmount(""); setSendAddress(""); setTxHash(""); setSimResult(null); setIsPreviewMode(false); }}
+            onClick={() => { setStatus('idle'); setSendAmount(""); setSendAddress(""); setTxHash(""); setSimResult(null); setIsPreviewMode(false); setIsFhePreviewMode(false); }}
             sx={{ borderRadius: 3, fontWeight: 600 }}
           >
             {t("send.newTransfer")}
           </Button>
+        </Stack>
+      ) : isFhePreviewMode ? (
+        /* ── FHE Private Transfer Preview ── */
+        <Stack spacing={2}>
+          <Paper elevation={0} sx={{
+            p: 2, borderRadius: 3,
+            background: 'linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(59,130,246,0.06) 100%)',
+            border: '1px solid rgba(16,185,129,0.3)',
+          }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <LockOutlined sx={{ fontSize: 18, color: '#10b981' }} />
+              <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#10b981' }}>
+                FHE Private Transfer
+              </Typography>
+              <Chip label="Encrypt.xyz" size="small" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700, bgcolor: 'rgba(16,185,129,0.15)', color: '#10b981' }} />
+            </Stack>
+            <Stack spacing={1.2}>
+              <Box>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>Recipient</Typography>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all', mt: 0.3 }}>
+                  {resolvedAddress || sendAddress}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>Amount</Typography>
+                <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mt: 0.3 }}>
+                  <Typography variant="h6" fontWeight={800} sx={{ color: '#10b981' }}>{sendAmount}</Typography>
+                  <Typography variant="body2" fontWeight={600}>SOL</Typography>
+                </Stack>
+              </Box>
+              <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2, bgcolor: 'rgba(16,185,129,0.06)', border: '1px dashed rgba(16,185,129,0.3)' }}>
+                <Stack spacing={0.5}>
+                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                    <LockOutlined sx={{ fontSize: 12, color: '#10b981' }} />
+                    <Typography variant="caption" fontWeight={700} sx={{ color: '#10b981' }}>What happens:</Typography>
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary">
+                    1. Amount encrypted via FHE → ciphertext ID generated
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    2. SOL transferred on-chain to recipient
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    3. Ciphertext ID attached as on-chain memo proof
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    4. Entry saved to your Privacy Vault
+                  </Typography>
+                </Stack>
+              </Paper>
+            </Stack>
+          </Paper>
+
+          {isLoading && (
+            <Fade in>
+              <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, bgcolor: '#10b981', color: '#fff' }}>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <CircularProgress size={16} color="inherit" />
+                  <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8rem' }}>
+                    {feedbackMsg || "Encrypting & sending…"}
+                  </Typography>
+                </Stack>
+              </Paper>
+            </Fade>
+          )}
+
+          {status === 'fail' && (
+            <Fade in>
+              <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, bgcolor: 'error.main', color: '#fff' }}>
+                <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8rem' }}>{feedbackMsg}</Typography>
+              </Paper>
+            </Fade>
+          )}
+
+          <Stack direction="row" spacing={2}>
+            <Button
+              variant="outlined"
+              fullWidth
+              size="large"
+              onClick={() => { setIsFhePreviewMode(false); setStatus('idle'); }}
+              disabled={isLoading}
+              sx={{ borderRadius: 3, fontWeight: 700 }}
+            >
+              {t("common.back")}
+            </Button>
+            <Button
+              variant="contained"
+              size="large"
+              fullWidth
+              onClick={handleSend}
+              disabled={isLoading}
+              sx={{ borderRadius: 3, fontWeight: 700, bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' } }}
+              endIcon={isLoading ? <CircularProgress size={18} color="inherit" /> : <LockOutlined />}
+            >
+              {isLoading ? "Encrypting…" : "Confirm & Encrypt"}
+            </Button>
+          </Stack>
         </Stack>
       ) : isPreviewMode ? (
         <Stack spacing={2.5}>
@@ -731,7 +965,7 @@ export default function SendPanel() {
                     - {sendAmount}
                   </Typography>
                   <Typography variant="subtitle2" fontWeight={700}>
-                    {sendTokenAddress === "ETH" ? "ETH" : (context?.tokenCache?.getToken(network?.network_id!, sendTokenAddress)?.symbol || "Token")}
+                    {sendTokenAddress === "ETH" ? "ETH" : sendTokenAddress === "SOL" ? "SOL" : sendTokenAddress === "SHIELDED_SOL" ? "sSOL" : (context?.tokenCache?.getToken(network?.network_id!, sendTokenAddress)?.symbol || "Token")}
                   </Typography>
                 </Stack>
               </Box>

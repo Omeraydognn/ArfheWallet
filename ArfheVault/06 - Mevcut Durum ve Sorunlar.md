@@ -7,11 +7,14 @@
 | SOL/SPL Transfer (Solana) | ✅ Çalışıyor | — |
 | EVM FHE (Fhenix/cofhejs) | ✅ Çalışıyor | — |
 | IKA dWallet DKG | ✅ Gerçek SDK flow (testnet token gerekli) | — |
-| Encrypt.xyz Vault Kontrat | ❌ Deploy yok | 🔴 Kritik |
-| Gizli Transfer (Solana FHE) | ❌ Dummy TX | 🔴 Kritik |
+| Encrypt.xyz gRPC-Web Client | ✅ `EncryptSolanaService` kuruldu | — |
+| Encrypt.xyz createInput (devnet) | ✅ Gerçek executor RPC | — |
+| Encrypt.xyz readCiphertext | ✅ Manuel gRPC-Web impl | — |
+| Encrypt.xyz Vault Kontrat | ⚠️ Kendi programı henüz deploy yok | 🟡 Orta |
+| Gizli Transfer (Solana FHE) | ⚠️ Pre-alpha: plaintext on-chain | 🟡 Orta |
 | IKA Cross-Chain Signing | ⚠️ Presign yapısı hazır, sign completion eksik | 🟡 Orta |
 | IkaDashboard UI | ✅ 3 fazlı wallet UI (Setup/Creating/Active) | — |
-| Privacy sayfası (Solana) | ⚠️ "Coming Soon" gösteriyor | 🟡 Orta |
+| Privacy sayfası (Solana) | ✅ Gerçek Encrypt.xyz entegrasyonu | — |
 
 ---
 
@@ -265,5 +268,22 @@ Extension, kullanıcının SUI adresi (signer) olmadan IKA işlemi yapamıyor. �
 3. SUI ve IKA bakiyelerini dashboard'da göster
 
 ---
+
+---
+
+### ✅ 2026-05-11 — Encrypt.xyz Solana Devnet Gerçek Entegrasyon
+
+**Ne yapıldı:**
+- `src/backend/EncryptSolanaService.ts` oluşturuldu: `@encrypt.xyz/pre-alpha-solana-client/grpc-web` kullanılarak gerçek gRPC-Web client
+- `createEncryptedInput(value, authorizedPublicKey)` → Executor'a `createInput` RPC, ciphertext identifier döndürüyor
+- `readCiphertext(id, pubkey, secretKey, epoch)` → Manuel protobuf + gRPC-Web framing ile `ReadCiphertext` RPC
+- `NetworkEncryptionKey` hesabı Solana devnet'ten `getProgramAccounts` ile çekiliyor (program: `Cq37zHSH1zB6xomYK2LjP6uXJvLR3uTehxA5W9wgHGvx`)
+- `src/pages/Privacy.tsx` yeniden yazıldı: Solana Devnet için `SolanaEncryptPanel` komponenti (bağlantı testi, şifreleme, reveal)
+- `vite.config.js`'e `/encrypt-grpc` proxy eklendi (dev server CORS için)
+- `pnpm build` ✅ başarılı
+
+**Dosyalar:** `src/backend/EncryptSolanaService.ts`, `src/pages/Privacy.tsx`, `vite.config.js`
+**Agent:** Claude Sonnet 4.6
+**Notlar:** Pre-alpha aşamasında gerçek FHE yok — tüm değerler on-chain plaintext. Program ID: `Cq37zHSH1zB6xomYK2LjP6uXJvLR3uTehxA5W9wgHGvx`. FHE type EUint64=4.
 
 [[05 - Kod Haritası|← Kod Haritası]] | [[07 - IKA Entegrasyon Rehberi|→ IKA Rehberi]]

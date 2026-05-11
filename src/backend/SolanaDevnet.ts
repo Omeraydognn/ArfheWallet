@@ -4,8 +4,10 @@ import Account from "./Account.js";
 import TokenCache from "./TokenCache.js";
 import {
   Connection, PublicKey, LAMPORTS_PER_SOL, SystemProgram,
-  Transaction, ParsedTransactionWithMeta,
+  Transaction, ParsedTransactionWithMeta, TransactionInstruction,
 } from "@solana/web3.js";
+
+const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 import { formatUnits } from "ethers";
 
 export default class SolanaDevnet extends Network {
@@ -303,22 +305,32 @@ export default class SolanaDevnet extends Network {
       return this.sendSplToken(account, tx.to, tx.mint, tx.amount, tx.decimals ?? 6);
     }
 
-    // Native SOL transfer
-    const toAddress = tx.to;
-    const lamports = Math.floor(parseFloat(String(tx.value)) * LAMPORTS_PER_SOL);
-    if (isNaN(lamports) || lamports <= 0) throw new Error("Geçersiz miktar");
+      // Native SOL transfer (or FHE memo-only transfer)
+      const toAddress = tx.to;
+      const lamports = Math.floor(parseFloat(String(tx.value || "0")) * LAMPORTS_PER_SOL);
+      if (isNaN(lamports) || lamports < 0) throw new Error("Geçersiz miktar");
 
-    const fromPubkey = account.solana_keypair.publicKey;
-    console.log("═══ SOL SEND ═══");
-    console.log("From:", fromPubkey.toBase58(), "To:", toAddress, "Lamports:", lamports);
+      const fromPubkey = account.solana_keypair.publicKey;
+      console.log("═══ SOL SEND ═══");
+      console.log("From:", fromPubkey.toBase58(), "To:", toAddress, "Lamports:", lamports);
 
-    const { blockhash } = await this.connection.getLatestBlockhash("confirmed");
-    const transaction = new Transaction({
-      recentBlockhash: blockhash,
-      feePayer: fromPubkey,
-    }).add(
-      SystemProgram.transfer({ fromPubkey, toPubkey: new PublicKey(toAddress), lamports })
-    );
+      const { blockhash } = await this.connection.getLatestBlockhash("confirmed");
+      const transaction = new Transaction({
+        recentBlockhash: blockhash,
+        feePayer: fromPubkey,
+      });
+
+      if (lamports > 0) {
+        transaction.add(
+          SystemProgram.transfer({ fromPubkey, toPubkey: new PublicKey(toAddress), lamports })
+        );
+      }    if (tx.memo) {
+      transaction.add(new TransactionInstruction({
+        keys: [{ pubkey: fromPubkey, isSigner: true, isWritable: false }],
+        programId: MEMO_PROGRAM_ID,
+        data: Buffer.from(tx.memo, "utf-8"),
+      }));
+    }
 
     transaction.sign(account.solana_keypair);
     const rawTx = transaction.serialize();

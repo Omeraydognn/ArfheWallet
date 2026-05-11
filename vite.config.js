@@ -121,6 +121,8 @@ export default defineConfig({
       "@ika.xyz/ika-wasm": path.resolve(__dirname, "src/shims/ikaWasm.ts"),
       "@ika-wasm-bundler-entry": ikaBundlerEntry,
       "@ika-wasm-bundler-bg": ikaBundlerBg,
+      // Expose internal generated gRPC-Web client so EncryptSolanaService can inject custom fetch
+      "@encrypt-svc-client": path.resolve(__dirname, "node_modules/@encrypt.xyz/pre-alpha-solana-client/src/generated/grpc-web/encrypt_service.client.ts"),
     }
   },
   base: './',
@@ -149,6 +151,12 @@ export default defineConfig({
         target: 'https://api.coingecko.com/api/v3',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/coingecko/, ''),
+      },
+      '/encrypt-grpc': {
+        target: 'https://pre-alpha-dev-1.encrypt.ika-network.net:443',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/encrypt-grpc/, ''),
       },
     },
     fs: {

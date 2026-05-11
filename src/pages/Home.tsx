@@ -55,6 +55,9 @@ import { useToast } from "../components/ToastProvider.js";
 import { classifyError, NetworkError, NetworkErrorType, getErrorFallbackMessage } from "../backend/NetworkErrorHandler.js";
 import { getCoinGeckoBase } from "../backend/Network.js";
 import { usePersistedState } from "../hooks/usePersistedState.js";
+import { FheVaultService } from "../backend/FheVaultService.js";
+
+const SHIELDED_SOL_ADDRESS = "SHIELDED_SOL";
 
 const KNOWN_LOGOS: Record<string, string> = {
   "ETH": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png",
@@ -613,7 +616,35 @@ function Home() {
         return valB - valA;
       });
 
-      setTokens(displayTokens);
+      // ── Inject shielded SOL token for Solana Devnet ──
+      if (activeNetworkId === NetworkId.Solana_Devnet && address) {
+        const shieldedTotal = FheVaultService.totalShielded(address);
+        if (shieldedTotal > 0) {
+          displayTokens.push({
+            name: "Shielded SOL",
+            symbol: "sSOL",
+            logoSrc: KNOWN_LOGOS["SOL"] ?? "",
+            contractAddress: SHIELDED_SOL_ADDRESS,
+            decimals: 9,
+            isShielded: true,
+            isSpam: false,
+            isSuspicious: false,
+            isHidden: false,
+            spamScore: 0,
+          });
+          balanceMap[SHIELDED_SOL_ADDRESS] = {
+            contractAddress: SHIELDED_SOL_ADDRESS,
+            tokenBalance: shieldedTotal.toFixed(6),
+            isNative: false,
+            isShielded: true,
+            priceUsd: balanceMap["SOL"]?.priceUsd ?? 0,
+            totalValueUsd: shieldedTotal * (balanceMap["SOL"]?.priceUsd ?? 0),
+          };
+          setBalances({ ...balanceMap });
+        }
+      }
+
+      setTokens([...displayTokens]);
 
       // Fetch NFTs balances manually from the cache list
       try {
@@ -735,21 +766,7 @@ function Home() {
           }} />
           {activeNetwork?.network_name}
         </Button>
-        <IconButton
-          onClick={() => { setFetchError(null); fetchData(true); }}
-          disabled={loading}
-          aria-label="Refresh balances"
-          sx={{
-            bgcolor: 'background.paper',
-            ml: 1,
-            '& svg': {
-              transform: 'translateY(0px)',
-            }
-          }}
-        >
-          <Refresh />
-        </IconButton>
-        <Button size="small" startIcon={<Add />} sx={{ ml: 1 }} onClick={() => navigate('/ika')}>
+        <Button size="small" startIcon={<Add />} sx={{ ml: 'auto', mr: 1 }} onClick={() => navigate('/ika')}>
           dWallet
         </Button>
         <Menu

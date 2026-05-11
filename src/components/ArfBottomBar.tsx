@@ -9,7 +9,7 @@ import {
   Stack,
 } from "@mui/material";
 import type { BoxProps } from "@mui/material";
-import { History, Home, Send, Hub, Explore } from "@mui/icons-material";
+import { History, Home, Send, Lock, Explore } from "@mui/icons-material";
 import ArfBottomMenu from "./ArfBottomMenu";
 import ShieldPanel from "./panels/ShieldPanel.js";
 import { useNavigate, useLocation } from "react-router";
@@ -61,7 +61,7 @@ function ArfBottomBar() {
       case '/home': return 0;
       case '/explore': return 1;
       case '/history': return 3;
-      case '/GraphExplorer': return 4;
+      case '/privacy': return 4;
       default: return 0;
     }
   };
@@ -142,9 +142,9 @@ function ArfBottomBar() {
             onClick={() => navigate('history')}
           />
           <BottomNavigationAction
-            label="Graph"
-            icon={<Hub sx={{ fontSize: 22 }} />}
-            onClick={() => navigate('GraphExplorer')}
+            label="Privacy"
+            icon={<Lock sx={{ fontSize: 22 }} />}
+            onClick={() => navigate('privacy')}
           />
         </BottomNavigation>
       </Paper>
