@@ -1,4 +1,3 @@
-
 export enum NetworkId {
     Unknown = -1,
     Ethereum_Mainnet = 1,
@@ -8,6 +7,7 @@ export enum NetworkId {
     Optimism = 10,
     BNB_Chain = 56,
     Polygon = 137,
+    Fhenix_Testnet = 8008135,
     Sei = 1329,
     Monad_Testnet = 10143,
     Arbitrum_One = 42161,
@@ -17,7 +17,10 @@ export enum NetworkId {
     Avalanche = 43114,
     Avalanche_Fuji = 43113,
     Linea = 59144,
+    Solana_Devnet = 8998,
 }
+
+export type NetworkType = "EVM" | "SOLANA";
 
 export type TokenBalance = {
     contractAddress: string;   // "ETH" for native
@@ -73,6 +76,7 @@ export const FHE_NETWORK_IDS = new Set<NetworkId>([
     NetworkId.Ethereum_Sepolia,
     NetworkId.Arbitrum_Sepolia,
     NetworkId.Base_Sepolia,
+    NetworkId.Solana_Devnet, // Added for Encrypt.xyz support
 ]);
 
 /** Check whether a given network supports FHE operations */
@@ -87,6 +91,7 @@ export const TESTNET_IDS = new Set<NetworkId>([
     NetworkId.Base_Sepolia,
     NetworkId.Monad_Testnet,
     NetworkId.Avalanche_Fuji,
+    NetworkId.Solana_Devnet,
 ]);
 
 /** Check whether a given network is a testnet */
@@ -103,4 +108,5 @@ export type CustomNetworkConfig = {
     currencySymbol: string;    // Native currency symbol (e.g. "MATIC")
     currencyDecimals?: number; // Native currency decimals (default 18)
     iconColor?: string;        // Dot color for network menu
+    type?: NetworkType;        // "EVM" or "SOLANA" (defaults to "EVM")
 };

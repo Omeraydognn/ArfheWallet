@@ -2,17 +2,55 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import wasmPlugin from '@rollup/plugin-wasm';
+import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+
+const ikaNodeEntry = require.resolve("@ika.xyz/ika-wasm");
+const ikaDistDir = path.dirname(path.dirname(ikaNodeEntry));
+const ikaBundlerEntry = path.join(ikaDistDir, "bundler", "dwallet_mpc_wasm.js");
+const ikaBundlerBg = path.join(ikaDistDir, "bundler", "dwallet_mpc_wasm_bg.js");
+
+/** @ika.xyz/ika-wasm "web" build loads this file via fetch(import.meta.url); dev server can otherwise return index.html (HTML magic bytes instead of \0asm). */
+function resolveIkaDwalletWasmPath() {
+  try {
+    const candidate = path.join(ikaDistDir, "web", "dwallet_mpc_wasm_bg.wasm");
+    return fs.existsSync(candidate) ? candidate : null;
+  } catch {
+    return null;
+  }
+}
+
+function ikaDwalletWasmDevPlugin() {
+  const ikaWasmPath = resolveIkaDwalletWasmPath();
+  function mount(server) {
+    if (!ikaWasmPath) return;
+    server.middlewares.use((req, res, next) => {
+      const pathname = (req.url ?? '').split('?')[0] ?? '';
+      if (!pathname.toLowerCase().endsWith('.wasm')) return next();
+      if (!pathname.includes('dwallet_mpc_wasm_bg')) return next();
+      res.setHeader('Content-Type', 'application/wasm');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.end(fs.readFileSync(ikaWasmPath));
+    });
+  }
+  return {
+    name: 'serve-ika-dwallet-wasm',
+    configureServer: mount,
+    configurePreviewServer: mount,
+  };
+}
 
 export default defineConfig({
   plugins: [
+    //ikaDwalletWasmDevPlugin(),
     react(),
     // Serve tfhe WASM file with correct MIME type from node_modules
     {
@@ -33,10 +71,7 @@ export default defineConfig({
         });
       }
     },
-    wasmPlugin({
-      targetEnv: 'browser',
-      maxFileSize: 10000000 // 10MB for large WASM files
-    }),
+    wasm(),
     topLevelAwait(),
     nodePolyfills({
       protocolImports: true,
@@ -79,17 +114,20 @@ export default defineConfig({
       ],
     }),
   ],
-  assetsInclude: ['**/*.wasm'],
+
   resolve: {
     alias: {
-      // cofhejs web binding support
+      // Use wasm-pack bundler target so Vite bundles .wasm; avoids fetch → HTML in dev/extension.
+      "@ika.xyz/ika-wasm": path.resolve(__dirname, "src/shims/ikaWasm.ts"),
+      "@ika-wasm-bundler-entry": ikaBundlerEntry,
+      "@ika-wasm-bundler-bg": ikaBundlerBg,
     }
   },
   base: './',
   server: {
-    historyApiFallback: true,
     headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups'
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      'Cross-Origin-Embedder-Policy': 'credentialless'
     },
     proxy: {
       '/api/1inch': {
@@ -117,9 +155,16 @@ export default defineConfig({
       allow: ['..']
     }
   },
-  optimizeDeps: {
-    include: ['tweetnacl'],
-    exclude: ['tfhe'],
+ optimizeDeps: {
+    // O iki Ika dosyasını include'dan sildik, sadece tweetnacl kaldı:
+    include: ['tweetnacl'], 
+    exclude: [
+      'tfhe', 
+      '@ika.xyz/ika-wasm', 
+      'ika-wasm',
+      '@ika-wasm-bundler-entry', // Vite bunlara dokunmasın diye buraya taşıdık
+      '@ika-wasm-bundler-bg'     // Bunu da buraya taşıdık
+    ],
     esbuildOptions: {
       target: 'esnext'
     }
@@ -221,7 +266,7 @@ export default defineConfig({
   worker: {
     format: 'es',
     plugins: () => [
-      wasmPlugin({ targetEnv: 'browser', maxFileSize: 10000000 }),
+      wasm(),
       topLevelAwait()
     ]
   }

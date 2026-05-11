@@ -20,6 +20,7 @@ const Settings = React.lazy(() => import("./pages/Settings"));
 const SettingsSecurity = React.lazy(() => import("./pages/SettingsSecurity"));
 const TokenDetail = React.lazy(() => import("./pages/TokenDetail"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
+const IkaDashboard = React.lazy(() => import("./pages/IkaDashboard"));
 
 // Wrap a route element in a smooth Fade transition
 const FadePage = React.memo(function FadePage({ children }: { children: React.ReactNode }) {
@@ -48,6 +49,7 @@ function AppRoutes() {
           <Route path="settings" element={<FadePage><Settings /></FadePage>} />
           <Route path="settings/security" element={<FadePage><SettingsSecurity /></FadePage>} />
           <Route path="token/:address" element={<FadePage><TokenDetail /></FadePage>} />
+          <Route path="ika" element={<FadePage><IkaDashboard /></FadePage>} />
           <Route path="*" element={<FadePage><NotFound /></FadePage>} />
         </Route>
 

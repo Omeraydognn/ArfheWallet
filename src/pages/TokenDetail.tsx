@@ -136,10 +136,11 @@ export default function TokenDetail() {
 
   const context = useContext(WalletContext);
   const { activeAccount } = useActiveAccount();
-  const walletAddress = activeAccount?.GetAddress() ?? "";
-
   const activeNetwork = context?.networkProvider?.getActiveNetwork();
   const activeNetworkId = context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Mainnet;
+
+  const isSolana = activeNetwork?.type === "SOLANA";
+  const walletAddress = isSolana ? (activeAccount?.GetSolanaAddress() ?? "") : (activeAccount?.GetAddress() ?? "");
   const networkName = activeNetwork?.network_name ?? "Unknown";
   const networkColor = getNetworkColor(activeNetworkId);
   const explorerBase = getExplorerBase(activeNetworkId, activeNetwork?.explorer_url);

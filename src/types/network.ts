@@ -13,11 +13,15 @@ export type RpcParams = unknown[];
 /** Transaction options passed to Network.sendTransaction() */
 export interface TransactionRequest {
   to: string;
-  value: string;
+  value?: string;
   data?: string;
   gasLimit?: string | bigint;
   gasPrice?: string;
   gasMultiplier?: number;
+  isShielded?: boolean;
+  mint?: string;
+  amount?: string;
+  decimals?: number;
 }
 
 // ─── Ethereum Log (from eth_getLogs RPC) ──────────────────────────

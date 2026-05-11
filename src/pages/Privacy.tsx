@@ -53,9 +53,10 @@ const FHEPrivacyPanel = () => {
   const activeAccount = context?.accountManager?.GetActive();
   const activeNetworkId = network?.network_id ?? NetworkId.Unknown;
   const showFhe = isFheNetwork(activeNetworkId);
+  const isSolana = network?.type === "SOLANA";
 
   // On mainnet, show a dedicated "FHE not available on mainnet" message
-  if (!showFhe) {
+  if (!showFhe || isSolana) {
     return (
       <Box sx={{ pb: 12, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', pt: { xs: 12, md: 16 }, minHeight: '80vh' }}>
         <Paper elevation={24} sx={{

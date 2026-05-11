@@ -101,16 +101,29 @@ function NetworkHealthIndicator() {
         try {
             const startTime = performance.now();
 
-            const [blockHex, feeHex] = await Promise.all([
-                rpcCall("eth_blockNumber", []),
-                rpcCall("eth_gasPrice", []).catch(() => null),
-            ]);
+            // Solana uses different RPC methods
+            const isSolana = network.type === "SOLANA";
+
+            let blockNumber = 0;
+            let gasPriceGwei = "—";
+
+            if (isSolana) {
+                // Solana RPC: getSlot for block height
+                const slotResult = await rpcCall("getSlot", []);
+                blockNumber = typeof slotResult === "number" ? slotResult : Number(slotResult);
+                gasPriceGwei = "N/A"; // Solana doesn't have gas price in the same way
+            } else {
+                const [blockHex, feeHex] = await Promise.all([
+                    rpcCall("eth_blockNumber", []),
+                    rpcCall("eth_gasPrice", []).catch(() => null),
+                ]);
+                blockNumber = parseInt(blockHex as string, 16);
+                gasPriceGwei = feeHex
+                    ? (Number(BigInt(feeHex as string)) / 1e9).toFixed(2)
+                    : "—";
+            }
 
             const latencyMs = Math.round(performance.now() - startTime);
-            const blockNumber = parseInt(blockHex as string, 16);
-            const gasPriceGwei = feeHex
-                ? (Number(BigInt(feeHex as string)) / 1e9).toFixed(2)
-                : "—";
 
             let status: NetworkHealth["status"] = "connected";
             if (latencyMs > 3000) status = "slow";

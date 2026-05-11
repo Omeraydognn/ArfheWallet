@@ -58,6 +58,23 @@ function buildAbstractSigner(ethersWallet: Wallet, abstractProvider: ReturnType<
   };
 }
 
+function requestUrlString(input: unknown): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  if (typeof Request !== "undefined" && input instanceof Request) return input.url;
+  try {
+    return String((input as { url?: string })?.url ?? "");
+  } catch {
+    return "";
+  }
+}
+
+/** Only cofhejs TFHE module — never intercept other .wasm (e.g. IKA dwallet_mpc_wasm_bg*.wasm). */
+function isTfheBgWasmRequest(url: string): boolean {
+  const path = url.split("?")[0].split("#")[0].toLowerCase();
+  return path.endsWith(".wasm") && path.includes("tfhe_bg");
+}
+
 class FheCofheService {
   private static instance: FheCofheService;
   private provider: JsonRpcProvider | null = null;
@@ -126,6 +143,8 @@ class FheCofheService {
     }
 
     this.initPromise = (async () => {
+      const originalFetch = globalThis.fetch;
+      let fetchWasPatched = false;
       try {
         this.initError = null;
         this.provider = provider;
@@ -136,17 +155,46 @@ class FheCofheService {
         const abstractProvider = buildAbstractProvider(provider);
         const abstractSigner = buildAbstractSigner(signer, abstractProvider);
 
+        // Prefetch tfhe wasm; during initialize() only, steer tfhe_bg.wasm fetches to those bytes.
+        // IMPORTANT: Do not blanket-replace all .wasm requests — IKA (@ika.xyz/ika-wasm) loads dwallet_mpc_wasm_bg*.wasm via fetch.
+        let fallbackWasmBuffer: ArrayBuffer | null = null;
+        try {
+          if (typeof originalFetch === "function") {
+            const fb = await originalFetch("/tfhe_bg.wasm").catch(() => null);
+            if (fb && fb.ok) {
+              try {
+                fallbackWasmBuffer = await fb.arrayBuffer();
+              } catch {
+                fallbackWasmBuffer = null;
+              }
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+
+        if (typeof originalFetch === "function" && fallbackWasmBuffer) {
+          globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (isTfheBgWasmRequest(requestUrlString(input))) {
+              return new Response(fallbackWasmBuffer!.slice(0), {
+                headers: { "content-type": "application/wasm" },
+              });
+            }
+            return originalFetch(input as RequestInfo, init);
+          };
+          fetchWasPatched = true;
+        }
+
         // Use low-level initialize() directly - bypasses viemProviderSignerTransformer
         // that causes "An internal error occurred" when given ethers objects
         // NOTE: ignoreErrors MUST be false (or omitted) so WASM (tfhe) initializes properly.
         // If WASM init is skipped, TfheCompactPublicKey.deserialize() will crash later.
-        const permit = await initialize({
+        await initialize({
           provider: abstractProvider,
           signer: abstractSigner,
           environment: "TESTNET",
           generatePermit: false,
         });
-
 
         // Create permit - REQUIRED for unseal/sealoutput operations
         // Without a valid permit, unseal will get 403 from sealoutput endpoint
@@ -156,13 +204,16 @@ class FheCofheService {
         this.currentAccount = signerAddress;
         this.currentChainId = chainId;
         this.currentNetworkId = networkId;
-        this.currentNetworkId = networkId;
 
       } catch (error) {
         this.initError = error instanceof Error ? error.message : String(error);
         this._isReady = false;
         this.initPromise = null;
         throw error;
+      } finally {
+        if (fetchWasPatched && typeof originalFetch === "function") {
+          globalThis.fetch = originalFetch;
+        }
       }
     })();
 

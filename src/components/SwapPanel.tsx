@@ -157,7 +157,8 @@ export default function SwapPanel() {
   // ── Fetch balances when tokens change ──
   useEffect(() => {
     if (!network || !activeAccount || !networkId) return;
-    const address = activeAccount.GetAddress();
+    const isSolana = network.type === "SOLANA";
+    const address = isSolana ? activeAccount.GetSolanaAddress() : activeAccount.GetAddress();
     if (!address) return;
 
     const fetchBalances = async () => {

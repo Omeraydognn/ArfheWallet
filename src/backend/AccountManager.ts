@@ -9,7 +9,21 @@ interface StoredAccount {
   private_key?: string;
   public_key?: string;
   address?: string;
+  sui_address?: string;
   derivationPath?: string;
+  solanaDerivationPath?: string;
+  suiDerivationPath?: string;
+  ika_evm_dwallet?: string;
+  ika_solana_dwallet?: string;
+  ika_mpc_id?: string;
+  ika_evm_mpc_id?: string;
+  ika_solana_mpc_id?: string;
+  ika_evm_dwallet_cap_id?: string;
+  ika_solana_dwallet_cap_id?: string;
+  ika_user_share_keys?: string;
+  ika_user_secret_share?: string;
+  ika_user_public_output?: string;
+  ika_last_tx_digest?: string;
   owned_tokens?: Record<string, string[]>;
 }
 
@@ -82,7 +96,21 @@ export default class AccountManager {
       account.private_key = stored.private_key;
       account.public_key = stored.public_key;
       account.address = stored.address;
+      account.sui_address = stored.sui_address;
       account.derivationPath = stored.derivationPath || "m/44'/60'/0'/0/0";
+      account.solanaDerivationPath = stored.solanaDerivationPath || "m/44'/501'/0'/0'";
+      account.suiDerivationPath = stored.suiDerivationPath || "m/44'/784'/0'/0'/0'";
+      account.ika_evm_dwallet = stored.ika_evm_dwallet;
+      account.ika_solana_dwallet = stored.ika_solana_dwallet;
+      account.ika_mpc_id = stored.ika_mpc_id;
+      account.ika_evm_mpc_id = stored.ika_evm_mpc_id;
+      account.ika_solana_mpc_id = stored.ika_solana_mpc_id;
+      account.ika_evm_dwallet_cap_id = stored.ika_evm_dwallet_cap_id;
+      account.ika_solana_dwallet_cap_id = stored.ika_solana_dwallet_cap_id;
+      account.ika_user_share_keys = stored.ika_user_share_keys;
+      account.ika_user_secret_share = stored.ika_user_secret_share;
+      account.ika_user_public_output = stored.ika_user_public_output;
+      account.ika_last_tx_digest = stored.ika_last_tx_digest;
       account.owned_tokens = new Map(
         stored.owned_tokens
           ? Object.entries(stored.owned_tokens).map(([key, value]) => [
@@ -106,6 +134,7 @@ export default class AccountManager {
         }
       }
 
+      account.Init();
       return account;
     });
   }
@@ -146,7 +175,21 @@ export default class AccountManager {
       private_key: account.private_key,
       public_key: account.public_key,
       address: account.address,
+      sui_address: account.sui_address,
       derivationPath: account.derivationPath,
+      solanaDerivationPath: account.solanaDerivationPath,
+      suiDerivationPath: account.suiDerivationPath,
+      ika_evm_dwallet: account.ika_evm_dwallet,
+      ika_solana_dwallet: account.ika_solana_dwallet,
+      ika_mpc_id: account.ika_mpc_id,
+      ika_evm_mpc_id: account.ika_evm_mpc_id,
+      ika_solana_mpc_id: account.ika_solana_mpc_id,
+      ika_evm_dwallet_cap_id: account.ika_evm_dwallet_cap_id,
+      ika_solana_dwallet_cap_id: account.ika_solana_dwallet_cap_id,
+      ika_user_share_keys: account.ika_user_share_keys,
+      ika_user_secret_share: account.ika_user_secret_share,
+      ika_user_public_output: account.ika_user_public_output,
+      ika_last_tx_digest: account.ika_last_tx_digest,
       owned_tokens: Object.fromEntries(account.owned_tokens)
     }));
 
@@ -158,6 +201,35 @@ export default class AccountManager {
       this.linkedStorageManager.setLocal("active", this.active);
       this.linkedStorageManager.setLocal("accounts", serializableAccounts);
     }
+  }
+
+  async SaveAccounts(): Promise<void> {
+    await this.updateStorage();
+    this.notifyListeners();
+  }
+
+  /**
+   * Save IKA dWallet data for a given account index and persist storage.
+   */
+  async setIkaSolanaDWallet(index: number, params: {
+    dwalletId?: string;
+    mpcId?: string;
+    capId?: string;
+    userShareHex?: string;
+    userSecretShare?: string;
+    userPublicOutput?: string;
+  }) {
+    const acct = this.accounts[index];
+    if (!acct) throw new Error('Account index out of range');
+    if (params.dwalletId) acct.ika_solana_dwallet = params.dwalletId;
+    if (params.mpcId) acct.ika_solana_mpc_id = params.mpcId;
+    if (params.capId) acct.ika_solana_dwallet_cap_id = params.capId;
+    if (params.userShareHex) acct.ika_user_share_keys = params.userShareHex;
+    if (params.userSecretShare) acct.ika_user_secret_share = params.userSecretShare;
+    if (params.userPublicOutput) acct.ika_user_public_output = params.userPublicOutput;
+
+    await this.updateStorage();
+    this.notifyListeners();
   }
 
   CreateAccount(): number {
@@ -259,7 +331,9 @@ export default class AccountManager {
 
     if (parentAccount.mnemonic && parentAccount.mnemonic.phrase) {
       const path = `m/44'/60'/0'/0/${nextIndex}`;
-      account = Account.FromMnemonic(parentAccount.mnemonic.phrase, name, path);
+      const solPath = `m/44'/501'/${nextIndex}'/0'`;
+      const suiPath = `m/44'/784'/${nextIndex}'/0'/0'`;
+      account = Account.FromMnemonic(parentAccount.mnemonic.phrase, name, path, solPath, suiPath);
     } else if (parentAccount.ethers_wallet) {
       const path = `social/${nextIndex}`;
       const entropy = toUtf8Bytes(`${parentAccount.ethers_wallet.privateKey}_${nextIndex}`);

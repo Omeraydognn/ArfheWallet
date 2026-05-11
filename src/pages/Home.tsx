@@ -86,6 +86,7 @@ const KNOWN_LOGOS: Record<string, string> = {
   "LDO": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32/logo.png",
   "SNX": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xC011a73ee8576Fb46F5E1c5751cA3B9Fe0af2a6F/logo.png",
   "MON": "https://coin-images.coingecko.com/coins/images/38927/small/mon.png",
+  "PYUSD": "https://assets.coingecko.com/coins/images/31212/small/PYUSD_Logo_%282%29.png",
 };
 
 // Token logo resolver: Alchemy → known symbol → TrustWallet CDN fallback
@@ -98,6 +99,7 @@ const getTokenLogoUrl = (contractAddress: string, logoSrc?: string, symbol?: str
   if (symUpper && KNOWN_LOGOS[symUpper]) return KNOWN_LOGOS[symUpper];
   if (symbol && KNOWN_LOGOS[symbol]) return KNOWN_LOGOS[symbol];
   if (contractAddress === "ETH" || name === "Ethereum") return KNOWN_LOGOS["ETH"];
+  if (contractAddress === "SOL" || name === "Solana") return KNOWN_LOGOS["SOL"];
 
   // 3. TrustWallet assets CDN fallback (requires checksummed address)
   //    Works for Ethereum mainnet tokens — most widely used
@@ -218,7 +220,8 @@ function Home() {
     const net = wallet_context.networkProvider.getActiveNetwork();
     if (!net) return;
 
-    const address = active_context.activeAccount?.GetAddress();
+    const isSolana = net.type === "SOLANA";
+    const address = isSolana ? active_context.activeAccount?.GetSolanaAddress() : active_context.activeAccount?.GetAddress();
     if (!address) return;
 
     // ── Cache check: skip API calls if data is fresh ──
@@ -250,8 +253,10 @@ function Home() {
     try {
 
       // Initialize cofhejs (TRUE FHE) if on a FHE-enabled network
-      const isFheNetwork = activeNetworkId === NetworkId.Ethereum_Sepolia || activeNetworkId === NetworkId.Arbitrum_Sepolia || activeNetworkId === NetworkId.Base_Sepolia;
-      if (isFheNetwork && active_context.activeAccount) {
+      const { isFheNetwork } = await import('../backend/NetworkTypes.js');
+      const isFheParams = isFheNetwork(activeNetworkId);
+
+      if (isFheParams && active_context.activeAccount) {
         try {
           const { default: FheCofheService } = await import("../backend/FheCofheService.js");
           const instance = FheCofheService.getInstance();
@@ -303,7 +308,7 @@ function Home() {
         "0x2210264a3775d5fbc51b1b73667f5590230ac2bd"  // WrappedUSDC_V2 (plaintext leak in transfer)
       ];
 
-      if (isFheNetwork) {
+      if (isFheParams) {
         // Fetch Wrapped USDC - Always show, even if balance is 0
         if (WRAPPED_USDC_ADDRESS) {
 
@@ -498,8 +503,8 @@ function Home() {
               }
             });
 
-            // Also set native price key by symbol for custom networks
-            if (net.isCustom && symbolPriceMap[nativeSymUpper] !== undefined) {
+            // Also set native price key by symbol for custom/Solana networks
+            if ((net.isCustom || net.type === "SOLANA") && symbolPriceMap[nativeSymUpper] !== undefined) {
               currentPrices[nativeSym] = symbolPriceMap[nativeSymUpper];
             }
 
@@ -520,8 +525,8 @@ function Home() {
       tokenBalances.forEach((tb) => {
         let p = 0;
         if (tb.isNative) {
-          if (net.isCustom) {
-            // Custom networks: only use price if explicitly fetched for this symbol
+          if (net.isCustom || net.type === "SOLANA") {
+            // Custom networks and Solana: use native symbol as price key
             p = currentPrices[nativePriceKey] ?? 0;
           } else {
             p = currentPrices["ETH"] ?? 0;
@@ -724,10 +729,28 @@ function Home() {
                                   activeNetworkId === NetworkId.Linea ? '#61dfff' :
                                     activeNetworkId === NetworkId.Sei ? '#9b1c1c' :
                                       activeNetworkId === NetworkId.Monad_Testnet ? '#836ef9' :
+                                      activeNetworkId === NetworkId.Solana_Devnet ? '#14F195' :
                                         (wallet_context?.networkProvider?.getCustomNetworks()?.find(cn => cn.chainId === (activeNetworkId as number))?.iconColor) || '#404040',
             mr: 1
           }} />
           {activeNetwork?.network_name}
+        </Button>
+        <IconButton
+          onClick={() => { setFetchError(null); fetchData(true); }}
+          disabled={loading}
+          aria-label="Refresh balances"
+          sx={{
+            bgcolor: 'background.paper',
+            ml: 1,
+            '& svg': {
+              transform: 'translateY(0px)',
+            }
+          }}
+        >
+          <Refresh />
+        </IconButton>
+        <Button size="small" startIcon={<Add />} sx={{ ml: 1 }} onClick={() => navigate('/ika')}>
+          dWallet
         </Button>
         <Menu
           anchorEl={anchorEl}
@@ -787,6 +810,9 @@ function Home() {
           </MenuItem>
           <MenuItem onClick={() => handleNetworkClose(NetworkId.Monad_Testnet)}>
             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#836ef9', mr: 1 }} /> Monad Testnet
+          </MenuItem>
+          <MenuItem onClick={() => handleNetworkClose(NetworkId.Solana_Devnet)}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#14F195', mr: 1 }} /> Solana Devnet
           </MenuItem>
 
           {/* Custom Networks */}

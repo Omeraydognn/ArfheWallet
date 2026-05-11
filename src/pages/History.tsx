@@ -116,6 +116,12 @@ export default function History() {
       setTxMemo(null);
       return;
     }
+    // Skip EVM memo fetch on Solana
+    if (network.type === "SOLANA") {
+      setTxMemo(null);
+      setMemoLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       setMemoLoading(true);
@@ -147,10 +153,12 @@ export default function History() {
     };
 
     // Initial load
-    setPendingTxs(network.getPendingTransactions());
+    setPendingTxs(network.type === "SOLANA" ? [] : network.getPendingTransactions());
 
-    // Auto-refresh every 5 seconds
-    pendingRefreshRef.current = setInterval(refreshPending, 5000);
+    // Auto-refresh every 5 seconds (skip on Solana — no nonce-replacement)
+    if (network.type !== "SOLANA") {
+      pendingRefreshRef.current = setInterval(refreshPending, 5000);
+    }
 
     return () => {
       if (pendingRefreshRef.current) clearInterval(pendingRefreshRef.current);
@@ -196,7 +204,8 @@ export default function History() {
     const fetchHistory = async () => {
       try {
         setLoading(true);
-        const address = activeAccount.GetAddress();
+        const isSolana = network?.type === "SOLANA";
+        const address = isSolana ? activeAccount.GetSolanaAddress() : activeAccount.GetAddress();
         if (!address) return;
         const res = await network.getHistory(address, tokenCache);
         setTransactions(res.history);
@@ -212,7 +221,8 @@ export default function History() {
 
   const handleLoadMore = async () => {
     if (!walletContext || !network || !activeAccount || !nextBlock) return;
-    const address = activeAccount.GetAddress();
+    const isSolana = network?.type === "SOLANA";
+    const address = isSolana ? activeAccount.GetSolanaAddress() : activeAccount.GetAddress();
     if (!address) return;
     try {
       setLoadingMore(true);
@@ -235,7 +245,10 @@ export default function History() {
     return true;
   });
 
-  const userAddress = activeAccount?.GetAddress()?.toLowerCase() || "";
+  const isSolana = network?.type === "SOLANA";
+  const userAddress = isSolana
+    ? (activeAccount?.GetSolanaAddress() || "")
+    : (activeAccount?.GetAddress()?.toLowerCase() || "");
 
   // Method label → color mapping
   const getMethodChipColor = (label: string): "default" | "primary" | "secondary" | "success" | "warning" | "info" | "error" => {
@@ -320,7 +333,8 @@ export default function History() {
                 size="small"
                 aria-label={t("history.exportCsv")}
                 onClick={() => {
-                  const addr = activeAccount?.GetAddress() || "";
+                  const isSolana = network?.type === "SOLANA";
+                  const addr = isSolana ? (activeAccount?.GetSolanaAddress() || "") : (activeAccount?.GetAddress() || "");
                   downloadCsv(filteredTransactions, addr, {
                     filename: `arfhe_tx_${activeFilter}_${new Date().toISOString().split("T")[0]}`
                   });
@@ -579,11 +593,13 @@ export default function History() {
           {/* Transaction Items */}
           <List sx={{ p: 0 }}>
             {filteredTransactions.map((tx, index) => {
-              const isSent = tx.from.toLowerCase() === userAddress;
+              const isSent = isSolana
+                ? (tx.from === userAddress)
+                : (tx.from.toLowerCase() === userAddress);
               const token = network ? tokenCache?.getToken(network.network_id, tx.contractAddress) : undefined;
 
-              // Resolve symbol: check token cache, then check if it's a known FHE contract
-              let symbol = token?.symbol || (tx.isNative ? "ETH" : "");
+              // Resolve symbol: check token cache, then native token
+              let symbol = token?.symbol || (tx.isNative ? (isSolana ? "SOL" : "ETH") : "");
               if (!symbol && tx.isShielded) {
                 const wrappedEth = (import.meta.env.VITE_WRAPPED_ETH_ADDRESS || "").toLowerCase();
                 const wrappedUsdc = (import.meta.env.VITE_WRAPPED_USDC_ADDRESS || "").toLowerCase();
@@ -872,7 +888,7 @@ export default function History() {
                     <Box display="flex" justifyContent="space-between" alignItems="center">
                       <Typography variant="body2" color="text.secondary">From:</Typography>
                       <Box display="flex" alignItems="center">
-                        <Typography variant="body2" sx={{ fontFamily: "monospace", mr: 1, ...((selectedTx.from.toLowerCase() === userAddress) && { fontWeight: 700, color: 'primary.main' }) }}>
+                        <Typography variant="body2" sx={{ fontFamily: "monospace", mr: 1, ...((isSolana ? selectedTx.from === userAddress : selectedTx.from.toLowerCase() === userAddress) && { fontWeight: 700, color: 'primary.main' }) }}>
                           {selectedTx.from.slice(0, 10)}...{selectedTx.from.slice(-8)}
                         </Typography>
                         <IconButton size="small" aria-label="Copy sender address" onClick={() => {
@@ -886,7 +902,7 @@ export default function History() {
                     <Box display="flex" justifyContent="space-between" alignItems="center">
                       <Typography variant="body2" color="text.secondary">To:</Typography>
                       <Box display="flex" alignItems="center">
-                        <Typography variant="body2" sx={{ fontFamily: "monospace", mr: 1, ...((selectedTx.to.toLowerCase() === userAddress) && { fontWeight: 700, color: 'primary.main' }) }}>
+                        <Typography variant="body2" sx={{ fontFamily: "monospace", mr: 1, ...((isSolana ? selectedTx.to === userAddress : selectedTx.to.toLowerCase() === userAddress) && { fontWeight: 700, color: 'primary.main' }) }}>
                           {selectedTx.to ? `${selectedTx.to.slice(0, 10)}...${selectedTx.to.slice(-8)}` : "Contract Creation"}
                         </Typography>
                         {selectedTx.to && (

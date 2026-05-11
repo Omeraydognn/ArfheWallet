@@ -38,15 +38,22 @@ export function useAccount(): UseAccountReturn {
   const { activeAccount, activeIndex, setActiveIndex } = useActiveAccount();
   const wallet = useWallet();
 
-  const address = useMemo(
-    () => activeAccount?.GetAddress() ?? "",
-    [activeAccount]
-  );
+  const activeNetwork = useMemo(() => wallet.networkProvider.getActiveNetwork(), [wallet.networkProvider]);
+
+  const address = useMemo(() => {
+    if (!activeAccount) return "";
+    const isSolana = activeNetwork.type === "SOLANA";
+    return isSolana ? activeAccount.GetSolanaAddress() ?? "" : activeAccount.GetAddress() ?? "";
+  }, [activeAccount, activeNetwork]);
 
   const shortAddress = useMemo(() => {
-    if (!address || address.length < 10) return "";
+    if (!address || address.length < 8) return "";
+    const isSolana = activeNetwork.type === "SOLANA";
+    if (isSolana) {
+      return `${address.slice(0, 4)}…${address.slice(-4)}`;
+    }
     return `${address.slice(0, 6)}…${address.slice(-4)}`;
-  }, [address]);
+  }, [address, activeNetwork]);
 
   const accounts = useMemo(
     () => wallet.accountManager.GetAll(),

@@ -15,7 +15,7 @@ import { NetworkId } from "./NetworkTypes.js";
 export default class FhenixSepoliaNetwork extends Network {
   constructor() {
     super(
-      NetworkId.Fhenix_Sepolia,
+      NetworkId.Fhenix_Testnet,
       "Fhenix Helium",
       undefined, // No base URL needed
       "https://api.helium.fhenix.zone" // Full RPC URL from Chainlist

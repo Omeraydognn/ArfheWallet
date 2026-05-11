@@ -24,10 +24,13 @@ import { inputCardSx } from "./shared.js";
 export default function ReceivePanel() {
   const { t } = useTranslation();
   const context = useContext(WalletContext);
-  const address = context?.accountManager?.GetActive()?.GetAddress() ?? "";
-  const accountName = context?.accountManager?.GetActive()?.GetName() ?? "";
   const activeNetworkId = context?.networkProvider?.getActiveNetworkId() ?? NetworkId.Ethereum_Mainnet;
   const activeNetwork = context?.networkProvider?.getActiveNetwork();
+  const isSolana = activeNetwork?.type === "SOLANA";
+  const address = isSolana 
+    ? (context?.accountManager?.GetActive()?.GetSolanaAddress() ?? "") 
+    : (context?.accountManager?.GetActive()?.GetAddress() ?? "");
+  const accountName = context?.accountManager?.GetActive()?.GetName() ?? "";
   const [copied, setCopied] = useState(false);
   const { showToast } = useToast();
 
@@ -38,7 +41,8 @@ export default function ReceivePanel() {
     activeNetworkId === NetworkId.Arbitrum_One ? '#2563eb' :
     activeNetworkId === NetworkId.Arbitrum_Sepolia ? '#60a5fa' :
     activeNetworkId === NetworkId.Base_Mainnet ? '#0052ff' :
-    activeNetworkId === NetworkId.Base_Sepolia ? '#93c5fd' : '#404040';
+    activeNetworkId === NetworkId.Base_Sepolia ? '#93c5fd' :
+    activeNetworkId === NetworkId.Solana_Devnet ? '#14F195' : '#404040';
 
   const handleCopy = async () => {
     try {
@@ -71,6 +75,13 @@ export default function ReceivePanel() {
   // Format address in chunks for readability
   const formatAddress = (addr: string): string[] => {
     if (!addr || addr.length < 10) return [addr];
+    if (isSolana) {
+      const chunks: string[] = [];
+      for (let i = 0; i < addr.length; i += 8) {
+        chunks.push(addr.slice(i, i + 8));
+      }
+      return chunks;
+    }
     // Split into groups: 0x + 4 groups of 8 + last part
     const clean = addr.slice(2); // remove 0x
     const chunks: string[] = [];
@@ -164,7 +175,7 @@ export default function ReceivePanel() {
             textAlign: 'center',
           }}
         >
-          <Box component="span" sx={{ color: 'primary.main', fontWeight: 700 }}>0x</Box>
+          {!isSolana && <Box component="span" sx={{ color: 'primary.main', fontWeight: 700 }}>0x</Box>}
           {addressChunks.map((chunk, i) => (
             <React.Fragment key={i}>
               {chunk}

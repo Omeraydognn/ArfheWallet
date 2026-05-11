@@ -1,0 +1,9 @@
+warning: virtual workspace defaulting to `resolver = "1"` despite one or more workspace members being on edition 2021 which implies `resolver = "2"`
+  |
+  = note: to keep the current resolver, specify `workspace.resolver = "1"` in the workspace root's manifest
+  = note: to use the edition 2021 resolver, specify `workspace.resolver = "2"` in the workspace root's manifest
+  = note: for more details see https://doc.rust-lang.org/cargo/reference/resolver.html#resolver-versions
+    Updating crates.io index
+error: no matching package named `encrypt-macros` found
+location searched: crates.io index
+required by package `arfhe_vault v0.1.0 (/Users/omeraydogan/arfhewalletsolana/ArfheWallet/arfhe_confidential_vault/programs/arfhe_vault)`

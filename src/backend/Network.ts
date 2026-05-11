@@ -5,7 +5,7 @@ import TokenCache, { TokenCacheItem } from "./TokenCache.js";
 import type NFTCache from "./NFTCache.js";
 import type { NFTCacheItem } from "./NFTCache.js";
 
-import { NetworkId, TokenBalance, TransactionHistory, PendingTransaction, CustomNetworkConfig } from "./NetworkTypes.js";
+import { NetworkId, NetworkType, TokenBalance, TransactionHistory, PendingTransaction, CustomNetworkConfig } from "./NetworkTypes.js";
 import { ExplorerService } from "./ExplorerService.js";
 import { withRetry, fetchWithTimeout, wssRpcCall, classifyError, NetworkErrorType } from "./NetworkErrorHandler.js";
 import type { RetryOptions } from "./NetworkErrorHandler.js";
@@ -36,6 +36,7 @@ class Network {
   alchemy?: Alchemy;
   explorerService?: ExplorerService;
   isCustom: boolean = false;
+  type: NetworkType = "EVM";
 
   /** In-memory store of pending (unconfirmed) transactions */
   pendingTransactions: Map<string, PendingTransaction> = new Map();
@@ -188,6 +189,7 @@ class Network {
     net.explorer_url = config.explorerUrl.replace(/\/+$/, ""); // strip trailing slash
     net.currency_symbol = config.currencySymbol;
     net.isCustom = true;
+    net.type = config.type || "EVM";
     return net;
   }
 
@@ -1152,6 +1154,10 @@ class Network {
       gasPrice?: string;
       data?: string;
       gasMultiplier?: number;
+      // Solana-specific fields for SPL token transfers
+      mint?: string;
+      amount?: string;
+      decimals?: number;
     }
   ): Promise<string> {
     if (!this.rpc_url) throw new Error("RPC URL not set");

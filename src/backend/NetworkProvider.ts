@@ -12,6 +12,7 @@ import BNBChainNetwork from "./BNBChain.js";
 import LineaNetwork from "./Linea.js";
 import SeiNetwork from "./Sei.js";
 import MonadTestnetNetwork from "./MonadTestnet.js";
+import SolanaDevnet from "./SolanaDevnet.js";
 import { Network } from "./Network.js";
 import { NetworkId, CustomNetworkConfig } from "./NetworkTypes.js";
 
@@ -27,6 +28,7 @@ class NetworkProvider {
   private arbitrumSepoliaNetwork?: ArbitrumSepoliaNetwork;
   private baseMainnetNetwork?: BaseMainnetNetwork;
   private baseSepoliaNetwork?: BaseSepoliaNetwork;
+  private solanaDevnet?: SolanaDevnet;
   private polygonNetwork?: PolygonNetwork;
   private optimismNetwork?: OptimismNetwork;
   private avalancheNetwork?: AvalancheNetwork;
@@ -35,7 +37,6 @@ class NetworkProvider {
   private lineaNetwork?: LineaNetwork;
   private seiNetwork?: SeiNetwork;
   private monadTestnetNetwork?: MonadTestnetNetwork;
-
   /** User-added custom networks keyed by chainId */
   private customNetworks: Map<number, Network> = new Map();
 
@@ -63,6 +64,7 @@ class NetworkProvider {
     if (!this.lineaNetwork) this.lineaNetwork = new LineaNetwork();
     if (!this.seiNetwork) this.seiNetwork = new SeiNetwork();
     if (!this.monadTestnetNetwork) this.monadTestnetNetwork = new MonadTestnetNetwork();
+    if (!this.solanaDevnet) this.solanaDevnet = new SolanaDevnet();
   }
 
   getSepoliaNetwork(): SepoliaNetwork {
@@ -135,6 +137,11 @@ class NetworkProvider {
     return this.avalancheFujiNetwork;
   }
 
+  getSolanaDevnet(): SolanaDevnet {
+    if (!this.solanaDevnet) this.solanaDevnet = new SolanaDevnet();
+    return this.solanaDevnet;
+  }
+
   getActiveNetwork(): Network {
     switch (this.activeNetworkId) {
       case NetworkId.Ethereum_Mainnet:
@@ -165,6 +172,8 @@ class NetworkProvider {
         return this.getMonadTestnetNetwork();
       case NetworkId.Avalanche_Fuji:
         return this.getAvalancheFujiNetwork();
+      case NetworkId.Solana_Devnet:
+        return this.getSolanaDevnet();
       default: {
         // Check custom networks
         const custom = this.customNetworks.get(this.activeNetworkId as number);
@@ -228,7 +237,7 @@ class NetworkProvider {
       NetworkId.Base_Mainnet, NetworkId.Base_Sepolia,
       NetworkId.Polygon, NetworkId.Optimism, NetworkId.Avalanche,
       NetworkId.Avalanche_Fuji, NetworkId.BNB_Chain, NetworkId.Linea,
-      NetworkId.Sei, NetworkId.Monad_Testnet
+      NetworkId.Sei, NetworkId.Monad_Testnet, NetworkId.Solana_Devnet
     ] as number[];
     if (builtIn.includes(config.chainId)) {
       throw new Error(`Chain ID ${config.chainId} is a built-in network and cannot be overridden.`);

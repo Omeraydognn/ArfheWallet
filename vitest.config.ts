@@ -1,5 +1,12 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const ikaNodeEntry = require.resolve("@ika.xyz/ika-wasm");
+const ikaDistDir = path.dirname(path.dirname(ikaNodeEntry));
+const ikaBundlerEntry = path.join(ikaDistDir, "bundler", "dwallet_mpc_wasm.js");
+const ikaBundlerBg = path.join(ikaDistDir, "bundler", "dwallet_mpc_wasm_bg.js");
 
 export default defineConfig({
   test: {
@@ -26,6 +33,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@ika.xyz/ika-wasm': path.resolve(__dirname, './src/shims/ikaWasm.ts'),
+      '@ika-wasm-bundler-entry': ikaBundlerEntry,
+      '@ika-wasm-bundler-bg': ikaBundlerBg,
     },
   },
 });

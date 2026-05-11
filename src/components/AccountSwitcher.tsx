@@ -84,8 +84,9 @@ function AccountSwitcher() {
   if (!wallet) return null;
 
   const accounts = wallet.accountManager.GetAll();
-  const address = activeAccount?.GetAddress() ?? "";
-  const shortAddr = activeAccount?.GetShortAddress() ?? "0x000...";
+  const isSolana = wallet.networkProvider.getActiveNetwork().type === "SOLANA";
+  const address = isSolana ? (activeAccount?.GetSolanaAddress() ?? "") : (activeAccount?.GetAddress() ?? "");
+  const shortAddr = isSolana ? (activeAccount?.GetShortSolanaAddress() ?? "5Mv...") : (activeAccount?.GetShortAddress() ?? "0x000...");
   const accountName = activeAccount?.GetName() ?? t("accountSwitcher.noAccount");
 
   // ─── Handlers ────
@@ -268,8 +269,8 @@ function AccountSwitcher() {
 
         {/* Account List */}
         {accounts.map((acc: Account, idx: number) => {
-          const accAddr = acc.GetAddress() ?? "";
-          const accShort = acc.GetShortAddress() ?? "0x000...";
+          const accAddr = isSolana ? (acc.GetSolanaAddress() ?? "") : (acc.GetAddress() ?? "");
+          const accShort = isSolana ? (acc.GetShortSolanaAddress() ?? "5Mv...") : (acc.GetShortAddress() ?? "0x000...");
           const isSelected = idx === activeIndex;
 
           return (

@@ -92,6 +92,7 @@ export function getExplorerBaseForNetwork(networkOrId: { network_id?: NetworkId;
       case NetworkId.Sei: return "https://seitrace.com";
       case NetworkId.Monad_Testnet: return "https://testnet.monadexplorer.com";
       case NetworkId.Avalanche_Fuji: return "https://testnet.snowtrace.io";
+      case NetworkId.Solana_Devnet: return "https://explorer.solana.com";
       default:
         // For other built-in or unknown networks, fall back to their explorer_url if set
         if (networkOrId.explorer_url) return networkOrId.explorer_url.replace(/\/+$/, '');
@@ -114,6 +115,7 @@ export function getExplorerBaseForNetwork(networkOrId: { network_id?: NetworkId;
     case NetworkId.Sei: return "https://seitrace.com";
     case NetworkId.Monad_Testnet: return "https://testnet.monadexplorer.com";
     case NetworkId.Avalanche_Fuji: return "https://testnet.snowtrace.io";
+    case NetworkId.Solana_Devnet: return "https://explorer.solana.com";
     default: return "https://etherscan.io";
   }
 }
@@ -143,3 +145,15 @@ export const ctaButtonSx = {
   },
   transition: 'all 0.2s ease',
 };
+
+/** Build a Solana Explorer transaction URL with the correct cluster param */
+export function getSolanaExplorerTxUrl(signature: string, cluster: string = "devnet"): string {
+  return `https://explorer.solana.com/tx/${signature}?cluster=${cluster}`;
+}
+
+/** Validate a Solana Base58 address (32–44 chars, Base58 alphabet) */
+export function isValidSolanaAddress(address: string): boolean {
+  if (!address || address.length < 32 || address.length > 44) return false;
+  // Base58 alphabet: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+}
